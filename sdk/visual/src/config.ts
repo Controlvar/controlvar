@@ -116,7 +116,8 @@ function attributesFrom(value: string | null, warnings: string[]): Record<string
   try {
     const parsed: unknown = utf8Bytes(value) <= MAX_ATTRIBUTES_BYTES ? JSON.parse(value) : null;
     if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
-      const attributes: Record<string, unknown> = {};
+      // No prototype: every key, whatever its name, stays the object's own key.
+      const attributes: Record<string, unknown> = Object.create(null);
       let dropped = false;
       for (const key of Object.keys(parsed)) {
         if (key.indexOf(DETAIL_PREFIX) === 0) dropped = true;

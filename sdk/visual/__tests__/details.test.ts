@@ -142,6 +142,16 @@ describe("the server's vectors, through the script's checks", () => {
   });
 });
 
+describe('the referring site', () => {
+  test("the referrer is left out only for this page's host name: a link from a subdomain is sent", () => {
+    expect([
+      referrerFrom('https://blog.shop.example/a', 'shop.example'),
+      referrerFrom('https://shop.example/a', 'www.shop.example'),
+      referrerFrom('https://SHOP.example:8443/a', 'shop.example'),
+    ]).toEqual(['blog.shop.example', 'shop.example', null]);
+  });
+});
+
 function sourceFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
     entry.isDirectory() ? sourceFiles(join(dir, entry.name)) : [join(dir, entry.name)],
@@ -186,6 +196,10 @@ describe('data-attributes', () => {
     const refused = readConfig(tag({ 'data-attributes': threeByte }));
     expect(refused.attributes).toBeNull();
     expect(refused.warnings).toEqual([BAD_ATTRIBUTES]);
+    // Over 4096 bytes as written and under 4096 as sent: the text itself is limited too.
+    const padded = `{"a":"${String.fromCharCode(0x20ac).repeat(1300)}"${' '.repeat(400)}}`;
+    expect([utf8Bytes(padded), utf8Bytes(JSON.stringify(JSON.parse(padded)))]).toEqual([4308, 3908]);
+    expect(readConfig(tag({ 'data-attributes': padded }))).toMatchObject({ attributes: null, warnings: [BAD_ATTRIBUTES] });
   });
 
   test('is also limited as sent: a short text that is larger as JSON is refused', () => {
@@ -199,6 +213,16 @@ describe('data-attributes', () => {
     const config = readConfig(tag({ 'data-attributes': '{"plan":"pro","web_device":"tablet","web_country":"FR","Web_x":1}' }));
     expect(config.attributes).toEqual({ plan: 'pro', Web_x: 1 });
     expect(config.warnings).toEqual([WEB_ATTRIBUTES]);
+  });
+
+  test('every key of data-attributes is sent as its own key, whatever its name', async () => {
+    const text = '{"__proto__":{"plan":"pro"},"constructor":"site","plan":"basic"}';
+    expect(Object.keys(readConfig(tag({ 'data-attributes': text })).attributes!)).toEqual(['__proto__', 'constructor', 'plan']);
+    const page = runClassic('https://shop.example/a', { ...TAG, 'data-attributes': text, 'data-collect': 'none' }, () => undefined, answering);
+    await settle();
+    const [ask] = page.fetches.filter((call) => new URL(call.url).pathname === '/api/v1/tracking/visual').map((call) => String(call.init.body));
+    expect(ask).toContain('"context":{"__proto__":{"plan":"pro"},"constructor":"site","plan":"basic"}');
+    page.close();
   });
 
   test("utf8Bytes counts as the server counts: 1 to 4 bytes a character, 3 for a lone surrogate", () => {

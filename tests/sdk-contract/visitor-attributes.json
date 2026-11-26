@@ -69,7 +69,7 @@
       "default": true,
       "label": "Came from",
       "values": null,
-      "source": "The host of the page that linked to this one, when it is another site",
+      "source": "The host of the page that linked to this one, when it is another host",
       "example": "www.google.com",
       "sent": "Yes",
       "stored": "No"

@@ -205,7 +205,7 @@ text = "New or returning (web_visitor) | Whether this browser was first seen bef
 by = ["mechanism:visual-details-table"]
 
 [[unit]]
-text = "Came from (web_referrer) | The host of the page that linked to this one, when it is another site | www.google.com | Yes | No"
+text = "Came from (web_referrer) | The host of the page that linked to this one, when it is another host | www.google.com | Yes | No"
 by = ["mechanism:visual-details-table"]
 
 [[unit]]
@@ -240,8 +240,9 @@ by = [
 ]
 
 [[unit]]
-text = "The referring site is a host only, never a path or a query, and is left out when the page that linked here is on your own site."
+text = "The referring site is a host only, never a path or a query, and is left out when the page that linked here has this page's host name; a link from another of your own subdomains is sent."
 by = [
+    "test:sdk/visual/__tests__/details.test.ts::the referrer is left out only for this page's host name: a link from a subdomain is sent",
     "test:frontend/tests/e2e/runtime/details.runtime.spec.ts::the referring site's host, the landing path and the campaign; never the referrer's query, gclid or email",
     "test:sdk/visual/__tests__/contexts.test.ts::every vector: the script sends exactly its details, and no other context",
 ]

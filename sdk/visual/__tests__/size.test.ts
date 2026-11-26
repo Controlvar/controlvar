@@ -89,6 +89,7 @@ const KINDS: [string, (n: number) => string][] = [
   ['four-byte characters', (n) => `{"a":"${String.fromCodePoint(0x1f600).repeat(n)}"}`],
   ['escaped control characters', (n) => `{"a":"${(BACKSLASH + 'u0001').repeat(n)}"}`],
   ['numbers the server writes longer (1e-7)', (n) => `{"a":[${Array(n).fill('1e-7').join(',')}]}`],
+  ['numbers the browser writes longer (1e20)', (n) => `{"a":[${Array(n).fill('1e20').join(',')}]}`],
   ['short keys', (n) => `{${Array.from({ length: n }, (_, i) => `"k${i}":0`).join(',')}}`],
 ];
 

@@ -58,7 +58,7 @@ No other call carries them: not `track()`'s events and not the error reports.
 | Browser (`web_browser`) | The browser's user agent | chrome | Yes | No |
 | Language (`web_language`) | The browser's language, its first part (en for en-US) | en | Yes | No |
 | New or returning (`web_visitor`) | Whether this browser was first seen before this visit started | returning | Yes | localStorage: controlvar_seen and controlvar_visit |
-| Came from (`web_referrer`) | The host of the page that linked to this one, when it is another site | www.google.com | Yes | No |
+| Came from (`web_referrer`) | The host of the page that linked to this one, when it is another host | www.google.com | Yes | No |
 | Campaign source (`web_utm_source`) | utm_source in the address of the visit's first page | newsletter | Yes, on every page of the visit | localStorage: controlvar_visit |
 | Campaign medium (`web_utm_medium`) | utm_medium in the address of the visit's first page | email | Yes, on every page of the visit | localStorage: controlvar_visit |
 | Campaign name (`web_utm_campaign`) | utm_campaign in the address of the visit's first page | spring-sale | Yes, on every page of the visit | localStorage: controlvar_visit |
@@ -66,7 +66,7 @@ No other call carries them: not `track()`'s events and not the error reports.
 
 The device type is phone, tablet or desktop; the browser is chrome, edge, firefox, safari, samsung, opera or other; new or returning is new or returning.
 The script never asks the browser for its detailed model: the device type comes from the user agent, whether the browser says it is a mobile, and its touch points.
-The referring site is a host only, never a path or a query, and is left out when the page that linked here is on your own site.
+The referring site is a host only, never a path or a query, and is left out when the page that linked here has this page's host name; a link from another of your own subdomains is sent.
 
 A visit ends after 30 minutes without a page view, and every tab on the same origin shares it.
 A page view is each page load the script starts on and each path change it follows.
