@@ -1081,6 +1081,40 @@ by = [
 ]
 
 [[unit]]
+text = "POST /api/v1/experiments/, PUT /api/v1/experiments/{experiment_id}, POST /api/v1/safety/feature-flags/{feature_flag_id}/config, POST /api/v1/api-keys | #2180 | Text holding NUL (U+0000) or an unpaired surrogate anywhere, in a key or a value, nested or not, answers 422 at its field with the msg Value error, name must not contain NUL or unpaired surrogate characters (or the field's own name); nothing is saved and no audit entry is made. The fields are an experiment's name, description, hypothesis, targeting_rules and tags; a variant's name, description and configuration and a metric's name, description, event_name, aggregation_method and event_value_path, each answered at its place in the list, such as [\"body\", \"metrics\", 0, \"event_name\"]; an experiment's variance_reduction_config.covariate_metric_id and split_url_config's cookie_name and canonical_url, each at its own field, such as [\"body\", \"split_url_config\", \"cookie_name\"]; a flag safety configuration's metrics, for the character in a metric's name or in its thresholds; and an API key's name, description and scopes. Most of these answered 500, because the database cannot store such text; on an experiment create, tags, targeting_rules, a variant's configuration and those three settings answered 400, except an unpaired surrogate in a key of a variant's configuration, which answered 500 in a nested key and in a top-level key was saved as three replacement characters. A split URL variant's url and visual_config's editor_url now refuse an unpaired surrogate as they refused NUL, with 422 at the field and the fixed message each already gave; in the query, which was not checked, it answered 400 on a create and 500 on an update. In a split URL variant's path or host it was already refused, with the path's or the host's message; it now gets the message about a # fragment, a backslash, a space or a control character, with the same type and loc. Where another check refused such text first, as for an unpaired surrogate in a name, event_name, aggregation_method or event_value_path, in an experiment's description or hypothesis or in an API key's description, or for the character in a condition's attribute or operator, it answered that check's 422 and now answers this one. An experiment's key answers its own 422 as before. The message does not repeat the value sent. Authentication still answers 401 first, and a safety configuration by a caller who is not a superuser still answers 403 first; the 422 now comes before the 403 for a role that may not create or change experiments or create a key with the sdk:ruleset scope, and the 404 for an unknown experiment or flag, as every other body 422 on these operations does. A valid surrogate pair, such as an emoji, is saved as before, and every other body answers as before. The OpenAPI document does not change."
+by = [
+    "test:backend/tests/integration/api/test_experiment_safety_key_text_refused.py::test_an_experiment_create_refuses_the_character",
+    "test:backend/tests/integration/api/test_experiment_safety_key_text_refused.py::test_an_experiment_update_refuses_the_character",
+    "test:backend/tests/integration/api/test_experiment_safety_key_text_refused.py::test_a_safety_configuration_refuses_the_character",
+    "test:backend/tests/integration/api/test_experiment_safety_key_text_refused.py::test_an_api_key_create_refuses_the_character",
+    "test:backend/tests/integration/api/test_experiment_safety_key_text_refused.py::test_an_experiment_create_refuses_the_character_in_a_setting",
+    "test:backend/tests/integration/api/test_experiment_safety_key_text_refused.py::test_an_experiment_update_refuses_the_character_in_a_setting",
+    "test:backend/tests/integration/api/test_experiment_safety_key_text_refused.py::test_a_setting_with_an_emoji_is_still_saved_as_sent",
+    "test:backend/tests/unit/schemas/test_experiment_safety_key_text_refused.py::test_a_url_refuses_an_unpaired_surrogate_with_its_own_message",
+    "test:backend/tests/unit/schemas/test_experiment_safety_key_text_refused.py::test_a_url_with_an_emoji_or_without_the_character_is_accepted",
+    "test:backend/tests/unit/schemas/test_experiment_safety_key_text_refused.py::test_a_surrogate_in_a_split_url_path_or_host_gets_the_forbidden_message",
+    "test:backend/tests/unit/schemas/test_split_url_config_rules.py::test_a_url_no_visitor_could_be_sent_to_is_refused_at_its_loc",
+    "test:backend/tests/unit/schemas/test_experiment_safety_key_text_refused.py::test_the_text_is_refused_at_its_field",
+    "test:backend/tests/integration/api/test_experiment_safety_key_text_refused.py::test_rules_another_check_reads_get_this_answer",
+    "test:backend/tests/integration/api/test_experiment_safety_key_text_refused.py::test_a_key_still_answers_its_own_422",
+    "test:backend/tests/integration/api/test_experiment_safety_key_text_refused.py::test_authentication_still_answers_401_first",
+    "test:backend/tests/integration/api/test_experiment_safety_key_text_refused.py::test_on_a_safety_configuration_the_403_for_a_non_superuser_still_comes_first",
+    "test:backend/tests/integration/api/test_experiment_safety_key_text_refused.py::test_on_an_experiment_create_the_422_comes_before_the_403",
+    "test:backend/tests/integration/api/test_experiment_safety_key_text_refused.py::test_on_an_experiment_update_the_422_comes_before_the_403",
+    "test:backend/tests/integration/api/test_experiment_safety_key_text_refused.py::test_on_an_api_key_create_the_422_comes_before_the_403",
+    "test:backend/tests/integration/api/test_experiment_safety_key_text_refused.py::test_on_an_experiment_update_the_422_comes_before_the_404",
+    "test:backend/tests/integration/api/test_experiment_safety_key_text_refused.py::test_on_a_safety_configuration_the_422_comes_before_the_404",
+    "test:backend/tests/integration/api/test_experiment_safety_key_text_refused.py::test_an_emoji_in_an_experiment_is_still_saved_as_sent",
+    "test:backend/tests/integration/api/test_experiment_safety_key_text_refused.py::test_an_emoji_in_a_safety_metric_name_is_still_saved",
+    "test:backend/tests/integration/api/test_experiment_safety_key_text_refused.py::test_an_emoji_in_an_api_key_is_still_saved",
+    "test:backend/tests/unit/schemas/test_experiment_safety_key_text_refused.py::test_an_emoji_is_accepted_as_sent",
+    "test:backend/tests/unit/schemas/test_experiment_safety_key_text_refused.py::test_the_same_body_without_the_character_is_accepted",
+    "test:backend/tests/unit/schemas/test_experiment_safety_key_text_refused.py::test_a_null_is_answered_as_before",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
 text = "POST /api/v1/feature-flags/, PUT /api/v1/feature-flags/{flag_id}, PUT /api/v1/feature-flags/{flag_id}/environments/{environment} (beta) | #2163 | A targeting_rules or tags holding NUL (U+0000) or an unpaired surrogate anywhere, in a key or a value, nested or not, answers 422 at [\"body\", \"targeting_rules\"] or [\"body\", \"tags\"] with the msg Value error, targeting_rules must not contain NUL or unpaired surrogate characters (or tags); nothing is saved and no audit entry is made. Where another check refused such a body first, as for the character in a condition's attribute, operator or semantic version, it answered that check's 422 and now answers this one; otherwise it answered 500, because the database cannot store such text. The message does not repeat the value sent. Authentication still answers 401 first, and a create by a role that may not create a flag still answers 403 first; on both PUTs the 422 now comes before the 403 for a role that may not change the flag and the 404 for an unknown flag. A valid surrogate pair, such as an emoji, is saved as before, and every other body answers as before. The OpenAPI document does not change."
 by = [
     "test:backend/tests/integration/api/test_flag_text_refused.py::test_a_create_refuses_the_character_in_targeting_rules",
