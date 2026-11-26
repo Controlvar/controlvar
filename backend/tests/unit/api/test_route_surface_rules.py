@@ -85,7 +85,7 @@ def test_every_safety_read_takes_any_signed_in_user_and_every_write_a_superuser(
     # and its check is open to every role; changing them and the rollback need
     # the superuser flag. No role check sits on any of these routes.
     routes = {
-        (method, path): {call for call in _calls(ctx.dependant)}
+        (method, path): set(_calls(ctx.dependant))
         for method, path, ctx in _contexts()
         if path.startswith("/api/v1/safety")
     }
