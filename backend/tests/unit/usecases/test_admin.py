@@ -342,3 +342,16 @@ def test_an_evaluation_with_a_context_sends_it_as_compact_json(helper, server):
     )
     assert json.loads(params["context"]) == context
     assert request.headers["X-API-Key"] == KEY
+
+
+def test_archive_posts_the_bulk_toggle_for_one_flag_with_the_token(helper, server):
+    helper.archive(FLAG_ID)
+    ((_, request),) = server.sent
+    assert (request.method, request.url.path) == (
+        "POST",
+        "/api/v1/feature-flags/bulk-toggle",
+    )
+    assert request.headers["Authorization"] == f"Bearer {TOKEN}"
+    assert "X-API-Key" not in request.headers
+    assert json.loads(request.content) == {"flag_ids": [FLAG_ID], "action": "archive"}
+    assert helper.requests == {admin.BULK_TOGGLE: 1}
