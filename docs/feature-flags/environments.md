@@ -218,8 +218,9 @@ curl -s -X POST localhost:8000/api/v1/feature-flags/$FLAG_ID/environments/develo
 
 In the dashboard, a flag in Development offers **Promote to Staging**, and a flag in Staging offers
 **Promote to Production**; Production offers nothing. The dialog lists **Status**,
-**Rollout percentage** and **Targeting rules** as they are in the target now and as they will be,
-and says what is not copied. A promotion into Production has a second step before it is sent.
+**Rollout percentage**, **Targeting rules** and, for a string, number or json flag, **Split** as
+they are in the target now and as they will be, and says what is not copied. A promotion into
+Production has a second step before it is sent.
 
 ## What runs in production only
 

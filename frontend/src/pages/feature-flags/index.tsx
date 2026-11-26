@@ -22,7 +22,8 @@ import {
   isFlagOn,
 } from '@/services/featureFlags';
 import { parseApiTimestamp } from '@/utils/apiTimestamp';
-import { flagValueType, typeLabel } from '@/utils/flagValues';
+import { flagValueType, isValueFlagType, typeLabel } from '@/utils/flagValues';
+import { SPLIT_BADGE } from '@/utils/flagSplit';
 import { useFlagEnvironment } from '@/contexts/FlagEnvironmentContext';
 import { ProductionBanner } from '@/components/feature-flags/FlagEnvironmentSections';
 import {
@@ -82,6 +83,8 @@ function inEnvironment(flag: FeatureFlagListItem, settings: FlagEnvironmentSetti
     is_active: isFlagArchived(flag) ? false : settings.is_active,
     rollout_percentage: settings.rollout_percentage,
     targeting_rules: settings.targeting_rules,
+    // That environment's own split (#2012), never Production's.
+    split: settings.split ?? null,
     updated_at: settings.updated_at ?? '',
     stale: false,
     stale_reasons: [],
@@ -96,6 +99,7 @@ function unconfigured(environment: string): FlagEnvironmentSettings {
     is_active: false,
     rollout_percentage: 0,
     targeting_rules: null,
+    split: null,
     configured: false,
     updated_at: null,
   };
@@ -602,9 +606,19 @@ export default function FeatureFlagsPage() {
                           </p>
                         )}
                       </td>
-                      {/* What the flag serves (#1497); a flag from a server without values is Boolean. */}
+                      {/* What the flag serves (#1497); a flag from a server without values is Boolean.
+                          A string, number or json flag with a split in the environment on screen
+                          (#2012) says so in text. */}
                       <td className="px-4 py-3 text-slate-700" data-testid="flag-value-type">
                         {typeLabel(flagValueType(flag))}
+                        {isValueFlagType(flagValueType(flag)) && Array.isArray(flag.split) && flag.split.length > 0 && (
+                          <span
+                            className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-800 border border-slate-300"
+                            data-testid="flag-split-badge"
+                          >
+                            {SPLIT_BADGE}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2 flex-wrap">

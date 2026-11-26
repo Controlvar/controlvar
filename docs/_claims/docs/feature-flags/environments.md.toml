@@ -425,9 +425,11 @@ by = [
 ]
 
 [[unit]]
-text = "The dialog lists Status, Rollout percentage and Targeting rules as they are in the target now and as they will be, and says what is not copied."
+text = "The dialog lists Status, Rollout percentage, Targeting rules and, for a string, number or json flag, Split as they are in the target now and as they will be, and says what is not copied."
 by = [
     "test:frontend/src/tests/pages/feature-flag-promote.test.tsx::names the status, the rollout percentage and the rules, each from what Staging has to what it will have",
+    "test:frontend/src/tests/pages/feature-flag-promote.test.tsx::a string flag: the Split row names each value and weight, from what Staging has to what it will have",
+    "test:frontend/src/tests/pages/feature-flag-promote.test.tsx::a boolean flag lists no Split row",
     "test:frontend/src/tests/pages/feature-flag-promote.test.tsx::says what is not copied",
     "test:backend/tests/unit/api/test_environment_words.py::test_each_dashboard_word_is_in_the_dashboard",
 ]
