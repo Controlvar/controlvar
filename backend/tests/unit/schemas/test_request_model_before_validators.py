@@ -67,9 +67,11 @@ FULL_MODEL_COUNT = 146
 #: variant's name, description and configuration (3), a metric's name,
 #: description, event_name, aggregation_method and event_value_path (5), and
 #: APIKeyCreate's description (1: its name and scopes had one, as had
-#: FeatureFlagSafetyConfigUpdate's metrics).
-CORE_BEFORE_COUNT = 71
-FULL_BEFORE_COUNT = 72
+#: FeatureFlagSafetyConfigUpdate's metrics), then 3 more: SplitUrlConfig's
+#: cookie_name and canonical_url and VarianceReductionConfig's
+#: covariate_metric_id.
+CORE_BEFORE_COUNT = 74
+FULL_BEFORE_COUNT = 75
 
 PROBES = ({}, [], False, None)
 

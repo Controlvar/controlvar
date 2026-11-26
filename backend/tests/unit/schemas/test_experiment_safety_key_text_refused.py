@@ -23,6 +23,11 @@ from backend.app.schemas.experiment import (
     VariantBase,
 )
 from backend.app.schemas.safety import FeatureFlagSafetyConfigUpdate
+from backend.app.schemas.split_url_config import (
+    SPLIT_URL_CONFIG_ERROR,
+    URL_HAS_FORBIDDEN_CHARACTER,
+)
+from backend.app.schemas.visual import EDITOR_URL_REFUSED, VISUAL_CONFIG_ERROR
 
 pytestmark = [pytest.mark.unit, pytest.mark.regression]
 
@@ -231,6 +236,79 @@ CASES: Dict[str, Tuple[Type[BaseModel], Dict[str, Any], str, Any, Tuple[Any, ...
     "key-scopes-as-text": (APIKeyCreate, {"name": "k"}, "scopes", "a,b{}", ("scopes",)),
 }
 
+SPLIT_VARIANTS = [
+    {"name": "Control", "url": "https://shop.example.com/a", "traffic_allocation": 50},
+    {
+        "name": "Treatment",
+        "url": "https://shop.example.com/b",
+        "traffic_allocation": 50,
+    },
+]
+#: An experiment's nested settings, checked at the leaf, on a create and on an
+#: update.
+for _model, _base, _route in (
+    (ExperimentCreate, CREATE, "create"),
+    (ExperimentUpdate, {}, "update"),
+):
+    CASES[f"{_route}-a-covariate-metric-id"] = (
+        _model,
+        _base,
+        "variance_reduction_config",
+        {"method": "cuped", "covariate_metric_id": "m{}"},
+        ("variance_reduction_config", "covariate_metric_id"),
+    )
+    CASES[f"{_route}-a-cookie-name"] = (
+        _model,
+        _base,
+        "split_url_config",
+        {"variants": SPLIT_VARIANTS, "cookie_name": "c{}"},
+        ("split_url_config", "cookie_name"),
+    )
+    CASES[f"{_route}-a-canonical-url"] = (
+        _model,
+        _base,
+        "split_url_config",
+        {"variants": SPLIT_VARIANTS, "canonical_url": "https://shop.example.com/a{}"},
+        ("split_url_config", "canonical_url"),
+    )
+
+#: URLs refuse an unpaired surrogate with their own fixed message, as they
+#: refuse NUL: (model, a valid body, the field, the value, the loc, the type,
+#: the message).
+URL_CASES: Dict[str, Tuple[Any, ...]] = {}
+for _model, _base, _route in (
+    (ExperimentCreate, CREATE, "create"),
+    (ExperimentUpdate, {}, "update"),
+):
+    URL_CASES[f"{_route}-a-split-url-query"] = (
+        _model,
+        _base,
+        "split_url_config",
+        {
+            "variants": [
+                {**SPLIT_VARIANTS[0], "url": "https://shop.example.com/a?q=v{}"},
+                SPLIT_VARIANTS[1],
+            ]
+        },
+        ("split_url_config", "variants", 0, "url"),
+        SPLIT_URL_CONFIG_ERROR,
+        URL_HAS_FORBIDDEN_CHARACTER.format(name="Control"),
+    )
+    URL_CASES[f"{_route}-the-editor-url-query"] = (
+        _model,
+        _base,
+        "visual_config",
+        {
+            "version": 1,
+            "editor_url": "https://shop.example.com/?q=v{}",
+            "pages": [{"match": "prefix", "url": "https://shop.example.com/"}],
+            "goals": [],
+        },
+        ("visual_config", "editor_url"),
+        VISUAL_CONFIG_ERROR,
+        EDITOR_URL_REFUSED,
+    )
+
 
 def _filled(value: Any, text: str) -> Any:
     """*value* with every ``{}`` in its strings, keys included, replaced."""
@@ -281,6 +359,35 @@ def test_an_emoji_is_accepted_as_sent(case):
     model, body = _body(case, EMOJI)
     validated = model.model_validate(body)
     assert EMOJI in str(validated.model_dump())
+
+
+def _url_body(case: str, text: str) -> Tuple[Type[BaseModel], Dict[str, Any]]:
+    model, base, field, value, *_ = URL_CASES[case]
+    body = copy.deepcopy(base)
+    body[field] = _filled(value, text)
+    return model, body
+
+
+@pytest.mark.parametrize("case", URL_CASES)
+def test_a_url_refuses_an_unpaired_surrogate_with_its_own_message(case):
+    model, body = _url_body(case, MARK + CHARACTERS["surrogate"])
+    *_, loc, error_type, message = URL_CASES[case]
+
+    with pytest.raises(ValidationError) as caught:
+        model.model_validate(body)
+
+    errors = caught.value.errors(include_url=False, include_input=False)
+    assert [(e["type"], e["loc"], e["msg"]) for e in errors] == [
+        (error_type, loc, message)
+    ]
+    assert MARK not in str(errors)
+
+
+@pytest.mark.parametrize("case", URL_CASES)
+def test_a_url_with_an_emoji_or_without_the_character_is_accepted(case):
+    for text in ("", EMOJI):
+        model, body = _url_body(case, text)
+        model.model_validate(body)
 
 
 def test_a_null_is_answered_as_before():

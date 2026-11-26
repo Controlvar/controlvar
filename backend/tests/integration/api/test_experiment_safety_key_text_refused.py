@@ -13,7 +13,11 @@ fixed message that never repeats the value, nothing saved and no audit entry.
   ``description``, ``hypothesis``, ``targeting_rules``, ``tags``; a variant's
   ``name``, ``description`` and ``configuration``; a metric's ``name``,
   ``description``, ``event_name``, ``aggregation_method`` and
-  ``event_value_path``.
+  ``event_value_path``; ``variance_reduction_config.covariate_metric_id`` and
+  ``split_url_config``'s ``cookie_name`` and ``canonical_url``, each at its
+  own field. A split URL variant's ``url`` and ``visual_config.editor_url``
+  refuse an unpaired surrogate (which in a query reached the database) with
+  the fixed message they give NUL.
 * ``POST /api/v1/safety/feature-flags/{id}/config``: ``metrics``, a metric's
   name or anything in its thresholds.
 * ``POST /api/v1/api-keys``: ``name``, ``description``, ``scopes``.
@@ -50,6 +54,11 @@ from backend.app.models.experiment import Experiment
 from backend.app.models.feature_flag import FeatureFlag, FeatureFlagStatus
 from backend.app.models.safety import FeatureFlagSafetyConfig
 from backend.app.models.user import User, UserRole
+from backend.app.schemas.split_url_config import (
+    SPLIT_URL_CONFIG_ERROR,
+    URL_HAS_FORBIDDEN_CHARACTER,
+)
+from backend.app.schemas.visual import EDITOR_URL_REFUSED, VISUAL_CONFIG_ERROR
 
 pytestmark = [pytest.mark.integration, pytest.mark.requires_db, pytest.mark.regression]
 
@@ -159,6 +168,12 @@ EXPERIMENT_PLACES: Dict[str, Place] = {
         lambda b: b["variants"][1].update(configuration={"color" + MARK + X: "blue"}),
         ("variants", 1, "configuration"),
     ),
+    "a-variant-configuration-nested-key": (
+        lambda b: b["variants"][1].update(
+            configuration={"button": {"color" + MARK + X: "blue"}}
+        ),
+        ("variants", 1, "configuration"),
+    ),
     "a-metric-name": (_append(("metrics", 0, "name")), ("metrics", 0, "name")),
     "a-metric-description": (
         _append(("metrics", 1, "description")),
@@ -190,6 +205,98 @@ RULES_READ_BEFORE: Dict[str, Place] = {
         ("targeting_rules",),
     ),
 }
+
+#: An experiment's nested settings, each refused at its own field (the leaf):
+#: a check on the setting as a whole would move the 422 another check gives a
+#: NUL in a URL. The URLs refuse an unpaired surrogate with their own fixed
+#: message, as they refuse NUL; a surrogate in a query reached the database.
+SETTINGS = {
+    "variance_reduction_config": {"method": "cuped", "covariate_metric_id": "m"},
+    "split_url_config": {
+        "variants": [
+            {
+                "name": "Control",
+                "url": "https://shop.example.com/a?q=v",
+                "traffic_allocation": 50,
+            },
+            {
+                "name": "Treatment",
+                "url": "https://shop.example.com/b",
+                "traffic_allocation": 50,
+            },
+        ],
+        "cookie_name": "c",
+        "canonical_url": "https://shop.example.com/a",
+    },
+    "visual_config": {
+        "version": 1,
+        "editor_url": "https://shop.example.com/?q=v",
+        "pages": [{"match": "prefix", "url": "https://shop.example.com/"}],
+        "goals": [],
+    },
+}
+URL_REFUSED = {
+    "type": SPLIT_URL_CONFIG_ERROR,
+    "msg": URL_HAS_FORBIDDEN_CHARACTER.format(name="Control"),
+}
+EDITOR_REFUSED = {"type": VISUAL_CONFIG_ERROR, "msg": EDITOR_URL_REFUSED}
+
+#: (the setting, the path to the text in it, the error's loc, the error when it
+#: is not this check's, the characters measured answering 400 or 500).
+SETTING_PLACES = {
+    "covariate-metric-id": (
+        "variance_reduction_config",
+        ("covariate_metric_id",),
+        ("variance_reduction_config", "covariate_metric_id"),
+        None,
+        CHARACTERS,
+    ),
+    "cookie-name": (
+        "split_url_config",
+        ("cookie_name",),
+        ("split_url_config", "cookie_name"),
+        None,
+        CHARACTERS,
+    ),
+    "canonical-url": (
+        "split_url_config",
+        ("canonical_url",),
+        ("split_url_config", "canonical_url"),
+        None,
+        CHARACTERS,
+    ),
+    "a-url-query": (
+        "split_url_config",
+        ("variants", 0, "url"),
+        ("split_url_config", "variants", 0, "url"),
+        URL_REFUSED,
+        ("surrogate",),
+    ),
+    "the-editor-url-query": (
+        "visual_config",
+        ("editor_url",),
+        ("visual_config", "editor_url"),
+        EDITOR_REFUSED,
+        ("surrogate",),
+    ),
+}
+SETTING_CASES = [
+    (place, character)
+    for place, (*_, characters) in SETTING_PLACES.items()
+    for character in characters
+]
+
+
+def _setting(place: str, text: str) -> Tuple[str, Any]:
+    """The setting of *place*, with *text* added to its text."""
+    name, path, *_ = SETTING_PLACES[place]
+    value = copy.deepcopy(SETTINGS[name])
+    target = value
+    for step in path[:-1]:
+        target = target[step]
+    target[path[-1]] = target[path[-1]] + text
+    return name, value
+
 
 SAFETY_PLACES = {
     "a-metric-name": {"error_rate" + MARK + X: {"critical_threshold": 0.1}},
@@ -227,13 +334,12 @@ def _raw(body: Dict[str, Any], escape: str) -> bytes:
     return sent.replace(X, escape).encode("ascii")
 
 
-def _assert_refused(response, loc: Tuple[Any, ...]) -> None:
+def _assert_refused(response, loc: Tuple[Any, ...], error=None) -> None:
     assert response.status_code == 422, response.text
     assert MARK not in response.text, "the answer repeats the value sent"
     errors = response.json()["detail"]
-    assert [{k: e[k] for k in ("type", "loc", "msg")} for e in errors] == [
-        _refusal(loc)
-    ]
+    expected = _refusal(loc) if error is None else {**error, "loc": ["body", *loc]}
+    assert [{k: e[k] for k in ("type", "loc", "msg")} for e in errors] == [expected]
 
 
 def _with(place: Place) -> Dict[str, Any]:
@@ -547,6 +653,68 @@ def test_rules_another_check_reads_get_this_answer(
     assert _stored_experiment(fresh, experiment_id) == before
 
 
+@pytest.mark.parametrize(
+    "place,character", SETTING_CASES, ids=[f"{p}-{c}" for p, c in SETTING_CASES]
+)
+def test_an_experiment_create_refuses_the_character_in_a_setting(
+    client, fresh, developer, place, character
+):
+    name, value = _setting(place, MARK + X)
+    body = {**_experiment_body(), name: value}
+    before = _totals(fresh)
+
+    response = _post_experiment(client, developer, body, CHARACTERS[character])
+
+    _assert_refused(response, SETTING_PLACES[place][2], SETTING_PLACES[place][3])
+    assert _totals(fresh) == before
+
+
+@pytest.mark.parametrize(
+    "place,character", SETTING_CASES, ids=[f"{p}-{c}" for p, c in SETTING_CASES]
+)
+def test_an_experiment_update_refuses_the_character_in_a_setting(
+    client, fresh, developer, place, character
+):
+    experiment_id = _create_experiment(client, developer)
+    before = (_stored_experiment(fresh, experiment_id), _totals(fresh))
+    name, value = _setting(place, MARK + X)
+
+    response = _put_experiment(
+        client, developer, experiment_id, {name: value}, CHARACTERS[character]
+    )
+
+    _assert_refused(response, SETTING_PLACES[place][2], SETTING_PLACES[place][3])
+    assert (_stored_experiment(fresh, experiment_id), _totals(fresh)) == before
+
+
+@pytest.mark.parametrize("place", SETTING_PLACES)
+def test_a_setting_with_an_emoji_is_still_saved_as_sent(
+    client, fresh, developer, place
+):
+    """On a create and on an update, as each setting's text was sent."""
+    name, value = _setting(place, X)
+    raw = json.dumps({**_experiment_body(), name: value}).replace(X, EMOJI_ESCAPE)
+
+    created = client.post(
+        f"{EXPERIMENTS}/", content=raw.encode("ascii"), headers=_auth(developer)
+    )
+
+    assert created.status_code == 201, created.text
+    experiment_id = created.json()["id"]
+    updated = client.put(
+        f"{EXPERIMENTS}/{experiment_id}",
+        content=json.dumps({name: value}).replace(X, EMOJI_ESCAPE).encode("ascii"),
+        headers=_auth(developer),
+    )
+    assert updated.status_code == 200, updated.text
+    session = fresh()
+    try:
+        stored = getattr(session.get(Experiment, uuid.UUID(experiment_id)), name)
+        assert EMOJI in json.dumps(stored, ensure_ascii=False)
+    finally:
+        session.close()
+
+
 @pytest.mark.parametrize("character", CHARACTERS)
 def test_a_key_still_answers_its_own_422(client, fresh, developer, character):
     """``key`` refused both characters already (its pattern, or as text that
@@ -585,7 +753,7 @@ def test_an_emoji_in_an_experiment_is_still_saved_as_sent(client, fresh, develop
     assert _condition(got)["value"] == "US" + EMOJI
     treatment = next(v for v in got["variants"] if v["name"] == "Treatment")
     assert treatment["description"] == "blue" + EMOJI
-    assert treatment["configuration"] == {"color" + EMOJI: "blue"}
+    assert treatment["configuration"] == {"button": {"color" + EMOJI: "blue"}}
     assert sorted(m["event_name"] for m in got["metrics"]) == [
         "purchase",
         "purchase" + EMOJI,

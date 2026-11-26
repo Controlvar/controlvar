@@ -6,14 +6,18 @@ Supports CUPED, CUPED+, and Winsorization methods.
 """
 
 from enum import Enum
-from typing import List, Optional
+from typing import Any, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
 
 from backend.app.core import analysis_status as analysis_table
 from backend.app.core.analysis_status import AnalysisStatusValue
 from backend.app.core.stats_engine import ENGINE_VERSION
 from backend.app.schemas.finite_number import FiniteFloat
+from backend.app.schemas.storable_text import (
+    contains_unstorable_text,
+    unstorable_text_message,
+)
 
 # ---------------------------------------------------------------------------
 # Enums
@@ -89,6 +93,15 @@ class VarianceReductionConfig(BaseModel):
             "the same whatever this is."
         ),
     )
+
+    @field_validator("covariate_metric_id", mode="before")
+    @classmethod
+    def refuse_unstorable_text(cls, value: Any, info: ValidationInfo) -> Any:
+        """NUL or an unpaired surrogate, which the database cannot store,
+        answers 422 at the field (#2180); the message never repeats it."""
+        if contains_unstorable_text(value):
+            raise ValueError(unstorable_text_message(info.field_name))
+        return value
 
 
 # ---------------------------------------------------------------------------
