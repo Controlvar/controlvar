@@ -24,6 +24,17 @@ stays `active`.
 
 ---
 
+## Environments
+
+A rollout schedule runs in production: each stage sets the flag's production rollout percentage,
+and a stage never changes the flag's staging or development settings. In Staging and Development
+the flag's page shows no schedule and says
+`Rollout schedules, safety monitoring and experiments run in Production only.` Promoting a flag into Production copies its status, rollout percentage and
+targeting rules, and leaves its schedules as they are, so the next stage that starts sets the
+rollout percentage again. See [Flag environments](environments.md#what-runs-in-production-only).
+
+---
+
 ## In the Dashboard
 
 A flag's page has a **Rollout schedule** section. Users who may change the flag create and run

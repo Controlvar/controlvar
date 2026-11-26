@@ -141,8 +141,10 @@ also refuses a key whose owner cannot change experiments. Only users who can cha
 flags (ADMIN, DEVELOPER, a superuser, or in the full profile anyone whose custom role or direct
 grant gives `feature_flag (update)`) can create a key with it; anyone else gets `403` and no
 key is created. `mcp:read` lets a key read flags, experiments and results on four read
-operations, listed below; any role can create a key with it. Every other endpoint that takes an
-API key accepts any active key, whatever its scopes; see
+operations, listed below; any role can create a production key with it. Every other endpoint
+that takes an API key accepts any active key, whatever its scopes, except that the routes for
+experiments and event tracking refuse a `staging` or `development` key
+([Flag environments](../feature-flags/environments.md#keys-and-environments)); see
 [Scopes](../security/api-keys.md#scopes).
 
 ### Using an API Key

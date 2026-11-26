@@ -1,0 +1,591 @@
+# What verifies each unit of docs/feature-flags/environments.md (#2011).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/feature-flags/environments.md"
+
+[[unit]]
+text = "Flag Environments (beta)"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A flag has settings in three environments, production, staging and development: whether it is on, its rollout percentage and its targeting rules."
+by = [
+    "test:backend/tests/unit/core/test_flag_environments.py::test_the_environments_are_exactly_three_the_default_first",
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_each_environment_answers_its_own_settings",
+]
+
+[[unit]]
+text = "Every API key belongs to one of them and is answered that environment's settings, so a change can be made and tested in staging before any production user gets it."
+by = [
+    "test:backend/tests/integration/api/test_key_environment_routes.py::test_a_scoped_route_answers_the_presented_keys_environment",
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_a_production_key_is_answered_productions_settings_after_a_staging_change",
+    "docex:docs/feature-flags/environments.md#{\"enabled\":false,\"reason\":\"inactive\"}",
+]
+
+[[unit]]
+text = "Environments are in beta: their routes and the dashboard may change."
+by = ["test:backend/tests/unit/api/test_flag_environment_operations.py::test_each_operation_is_beta_and_answers_what_it_says"]
+
+[[unit]]
+text = "The commands on this page run as written against the stack from the Quick Start, in one terminal, top to bottom."
+by = ["docex:docs/feature-flags/environments.md#[\"production\",\"staging\",\"development\"]"]
+
+[[unit]]
+text = "Each one uses the shell variables set by the ones before it."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "What an environment is"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The environments are production, staging and development, and there are no others."
+by = [
+    "test:backend/tests/unit/core/test_flag_environments.py::test_the_environments_are_exactly_three_the_default_first",
+    "test:backend/tests/unit/core/test_flag_environments.py::test_any_other_spelling_is_not_an_environment",
+]
+
+[[unit]]
+text = "They are lower case in the API and capitalised in the dashboard: Production, Staging and Development."
+by = [
+    "test:backend/tests/unit/core/test_flag_environments.py::test_any_other_spelling_is_not_an_environment",
+    "test:frontend/src/tests/pages/feature-flag-environments.test.tsx::offers Development, Staging and Production, labelled \"Environment\", with Production marked in text",
+]
+
+[[unit]]
+text = "Production's settings are the flag's own."
+by = [
+    "test:backend/tests/unit/core/test_flag_environments.py::test_production_is_the_flag_row_itself",
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_a_put_to_production_is_the_stable_put",
+]
+
+[[unit]]
+text = "They are what the flag's page and PUT /api/v1/feature-flags/{id} have always changed, and every API key made before environments existed is a production key."
+by = [
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_a_put_to_production_is_the_stable_put",
+    "test:backend/tests/integration/api/test_environment_evaluation.py::test_a_key_stored_with_no_environment_named_is_a_production_key",
+    "test:backend/tests/integration/database/test_flag_environments_migration.py::test_a_database_at_the_previous_release_gains_the_table_and_the_column_and_no_data",
+]
+
+[[unit]]
+text = "In staging and development a flag is off until someone configures it there: with no settings it is off, at 0%, with no rules."
+by = [
+    "test:backend/tests/unit/core/test_flag_environments.py::test_no_side_row_is_off_and_production_is_untouched",
+    "test:backend/tests/integration/api/test_environment_evaluation.py::test_a_flag_nothing_configures_there_is_off_with_its_off_value",
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_a_flag_nobody_configured_is_off_outside_production",
+]
+
+[[unit]]
+text = "A flag's key, name, description, value_type, on_value and off_value are the flag's, and are the same in every environment."
+by = ["test:backend/tests/unit/core/test_flag_environments.py::test_identity_and_values_are_the_flag_rows"]
+
+[[unit]]
+text = "An archived flag is off in every environment, whatever its settings there."
+by = [
+    "test:backend/tests/integration/api/test_environment_evaluation.py::test_an_archived_flag_is_off_in_every_environment",
+    "test:backend/tests/unit/core/test_flag_environments.py::test_an_archived_flag_row_wins_over_an_active_side_row",
+]
+
+[[unit]]
+text = "A user who is inside a rollout percentage in one environment is inside the same percentage in every environment."
+by = ["test:backend/tests/integration/api/test_environment_evaluation.py::test_the_same_users_are_inside_the_same_percentage_in_every_environment"]
+
+[[unit]]
+text = "The environment of a flag is not the deployment setting ENVIRONMENT: an installation whose ENVIRONMENT is development still answers its flags from production, until a key says otherwise."
+by = [
+    "test:backend/tests/integration/database/test_flag_environments_migration.py::test_the_upgrade_changes_no_answer_whatever_the_deployments_environment",
+    "test:backend/tests/unit/core/test_flag_environments.py::test_the_module_never_reads_the_deployment_environment",
+]
+
+[[unit]]
+text = "Log in, then list the environments:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It prints [\"production\",\"staging\",\"development\"]."
+by = ["docex:docs/feature-flags/environments.md#[\"production\",\"staging\",\"development\"]"]
+
+[[unit]]
+text = "Any signed-in user can read the list."
+by = ["test:backend/tests/integration/api/test_flag_environments_api.py::test_the_environments_are_listed_for_every_role"]
+
+[[unit]]
+text = "Keys and environments"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A key belongs to one environment, chosen when it is created and never changed: to move a key, create a new one and delete the old."
+by = ["test:backend/tests/integration/api/test_api_key_environment_api.py::test_the_environment_is_stored_answered_listed_and_audited"]
+
+[[unit]]
+text = "A key made without an environment is a production key."
+by = ["test:backend/tests/integration/api/test_api_key_environment_api.py::test_a_create_that_names_no_environment_is_answered_as_before_plus_the_field"]
+
+[[unit]]
+text = "This creates a flag, then a key for staging and one for production, and prints the environment of each key from the create response:"
+by = [
+    "docex:docs/feature-flags/environments.md#{\"name\":\"checkout staging\",\"environment\":\"staging\"}",
+    "docex:docs/feature-flags/environments.md#{\"name\":\"checkout production\",\"environment\":\"production\"}",
+]
+
+[[unit]]
+text = "The flag is on in production."
+by = ["docex:docs/feature-flags/environments.md#{\"status\":\"active\",\"rollout_percentage\":100}"]
+
+[[unit]]
+text = "The create response, and the list of keys, name each key's environment; check it before you hand a key out."
+by = ["test:backend/tests/integration/api/test_api_key_environment_api.py::test_the_environment_is_stored_answered_listed_and_audited"]
+
+[[unit]]
+text = "environment takes production, staging or development, and anything else, null included, answers 422."
+by = ["test:backend/tests/integration/api/test_api_key_environment_api.py::test_any_other_value_is_the_standard_422_and_writes_nothing"]
+
+[[unit]]
+text = "An evaluation answers the settings of the environment of the key that asks."
+by = [
+    "test:backend/tests/integration/api/test_key_environment_routes.py::test_a_scoped_route_answers_the_presented_keys_environment",
+    "test:backend/tests/integration/api/test_environment_evaluation.py::test_an_environments_own_rules_and_percentage_decide",
+]
+
+[[unit]]
+text = "The staging key has no settings for the flag yet, so it is answered off, and the production key is answered on:"
+by = ["docex:docs/feature-flags/environments.md#{\"enabled\":false,\"reason\":\"inactive\"}"]
+
+[[unit]]
+text = "The routes that answer a key's environment are the flag evaluation routes, GET and POST /api/v1/feature-flags/evaluate/{flag_key} and GET /api/v1/feature-flags/user/{user_id}, and the ruleset, GET /api/v1/sdk/ruleset, which has a version of its own in each environment."
+by = [
+    "test:backend/tests/integration/api/test_key_environment_routes.py::test_every_key_route_is_in_exactly_one_class_and_the_counts_are_exact",
+    "test:backend/tests/integration/api/test_environment_evaluation.py::test_each_environments_ruleset_has_its_own_version",
+]
+
+[[unit]]
+text = "An SDK that evaluates locally with a staging key evaluates staging's rules."
+by = ["test:backend/tests/integration/api/test_environment_evaluation.py::test_a_staging_keys_ruleset_is_the_vectors_ruleset"]
+
+[[unit]]
+text = "An answer has the fields it always had."
+by = ["test:backend/tests/integration/api/test_environment_evaluation.py::test_a_flag_nothing_configures_there_is_off_with_its_off_value"]
+
+[[unit]]
+text = "Experiments and event tracking run in production only."
+by = ["test:backend/tests/integration/api/test_key_environment_routes.py::test_a_production_only_route_refuses_another_key_and_writes_nothing"]
+
+[[unit]]
+text = "Pass a staging key to an SDK as its API key setting (apiKey in the JavaScript SDK, api_key in the Python SDK), as you would a production key: nothing else in your setup changes."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The routes that assign users and record events (for example /tracking/assign, /assign/batch, /alias, /track, /events, /batch and /visual) refuse a staging or development key with 403, and write nothing."
+by = ["test:backend/tests/integration/api/test_key_environment_routes.py::test_a_production_only_route_refuses_another_key_and_writes_nothing"]
+
+[[unit]]
+text = "Error and evaluation reports are not refused; see below:"
+by = [
+    "test:backend/tests/integration/api/test_key_environment_routes.py::test_an_error_report_of_another_environment_is_stored_and_counted_in_neither_set",
+    "test:backend/tests/integration/api/test_key_environment_routes.py::test_local_evaluation_counts_of_another_environment_are_not_recorded",
+]
+
+[[unit]]
+text = "It prints This API key belongs to the staging environment."
+by = [
+    "test:backend/tests/unit/api/test_key_environment.py::test_the_refusal_is_one_403_with_one_text",
+    "test:backend/tests/unit/api/test_environment_words.py::test_the_403_is_the_text_the_guide_quotes",
+]
+
+[[unit]]
+text = "Experiments and event tracking run in production only; use a production key."
+by = [
+    "test:backend/tests/unit/api/test_key_environment.py::test_the_refusal_is_one_403_with_one_text",
+    "test:backend/tests/unit/api/test_environment_words.py::test_the_403_is_the_text_the_guide_quotes",
+]
+
+[[unit]]
+text = "A staging or development key cannot carry the mcp:read scope, because the routes it opens read production only."
+by = [
+    "test:backend/tests/integration/api/test_api_key_environment_api.py::test_mcp_read_outside_production_is_refused_and_writes_nothing",
+    "test:backend/tests/integration/api/test_key_environment_routes.py::test_an_mcp_read_route_reads_production_with_a_key_of_any_environment",
+]
+
+[[unit]]
+text = "An error report sent with such a key is stored and is in no safety number, and an evaluation count sent with one answers accepted: 0 and is not recorded."
+by = [
+    "test:backend/tests/integration/api/test_key_environment_routes.py::test_an_error_report_of_another_environment_is_stored_and_counted_in_neither_set",
+    "test:backend/tests/integration/api/test_key_environment_routes.py::test_local_evaluation_counts_of_another_environment_are_not_recorded",
+    "test:backend/tests/integration/api/test_environment_evaluation.py::test_evaluations_outside_production_are_not_counted_anywhere",
+]
+
+[[unit]]
+text = "See Safety monitoring."
+by = ["exempt:navigation"]
+count = 2
+
+[[unit]]
+text = "In the dashboard, Admin → API Keys → Create API Key and Your API keys both offer an Environment, Production first, and both lists show each key's environment."
+by = [
+    "test:frontend/src/tests/admin/ApiKeysPage.environment.test.tsx::is a labelled select, Production first and chosen, described before anything is sent",
+    "test:frontend/src/tests/pages/account-api-keys-environment.test.tsx::is a labelled select, Production first and chosen, described before anything is sent",
+    "test:frontend/src/tests/admin/ApiKeysPage.environment.test.tsx::names each key's environment, and a dash where the API did not say",
+    "test:frontend/src/tests/pages/account-api-keys-environment.test.tsx::names each key's environment, and a dash where the API did not say",
+]
+
+[[unit]]
+text = "Each checks the create response, and a key whose response does not name the environment asked for is revoked and an error is shown; if the revoke fails, the error says which key is left."
+by = [
+    "test:frontend/src/tests/admin/keyEnvironment.test.ts::an answer that names no environment is refused for a Production key too",
+    "test:frontend/src/tests/admin/ApiKeysPage.environment.test.tsx::a Production key that the API did not confirm is refused too",
+    "test:frontend/src/tests/pages/account-api-keys-environment.test.tsx::a Production key that the API did not confirm is refused too",
+]
+
+[[unit]]
+text = "Changing a flag in an environment"
+by = ["exempt:label"]
+
+[[unit]]
+text = "GET /api/v1/feature-flags/{flag_id}/environments lists the flag's settings in each environment, and PUT /api/v1/feature-flags/{flag_id}/environments/{environment} changes them in one."
+by = [
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_each_environment_answers_its_own_settings",
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_a_put_changes_only_its_environment",
+]
+
+[[unit]]
+text = "The body takes is_active, rollout_percentage and targeting_rules, each optional: only the fields sent change, and \"targeting_rules\": null clears the rules."
+by = ["test:backend/tests/integration/api/test_flag_environments_api.py::test_only_the_fields_sent_change_and_null_clears_the_rules"]
+
+[[unit]]
+text = "Anyone signed in can read; changing needs the permission to change flags: the ADMIN and DEVELOPER roles, and in the full profile anyone whose custom role or direct grant gives feature_flag (update)."
+by = [
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_the_environments_are_listed_for_every_role",
+    "test:backend/tests/integration/api/test_flag_change_routes_access.py::test_environment_changes_require_update_on_the_flag",
+    "test:backend/tests/integration/api/test_flag_change_routes_access.py::test_environment_changes_follow_a_flag_update_grant",
+]
+
+[[unit]]
+text = "A PUT to production is the change PUT /api/v1/feature-flags/{flag_id} makes."
+by = ["test:backend/tests/integration/api/test_flag_environments_api.py::test_a_put_to_production_is_the_stable_put"]
+
+[[unit]]
+text = "This turns the flag on in staging at 100%."
+by = ["docex:docs/feature-flags/environments.md#{\"environment\":\"staging\",\"status\":\"active\",\"rollout_percentage\":100,\"configured\":true}"]
+
+[[unit]]
+text = "The development settings are as they were, and the production key is still answered on:"
+by = ["docex:docs/feature-flags/environments.md#{\"environment\":\"development\",\"status\":\"inactive\",\"configured\":false}"]
+
+[[unit]]
+text = "configured is false for a flag nobody has configured in that environment."
+by = ["test:backend/tests/integration/api/test_flag_environments_api.py::test_a_flag_nobody_configured_is_off_outside_production"]
+
+[[unit]]
+text = "A name that is not an environment answers the standard 422:"
+by = ["test:backend/tests/integration/api/test_flag_environments_api.py::test_an_unknown_environment_in_the_path_is_the_standard_422"]
+
+[[unit]]
+text = "It prints Input should be 'production', 'staging' or 'development'."
+by = [
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_an_unknown_environment_in_the_path_is_the_standard_422",
+    "test:backend/tests/unit/api/test_environment_words.py::test_the_422_is_the_text_the_guide_quotes",
+]
+
+[[unit]]
+text = "The routes, their errors and their permissions are in API endpoints."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "In the dashboard"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The flag list and a flag's page have an Environment switch: Development, Staging and Production."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-environments.test.tsx::offers Development, Staging and Production, labelled \"Environment\", with Production marked in text",
+    "test:frontend/src/tests/pages/feature-flags-index-environments.test.tsx::lists the flags as before, with no environment route, and says what a change reaches",
+]
+
+[[unit]]
+text = "Production is marked Live beside it, and for anyone who may change flags its page says You are editing Production."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-environments.test.tsx::a user who cannot change flags gets no \"editing\" banner in Production",
+    "test:frontend/src/tests/pages/feature-flag-environments.test.tsx::offers Development, Staging and Production, labelled \"Environment\", with Production marked in text",
+    "test:frontend/src/tests/pages/feature-flag-environments.test.tsx::Production keeps its controls and says what a change reaches",
+    "test:backend/tests/unit/api/test_environment_words.py::test_each_dashboard_word_is_in_the_dashboard",
+]
+
+[[unit]]
+text = "Changes affect live users."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-environments.test.tsx::Production keeps its controls and says what a change reaches",
+    "test:backend/tests/unit/api/test_environment_words.py::test_each_dashboard_word_is_in_the_dashboard",
+]
+
+[[unit]]
+text = "The environment is in the page's address, as ?env=staging, so a reload or a copied link opens the same one."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-environments.test.tsx::keeps the choice for the user and writes it into the URL",
+    "test:frontend/src/tests/pages/feature-flag-environments.test.tsx::lets ?env= win over the stored choice",
+]
+
+[[unit]]
+text = "A save in Staging or Development reads Save changes in Staging (or Development), and changes that environment only."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-environments.test.tsx::a Staging save goes to the Staging route, and never to the stable PUT",
+    "test:frontend/src/tests/pages/feature-flag-environments.test.tsx::Staging shows Staging's settings, the production-only line, and no schedule, safety or manage controls",
+    "test:backend/tests/unit/api/test_environment_words.py::test_each_dashboard_word_is_in_the_dashboard",
+]
+
+[[unit]]
+text = "A save in Production changes the flag as it always has."
+by = ["test:frontend/src/tests/pages/feature-flag-environments.test.tsx::a Production save goes to the stable PUT, and never to an environment route"]
+
+[[unit]]
+text = "A flag with no settings in Staging or Development shows Off, with Not configured in Staging."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-environments.test.tsx::a flag with no setting in Development is \"Off\", \"Not configured in Development\"",
+    "test:backend/tests/unit/api/test_environment_words.py::test_each_dashboard_word_is_in_the_dashboard",
+]
+
+[[unit]]
+text = "Compare environments shows the flag's status, rollout and targeting rules in Development, Staging and Production side by side."
+by = ["test:frontend/src/tests/pages/feature-flag-environments.test.tsx::shows the flag in all three environments side by side, from the environments route"]
+
+[[unit]]
+text = "A flag's values, and archiving or deleting it, apply in every environment, so the dashboard offers them in Production only."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-environments.test.tsx::a value flag's values are shown, not edited, outside Production",
+    "test:frontend/src/tests/pages/feature-flag-environments.test.tsx::Staging shows Staging's settings, the production-only line, and no schedule, safety or manage controls",
+]
+
+[[unit]]
+text = "New flags are created in Production."
+by = ["test:frontend/src/tests/pages/feature-flags-index-environments.test.tsx::reads every listed flag's Staging setting from the batch route, one flag_id each"]
+
+[[unit]]
+text = "Promotion"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Promotion copies a flag's settings from one environment into another: POST /api/v1/feature-flags/{flag_id}/environments/{target}/promote, with the body {\"from\": \"<environment>\"}."
+by = [
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_promotion_copies_all_three_fields_and_nothing_else",
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_a_promotion_body_that_names_no_environment_is_refused",
+]
+
+[[unit]]
+text = "It needs the permission that changing a flag needs."
+by = [
+    "test:backend/tests/integration/api/test_flag_change_routes_access.py::test_environment_changes_require_update_on_the_flag",
+    "test:backend/tests/integration/api/test_flag_change_routes_access.py::test_environment_changes_follow_a_flag_update_grant",
+]
+
+[[unit]]
+text = "It copies the status, the rollout percentage and the targeting rules, all together."
+by = [
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_promotion_copies_exactly_the_per_environment_fields",
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_promotion_copies_all_three_fields_and_nothing_else",
+]
+
+[[unit]]
+text = "It does not copy the flag's value_type, on_value or off_value, its rollout schedules or their stage state, or its safety settings."
+by = [
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_promotion_copies_all_three_fields_and_nothing_else",
+    "test:frontend/src/tests/pages/feature-flag-promote.test.tsx::says what is not copied",
+]
+
+[[unit]]
+text = "A source nobody has configured copies off."
+by = ["test:backend/tests/integration/api/test_flag_environments_api.py::test_promoting_from_an_environment_nobody_configured_turns_the_target_off"]
+
+[[unit]]
+text = "A promotion into the environment it copies from answers 422, and a promotion of an archived flag leaves it archived."
+by = [
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_promoting_into_the_source_is_refused",
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_promoting_an_archived_flag_copies_off_and_leaves_it_archived",
+]
+
+[[unit]]
+text = "This copies staging's settings into development:"
+by = ["docex:docs/feature-flags/environments.md#{\"environment\":\"development\",\"status\":\"active\",\"rollout_percentage\":100,\"configured\":true}"]
+
+[[unit]]
+text = "In the dashboard, a flag in Development offers Promote to Staging, and a flag in Staging offers Promote to Production; Production offers nothing."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-promote.test.tsx::Development offers \"Promote to Staging\"",
+    "test:frontend/src/tests/pages/feature-flag-promote.test.tsx::Staging offers \"Promote to Production\"",
+    "test:frontend/src/tests/pages/feature-flag-promote.test.tsx::Production offers nothing",
+    "test:backend/tests/unit/api/test_environment_words.py::test_each_dashboard_word_is_in_the_dashboard",
+]
+
+[[unit]]
+text = "The dialog lists Status, Rollout percentage and Targeting rules as they are in the target now and as they will be, and says what is not copied."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-promote.test.tsx::names the status, the rollout percentage and the rules, each from what Staging has to what it will have",
+    "test:frontend/src/tests/pages/feature-flag-promote.test.tsx::says what is not copied",
+    "test:backend/tests/unit/api/test_environment_words.py::test_each_dashboard_word_is_in_the_dashboard",
+]
+
+[[unit]]
+text = "A promotion into Production has a second step before it is sent."
+by = ["test:frontend/src/tests/pages/feature-flag-promote.test.tsx::is a second step in the same dialog, named by the fields that change: Continue sends nothing"]
+
+[[unit]]
+text = "What runs in production only"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Rollout schedules, safety monitoring and experiments run in Production only."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-environments.test.tsx::Staging shows Staging's settings, the production-only line, and no schedule, safety or manage controls",
+    "test:backend/tests/unit/api/test_environment_words.py::test_each_dashboard_word_is_in_the_dashboard",
+]
+
+[[unit]]
+text = "A rollout schedule changes the flag's production rollout percentage and nothing in staging or development."
+by = ["test:backend/tests/integration/api/test_flag_environments_api.py::test_a_rollout_schedule_changes_production_only"]
+
+[[unit]]
+text = "See Gradual rollouts."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Safety monitoring counts production's errors and evaluations, and a rollback changes production only."
+by = [
+    "test:backend/tests/integration/api/test_environment_safety.py::test_errors_of_another_environment_never_roll_production_back",
+    "test:backend/tests/integration/api/test_environment_evaluation.py::test_evaluations_outside_production_are_not_counted_anywhere",
+]
+
+[[unit]]
+text = "Experiments and event tracking take production keys only, as above."
+by = ["test:backend/tests/integration/api/test_key_environment_routes.py::test_a_production_only_route_refuses_another_key_and_writes_nothing"]
+
+[[unit]]
+text = "Turning a flag off follows its environment too: see Turning a flag off."
+by = [
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_a_put_changes_only_its_environment",
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_bulk_enable_and_disable_are_production_only",
+]
+
+[[unit]]
+text = "Other flag routes read a flag's settings in staging and development as well."
+by = [
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_bulk_archive_turns_the_flag_off_everywhere_and_names_where",
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_a_flag_on_outside_production_is_not_stale",
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_a_segment_used_only_in_staging_is_in_use_and_names_staging",
+]
+
+[[unit]]
+text = "Archiving a flag with bulk toggle turns it off there too, and unarchiving it leaves it off."
+by = ["test:backend/tests/integration/api/test_flag_environments_api.py::test_bulk_archive_turns_the_flag_off_everywhere_and_names_where"]
+
+[[unit]]
+text = "A flag that is on in staging or development is not stale."
+by = ["test:backend/tests/integration/api/test_flag_environments_api.py::test_a_flag_on_outside_production_is_not_stale"]
+
+[[unit]]
+text = "A segment that a flag's staging or development rules use is in use, and is listed with the environments that use it."
+by = ["test:backend/tests/integration/api/test_flag_environments_api.py::test_a_segment_used_only_in_staging_is_in_use_and_names_staging"]
+
+[[unit]]
+text = "Upgrading to 0.49.0"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Environments (beta)."
+by = ["exempt:label"]
+
+[[unit]]
+text = "A flag now has a production, a staging and a development configuration, and every API key belongs to one environment."
+by = [
+    "test:backend/tests/unit/core/test_flag_environments.py::test_the_environments_are_exactly_three_the_default_first",
+    "test:backend/tests/integration/api/test_api_key_environment_api.py::test_the_environment_is_stored_answered_listed_and_audited",
+]
+
+[[unit]]
+text = "Upgrading changes nothing: your flags, rollout schedules and safety settings are your production environment, every existing API key is a production key, and SDKs get the same answers with no change."
+by = [
+    "test:backend/tests/integration/database/test_flag_environments_migration.py::test_a_database_at_the_previous_release_gains_the_table_and_the_column_and_no_data",
+    "test:backend/tests/integration/database/test_flag_environments_migration.py::test_the_upgrade_changes_no_answer_whatever_the_deployments_environment",
+]
+
+[[unit]]
+text = "In staging and development every flag is off until you configure or promote it."
+by = [
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_a_flag_nobody_configured_is_off_outside_production",
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_promotion_copies_all_three_fields_and_nothing_else",
+]
+
+[[unit]]
+text = "Safety monitoring, rollout schedules and experiments run in production only."
+by = [
+    "test:backend/tests/integration/api/test_environment_safety.py::test_errors_of_another_environment_never_roll_production_back",
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_a_rollout_schedule_changes_production_only",
+    "test:backend/tests/integration/api/test_key_environment_routes.py::test_a_production_only_route_refuses_another_key_and_writes_nothing",
+]
+
+[[unit]]
+text = "Nothing to do."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "A task still running 0.48.0"
+by = ["exempt:label"]
+
+[[unit]]
+text = "While a task still runs 0.48.0 against the upgraded database, during a rolling upgrade and after any rollback of the API alone below 0.49.0, that task has no concept of environments."
+by = ["test:backend/tests/integration/database/test_flag_environments_migration.py::test_the_previous_release_treats_a_staging_key_as_a_production_key"]
+
+[[unit]]
+text = "It treats a staging or development key as a production key."
+by = ["test:backend/tests/integration/database/test_flag_environments_migration.py::test_the_previous_release_treats_a_staging_key_as_a_production_key"]
+
+[[unit]]
+text = "It serves that key production's configuration."
+by = ["test:backend/tests/integration/database/test_flag_environments_migration.py::test_the_previous_release_treats_a_staging_key_as_a_production_key"]
+
+[[unit]]
+text = "It counts that key's server-side error reports, its failed evaluations and its evaluation counts in production's safety numbers (error reports sent with a client-side key are stored but not counted, as today), which can trigger or dilute a production rollback."
+by = ["test:backend/tests/integration/database/test_flag_environments_migration.py::test_the_previous_release_treats_a_staging_key_as_a_production_key"]
+
+[[unit]]
+text = "It writes that key's assignments and events into production experiments."
+by = ["test:backend/tests/integration/database/test_flag_environments_migration.py::test_the_previous_release_treats_a_staging_key_as_a_production_key"]
+
+[[unit]]
+text = "After a rollback this lasts until someone acts; the rollback runbook's 0.49.0 step removes those keys."
+by = [
+    "test:backend/tests/integration/database/test_flag_environments_migration.py::test_the_previous_release_treats_a_staging_key_as_a_production_key",
+    "test:backend/tests/integration/database/test_api_key_environment_previous_release.py::test_the_rollback_runbooks_steps_work_on_the_previous_release",
+]
+
+[[unit]]
+text = "A key created through a task still running 0.48.0 is a production key, even when the request asks for staging or development: 0.48.0 ignores the field, and its response carries no environment."
+by = ["test:backend/tests/integration/database/test_api_key_environment_previous_release.py::test_the_previous_release_makes_a_production_key_when_asked_for_staging"]
+
+[[unit]]
+text = "Check environment in the create response."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The dashboard checks it, revokes a key whose response does not match, and shows an error."
+by = [
+    "test:frontend/src/tests/admin/keyEnvironment.test.ts::an answer that names no environment is refused for a Production key too",
+    "test:backend/tests/integration/database/test_api_key_environment_previous_release.py::test_the_previous_release_makes_a_production_key_when_asked_for_staging",
+]
+
+[[unit]]
+text = "A flag that such a task archives keeps its staging and development settings as they were."
+by = ["test:backend/tests/integration/api/test_environment_archive_by_previous_release.py::test_a_flag_the_previous_release_archived_comes_back_on_in_staging_when_unarchived"]
+
+[[unit]]
+text = "They answer off while the flag is archived, because an archived flag is off everywhere, and they answer as before once the flag is unarchived, which can turn the flag back on in staging or development."
+by = ["test:backend/tests/integration/api/test_environment_archive_by_previous_release.py::test_a_flag_the_previous_release_archived_comes_back_on_in_staging_when_unarchived"]
+
+[[unit]]
+text = "Check them with GET /api/v1/feature-flags/{flag_id}/environments after unarchiving."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "To roll back, follow Rolling back past flag environments."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Migrations says what the database downgrade loses and how the upgrade waits for its locks."
+by = ["exempt:navigation"]

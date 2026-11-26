@@ -419,8 +419,9 @@ by = [
 ]
 
 [[unit]]
-text = "A stored report counts toward the flag's error rate and automatic rollback only when the client's key has the sdk:ruleset scope and was created by a user who can change feature flags; the flag's safety check shows the others as uncounted_error_count."
+text = "A stored report counts toward the flag's error rate and automatic rollback only when the client's key is a production key with the sdk:ruleset scope and was created by a user who can change feature flags; the flag's safety check shows the other production reports as uncounted_error_count, and a report sent with a staging or development key is in neither."
 by = [
+    "test:backend/tests/integration/api/test_key_environment_routes.py::test_an_error_report_of_another_environment_is_stored_and_counted_in_neither_set",
     "test:backend/tests/integration/api/test_error_report_source.py::test_a_report_sent_with_a_server_side_key_rolls_back",
     "test:backend/tests/integration/api/test_error_report_source.py::test_a_report_sent_with_a_key_without_the_scope_does_not_roll_back",
     "test:backend/tests/integration/api/test_error_report_source.py::test_a_scoped_key_whose_owner_can_no_longer_change_flags_does_not_count",

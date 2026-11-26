@@ -261,7 +261,8 @@ def test_a_key_deactivated_by_its_hash_gets_401_everywhere(client, db_session, k
     deactivated = db_session.execute(
         text(
             "UPDATE test_experimentation.api_keys SET is_active = false "
-            "WHERE key = :hash RETURNING id, name, user_id, scopes, last_used_at"
+            "WHERE key = :hash "
+            "RETURNING id, name, user_id, scopes, environment, last_used_at"
         ),
         {"hash": key_hash},
     ).all()

@@ -169,6 +169,22 @@ text = "Rollout percentage: a flag is on for a share of users, and a targeting r
 by = ["test:backend/tests/integration/services/test_feature_flag_targeting_rules.py::TestDashboardRules::test_matched_rule_uses_rule_percentage_unmatched_uses_global"]
 
 [[unit]]
+text = "Flag environments (beta): a flag has its own settings in production, staging and development, and a promotion copies its status, rollout percentage and targeting rules from one into another."
+by = [
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_each_environment_answers_its_own_settings",
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_promotion_copies_all_three_fields_and_nothing_else",
+    "test:backend/tests/unit/api/test_flag_environment_operations.py::test_each_operation_is_beta_and_answers_what_it_says",
+]
+
+[[unit]]
+text = "Environment API keys (beta): an API key belongs to one environment and is answered that environment's flags; experiments and event tracking take production keys only."
+by = [
+    "test:backend/tests/integration/api/test_key_environment_routes.py::test_a_scoped_route_answers_the_presented_keys_environment",
+    "test:backend/tests/integration/api/test_key_environment_routes.py::test_a_production_only_route_refuses_another_key_and_writes_nothing",
+    "test:backend/tests/integration/api/test_api_key_environment_api.py::test_the_environment_is_stored_answered_listed_and_audited",
+]
+
+[[unit]]
 text = "Rollout schedules: a flag's percentage raised in stages, each started at its date or by hand."
 by = [
     "test:backend/tests/unit/core/test_rollout_stage_order.py::test_a_time_based_stage_starts_once_the_stage_before_it_is_complete",

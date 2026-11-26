@@ -152,9 +152,10 @@ the server decided. Caches are keyed by user + key only — call `clear_cache()`
 user's attributes.
 
 `report_error` returns `True` when the server stored the report. A stored report counts toward the
-flag's error rate and automatic rollback only when the client's key has the `sdk:ruleset` scope and
-was created by a user who can change feature flags; the flag's safety check shows the others as
-`uncounted_error_count`.
+flag's error rate and automatic rollback only when the client's key is a production key with the
+`sdk:ruleset` scope and was created by a user who can change feature flags; the flag's safety
+check shows the other production reports as `uncounted_error_count`, and a report sent with a
+`staging` or `development` key is in neither.
 
 ### Enrolment: `assigned` and `reason`
 

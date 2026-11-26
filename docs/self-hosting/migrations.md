@@ -977,15 +977,30 @@ every API key is a production key. SDKs get the same answers as before.
 
 The previous release, 0.48.0, runs against this schema unchanged: it never
 reads or writes the table, and a key it creates gets `production` from the
-column's default.
+column's default. It has no concept of environments, though: while a task still
+runs 0.48.0 against the upgraded database, during a rolling upgrade and after an
+API-only rollback, it treats a staging or development key as a production key,
+and a key it creates is a production key even when the request asks for staging
+or development. [Flag environments](../feature-flags/environments.md#a-task-still-running-0480)
+says what that task does with such a key.
 
-From 0.48.0, the upgrade waits for two locks, each with its own bound: at most
+From 0.48.0, `t2011_flag_environments` waits for two locks, each with its own bound: at most
 0.5 s for the lock that creating the table takes on `feature_flags`, which a
 session writing to `feature_flags`, or a vacuum, analyze or schema change of
 it, holds up (SDK requests only read that table, and keep being answered), then
 at most 1.5 s for `api_keys`, which every SDK request reads. A lock that cannot
 be taken within its bound, or a deadlock, stops the upgrade with nothing
 applied, and it is simply run again.
+
+If the upgrade to 0.49.0 stops with a lock-timeout message, re-run it: every
+revision runs in one transaction, so nothing was applied. While it runs, an SDK
+request can wait up to 3 seconds at most: the upgrade waits at most 3 seconds in
+all for its locks, and SDK requests queue behind the `api_keys` lock, which
+`t2011_flag_environments` takes (at most 1.5 seconds to take) and the upgrade
+holds until it commits, through the wait of `t2012_flag_split` (at most 1
+second); a request that reads `feature_flags` during that wait queues behind it
+too, for at most 1 second. An SDK whose timeout is shorter answers its fallback meanwhile (the edge SDK's default is
+500 ms, and it answers `enabled: false`).
 
 The downgrade can wait for more than one lock, and each wait has its own
 bound: at most 1.5 s for each lock it needs on `api_keys` (the row of each

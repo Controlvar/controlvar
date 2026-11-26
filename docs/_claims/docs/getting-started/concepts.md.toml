@@ -613,11 +613,15 @@ text = "To test experiments in staging before they reach production users, run s
 by = ["exempt:advice"]
 
 [[unit]]
-text = "Staging vs Production"
+text = "Flag environments says how to configure, test and promote a flag in each."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Staging vs Production deployments"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Environment | Purpose"
+text = "Deployment | Purpose"
 by = ["exempt:label"]
 
 [[unit]]

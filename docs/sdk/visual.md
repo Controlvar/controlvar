@@ -17,7 +17,7 @@ Placed anywhere else (in `<body>`, with `defer` or `async`, or added by a tag ma
 | Attribute | What it does |
 |---|---|
 | `data-api-url` | Your Controlvar API's address. Without it, or without the key, the script logs one error and does nothing. |
-| `data-api-key` | An API key with no scopes, made for your website. A key with any scope is refused, because anyone who opens the page can read it. |
+| `data-api-key` | An API key with no scopes, made for your website. A key with any scope is refused, because anyone who opens the page can read it, and so is a `staging` or `development` key, because experiments run in production only. |
 | `data-require-consent` | The script waits for `controlvar.visual.consent()` before it reads, stores or sends anything about the visitor. |
 | `data-timeout-ms` | How long the page may stay hidden while its changes are applied: 0 to 4000 milliseconds, 1000 by default; 0 never hides it. |
 | `data-user-id` | Your own id for the visitor, at most 255 characters. Use an id that does not identify a person, such as an account number, not an email address: anyone with your page's key can ask what that id is assigned to. |

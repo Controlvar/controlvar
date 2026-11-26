@@ -388,8 +388,9 @@ by = [
 ]
 
 [[unit]]
-text = "Not limited by their scopes, with two exceptions: any active key authenticates every SDK route as the user who created it, except the server-side SDK routes (GET /api/v1/sdk/ruleset, POST /api/v1/tracking/evaluations, POST /api/v1/tracking/assign/batch), which require the sdk:ruleset scope; and four read operations (GET /api/v1/feature-flags/, GET /api/v1/experiments/, GET /api/v1/experiments/{experiment_id} and GET /api/v1/experiments/{experiment_id}/results) accept a key only if it carries the mcp:read scope (see API Key Management)"
+text = "Not limited by their scopes, with two exceptions: any active key authenticates every SDK route as the user who created it, except the routes for experiments and event tracking, which refuse a key of the staging or development flag environment (Flag environments), and the server-side SDK routes (GET /api/v1/sdk/ruleset, POST /api/v1/tracking/evaluations, POST /api/v1/tracking/assign/batch), which require the sdk:ruleset scope; and four read operations (GET /api/v1/feature-flags/, GET /api/v1/experiments/, GET /api/v1/experiments/{experiment_id} and GET /api/v1/experiments/{experiment_id}/results) accept a key only if it carries the mcp:read scope (see API Key Management)"
 by = [
+    "test:backend/tests/integration/api/test_key_environment_routes.py::test_a_production_only_route_refuses_another_key_and_writes_nothing",
     "test:backend/tests/smoke/test_sdk_scoped_routes.py::test_the_scoped_routes_are_exactly_these",
     "test:backend/tests/smoke/test_sdk_scoped_routes.py::test_every_route_under_the_sdk_prefix_requires_the_scope",
     "journey:api-key-first-assignment#ruleset-scope",
