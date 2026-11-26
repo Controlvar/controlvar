@@ -498,11 +498,11 @@ export default function ExperimentDetailPage() {
               </div>
               {/* Every dt is slate-500 (4.76:1 on white), never slate-400 (2.56:1): a11y/grey-text-contrast.test.ts. */}
               <dl className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm text-slate-600">
-                <div className="flex items-center gap-1.5">
+                <div className="flex min-w-0 items-center gap-1.5">
                   <dt className="text-slate-500">Key</dt>
                   {/* The Copy button sits inside the dd: a dl may hold only dt and dd groups. */}
-                  <dd className="flex items-center gap-1.5">
-                    <span className="font-mono text-slate-800" data-testid="experiment-key">
+                  <dd className="flex min-w-0 items-center gap-1.5">
+                    <span className="min-w-0 break-all font-mono text-slate-800" data-testid="experiment-key">
                       {experiment.key ?? '—'}
                     </span>
                     {experiment.key && (
