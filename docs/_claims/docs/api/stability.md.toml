@@ -1159,6 +1159,24 @@ by = [
 ]
 
 [[unit]]
+text = "POST /api/v1/safety/settings | #2209 | NUL (U+0000) or an unpaired surrogate in a metric's name or its comparison_type in default_metrics answers 422 at [\"body\", \"default_metrics\"] with the msg Value error, default_metrics must not contain NUL or unpaired surrogate characters; nothing is saved and no audit entry is made. It used to answer 500, because the database cannot store such text. The message does not repeat the value sent. Authentication still answers 401 first, and a caller who is not a superuser still answers 403 first. A valid surrogate pair, such as an emoji, is saved as before, and every other body answers as before. The OpenAPI document does not change."
+by = [
+    "test:backend/tests/integration/api/test_safety_settings_text_refused.py::test_the_global_safety_settings_refuse_the_character",
+    "test:backend/tests/unit/schemas/test_safety_settings_text_refused.py::test_default_metrics_refuses_the_character",
+    "test:backend/tests/integration/api/test_safety_settings_text_refused.py::test_authentication_still_answers_401_first",
+    "test:backend/tests/integration/api/test_safety_settings_text_refused.py::test_the_403_for_a_caller_who_is_not_a_superuser_still_comes_first",
+    "test:backend/tests/integration/api/test_safety_settings_text_refused.py::test_an_emoji_in_a_metric_name_is_still_saved",
+    "test:backend/tests/integration/api/test_safety_settings_text_refused.py::test_a_body_this_check_does_not_read_answers_as_before",
+    "test:backend/tests/integration/api/test_safety_settings_text_refused.py::test_a_body_another_check_refuses_answers_as_before",
+    "test:backend/tests/integration/api/test_safety_settings_text_refused.py::test_a_key_a_threshold_does_not_have_is_still_dropped",
+    "test:backend/tests/unit/schemas/test_safety_settings_text_refused.py::test_a_key_a_threshold_does_not_have_is_still_dropped",
+    "test:backend/tests/unit/schemas/test_safety_settings_text_refused.py::test_a_body_another_check_refuses_gets_that_error",
+    "test:backend/tests/unit/schemas/test_safety_settings_text_refused.py::test_a_null_a_storable_body_and_an_emoji_are_accepted_as_before",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
 text = "POST /api/v1/feature-flags/, PUT /api/v1/feature-flags/{flag_id}, PUT /api/v1/feature-flags/{flag_id}/environments/{environment} (beta) | #2163 | A targeting_rules or tags holding NUL (U+0000) or an unpaired surrogate anywhere, in a key or a value, nested or not, answers 422 at [\"body\", \"targeting_rules\"] or [\"body\", \"tags\"] with the msg Value error, targeting_rules must not contain NUL or unpaired surrogate characters (or tags); nothing is saved and no audit entry is made. Where another check refused such a body first, as for the character in a condition's attribute, operator or semantic version, it answered that check's 422 and now answers this one; otherwise it answered 500, because the database cannot store such text. The message does not repeat the value sent. Authentication still answers 401 first, and a create by a role that may not create a flag still answers 403 first; on both PUTs the 422 now comes before the 403 for a role that may not change the flag and the 404 for an unknown flag. A valid surrogate pair, such as an emoji, is saved as before, and every other body answers as before. The OpenAPI document does not change."
 by = [
     "test:backend/tests/integration/api/test_flag_text_refused.py::test_a_create_refuses_the_character_in_targeting_rules",
