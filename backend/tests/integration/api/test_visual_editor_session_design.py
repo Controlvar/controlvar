@@ -7,17 +7,20 @@ Users of each role sign in with local tokens. TestClient sends no ``Origin``:
 every request here sets the one it means, and every "wrong Origin" refusal is
 paired with the same call from a dashboard origin.
 
+The experiment's metrics come back in no fixed order, so every comparison
+here pairs them by ``(event_name, name)``, never by position.
+
 The rows of PLAN-v3.1's VERIFICATION held here, each with the defect that
 fails it (the failing line is the assertion's message or comparison):
 
-* BD2     the session's answer -- the exchange's, GET current's and the
+* Answer  the session's answer -- the exchange's, GET current's and the
           changes PUT's -- carries the draft's audience, each variant's
           share, every field of every metric, the goals and the exclusion
           group, each equal to the experiment's own answer for the same
           row. A metric model of four fields fails
           ``metrics[0].lower_is_better missing``; the group read from another
           row fails ``mutual_exclusion_group``.
-* D9      the global holdout goes to a user who may create experiments,
+* Holdout the global holdout goes to a user who may create experiments,
           never to one who may only change them, and is null when none is
           active. Shown to everyone: ``update-only role: {...} != None``.
 * Reads   the segments read lists active segments only, as
@@ -30,11 +33,11 @@ fails it (the failing line is the assertion's message or comparison):
 
 The save, ``PATCH .../sessions/current/experiment``:
 
-* BD3     the split names each variant once (a missing, extra or repeated
+* Split   the split names each variant once (a missing, extra or repeated
           id is refused); everything else about a variant, the page changes
           above all, is kept, and a preview link still opens. Built from
-          the request alone: ``variant B changes lost``.
-* BD6     a part not sent, the balance and the analysis settings included,
+          the request alone: ``variant A changes lost``.
+* Kept    a part not sent, the balance and the analysis settings included,
           stays as stored; a goals save keeps the pages
           (``pages lost``); a save of the split keeps every metric field
           (``lower_is_better False != True`` for a four-field metric model).
@@ -62,7 +65,7 @@ import json
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import pytest
 from fastapi.testclient import TestClient
@@ -385,10 +388,42 @@ def _get(client, path: str, token: str, origin: Optional[str] = None):
     return client.get(path, headers=_bearer(token, origin))
 
 
+def _metric_key(metric: Dict[str, Any]) -> Tuple[str, str]:
+    return (metric["event_name"], metric["name"])
+
+
+def _by_metric(metrics: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """*metrics* in ``(event_name, name)`` order, the order ``design_etag``
+    sorts them in. The experiment's metrics have no stored order: a read
+    lists them in whatever order its query plan reads the rows."""
+    return sorted(metrics, key=_metric_key)
+
+
+def _paired(
+    got: List[Dict[str, Any]], want: List[Dict[str, Any]]
+) -> List[Tuple[int, Dict[str, Any], Dict[str, Any]]]:
+    """Each metric of *want* with the metric of *got* of the same
+    ``(event_name, name)``, both in that order."""
+    got, want = _by_metric(got), _by_metric(want)
+    keys = [_metric_key(m) for m in got], [_metric_key(m) for m in want]
+    assert keys[0] == keys[1], f"metrics: {keys[0]} != {keys[1]}"
+    return [(index, g, w) for index, (g, w) in enumerate(zip(got, want))]
+
+
 def _detail(client, user, experiment_id: str) -> Dict[str, Any]:
+    """The experiment's own answer, its metrics in ``(event_name, name)``
+    order, so that two answers compare whatever order each read them in."""
     response = client.get(f"{EXPERIMENTS}/{experiment_id}", headers=auth(user))
     assert response.status_code == 200, response.text
-    return response.json()
+    detail = response.json()
+    return {**detail, "metrics": _by_metric(detail["metrics"])}
+
+
+def _answer(response) -> Dict[str, Any]:
+    """A session answer's body, its metrics in ``(event_name, name)`` order."""
+    body = response.json()
+    shown = body["experiment"]
+    return {**body, "experiment": {**shown, "metrics": _by_metric(shown["metrics"])}}
 
 
 def _custom_role(db_session, user, actions: List[str]) -> None:
@@ -451,15 +486,15 @@ def _assert_as_the_dashboard_shows(
     shown: Dict[str, Any], detail: Dict[str, Any], group_name: Optional[str]
 ) -> None:
     """Each new field of the session's ``experiment`` equals the experiment's
-    own answer's for the same row, field by field."""
+    own answer's for the same row, field by field; metrics are paired by
+    ``(event_name, name)``."""
     assert shown["targeting_rules"] == detail["targeting_rules"], "targeting_rules"
     split = {v["id"]: v["traffic_allocation"] for v in detail["variants"]}
     for variant in shown["variants"]:
         assert "traffic_allocation" in variant, f"{variant['name']}: no share"
         assert variant["traffic_allocation"] == split[variant["id"]], variant["name"]
     assert len(shown["metrics"]) == len(detail["metrics"]), "metric count"
-    for index, want in enumerate(detail["metrics"]):
-        got = shown["metrics"][index]
+    for index, got, want in _paired(shown["metrics"], detail["metrics"]):
         # lower_is_better first: it decides which variant wins (#1377).
         for field in ("lower_is_better", *want):
             assert field in got, f"metrics[{index}].{field} missing"
@@ -939,7 +974,7 @@ def test_a_save_of_the_split_keeps_everything_else_about_each_variant(
         else:
             assert after[field] == before[field], f"{field} changed"
     assert after["design_etag"] != before["design_etag"]
-    assert saved.json() == _get(client, CURRENT, token).json()
+    assert _answer(saved) == _answer(_get(client, CURRENT, token))
     assert saved.json()["experiment"]["design_etag"] == after["design_etag"]
     read = client.post(
         "/api/v1/tracking/visual/preview",
@@ -1021,7 +1056,7 @@ def test_a_save_keeps_every_metric_field_it_did_not_send(client, developer, expe
             {k: v for k, v in m.items() if k not in strip} for m in detail["metrics"]
         ]
 
-    assert metrics() == METRICS
+    assert metrics() == _by_metric(METRICS)
     split = _patch(
         client,
         token,
@@ -1031,7 +1066,7 @@ def test_a_save_keeps_every_metric_field_it_did_not_send(client, developer, expe
         },
     )
     assert split.status_code == 200, split.text
-    for index, (got, want) in enumerate(zip(metrics(), METRICS)):
+    for index, got, want in _paired(metrics(), METRICS):
         for field in ("lower_is_better", *want):
             assert got[field] == want[field], (
                 f"metrics[{index}].{field}: {got[field]!r} != {want[field]!r}"
@@ -1055,7 +1090,7 @@ def test_a_save_keeps_every_metric_field_it_did_not_send(client, developer, expe
         {"design_etag": split.json()["experiment"]["design_etag"], "metrics": sent},
     )
     assert saved.status_code == 200, saved.text
-    for index, (got, want) in enumerate(zip(metrics(), sent)):
+    for index, got, want in _paired(metrics(), sent):
         for field in ("lower_is_better", *want):
             assert got[field] == want[field], (
                 f"lower_is_better {got[field]} != {want[field]}"
@@ -1096,9 +1131,26 @@ def test_a_goals_save_keeps_the_pages_and_the_editor_page(client, developer):
         {"design_etag": saved.json()["experiment"]["design_etag"], "goals": no_metric},
     )
     assert refused.status_code == 422, refused.text
-    assert refused.json()["detail"][0]["msg"].endswith(
+    goal_text = (
         "A goal's event_name must be the event_name of one of the experiment's metrics."
-    ), refused.json()
+    )
+    (error,) = refused.json()["detail"]
+    assert error["msg"].endswith(goal_text), refused.json()
+    # The shared write's place for it: a key the save's body does not have.
+    assert error["loc"] == ["body", "visual_config", "goals", 0, "event_name"]
+    assert _detail(client, developer, experiment) == before
+
+    # A metrics save that leaves a stored goal without its metric.
+    buy_only = [m for m in METRICS if m["event_name"] == "click_buy"]
+    orphaned = _patch(
+        client,
+        token,
+        {"design_etag": saved.json()["experiment"]["design_etag"], "metrics": buy_only},
+    )
+    assert orphaned.status_code == 422, orphaned.text
+    (error,) = orphaned.json()["detail"]
+    assert error["loc"] == ["body", "metrics"], orphaned.json()
+    assert goal_text in error["msg"], orphaned.json()
     assert _detail(client, developer, experiment) == before
 
 
@@ -1423,7 +1475,7 @@ def test_a_save_with_only_its_version_saves_nothing(
     saved = _patch(client, token, {"design_etag": shown["design_etag"]})
 
     assert saved.status_code == 200, saved.text
-    assert saved.json() == _get(client, CURRENT, token).json()
+    assert _answer(saved) == _answer(_get(client, CURRENT, token))
     assert _detail(client, developer, experiment) == before
     assert len(_entries_of(db_session, experiment, "experiment_update")) == entries
 
