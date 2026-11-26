@@ -662,13 +662,12 @@ def get_experiment_daily_results(
         if end_date and date_str > end_date:
             continue
 
-        # We take the first metric (or the one matching metric_id)
+        # The service lists the metrics as GET /results does (the primary
+        # first, then by name), or only metric_id's when one is given, so the
+        # first is the metric this route answers for.
         metrics_list = day_entry.get("metrics", [])
         if not metrics_list:
             continue
-
-        # When metric_id is provided the service already filters; otherwise
-        # default to the first metric in the list.
         chosen_metric = metrics_list[0]
 
         for v in chosen_metric.get("variants", []):
