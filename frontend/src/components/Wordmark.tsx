@@ -45,8 +45,9 @@ export function Wordmark({ href = '/', className = '' }: WordmarkProps) {
 
   // The public site shows the logo. Inside the "Controlvar home" link the link
   // names itself and the drawing is hidden; unlinked, the drawing is the name.
+  const showsLogo = Boolean(LogoLockup) && isMarketingSite();
   const content =
-    LogoLockup && isMarketingSite() ? (
+    LogoLockup && showsLogo ? (
       // align-top: an unlinked inline-flex box holding a block SVG has no text
       // baseline, which left a descender gap and grew the footer by 5 px.
       <span className={`inline-flex items-center align-top ${className}`}>
@@ -57,9 +58,20 @@ export function Wordmark({ href = '/', className = '' }: WordmarkProps) {
     );
 
   if (!href) return content;
+  // The logo has no text, so the link is named by its label. The "C" and the
+  // word are text: the name has to contain them (WCAG 2.5.3), so " home" is
+  // added as hidden text after them instead of replacing them with a label.
+  if (showsLogo) {
+    return (
+      <Link href={href} className="inline-flex items-center" aria-label="Controlvar home">
+        {content}
+      </Link>
+    );
+  }
   return (
-    <Link href={href} className="inline-flex items-center" aria-label="Controlvar home">
+    <Link href={href} className="inline-flex items-center">
       {content}
+      <span className="sr-only"> home</span>
     </Link>
   );
 }

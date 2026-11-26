@@ -74,7 +74,7 @@ export function SegmentPicker({ label, value, onChange, readOnly = false }: Segm
         value={value}
         onChange={(e) => onChange(e.target.value)}
         disabled={readOnly || !ready}
-        className="w-full rounded border border-slate-300 px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:bg-slate-100 disabled:text-slate-600"
+        className="w-full rounded border border-slate-300 px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-600 disabled:bg-slate-100 disabled:text-slate-600"
       >
         {!ready && <option value={value}>{list.state === 'error' ? 'Segments not loaded' : 'Loading segments...'}</option>}
         {ready && (

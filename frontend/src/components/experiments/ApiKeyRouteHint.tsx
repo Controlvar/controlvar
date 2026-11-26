@@ -18,11 +18,11 @@ export function ApiKeyRouteHint({ testId }: { testId: string }) {
   return (
     <span data-testid={testId}>
       Create one for yourself under More →{' '}
-      <Link href={OWN_API_KEYS_PATH} className="text-blue-600 hover:underline">
+      <Link href={OWN_API_KEYS_PATH} className="text-blue-600 underline">
         Your API keys
       </Link>{' '}
       (see{' '}
-      <a href={docsUrl('security/api-keys')} className="text-blue-600 hover:underline">
+      <a href={docsUrl('security/api-keys')} className="text-blue-600 underline">
         API Key Management
       </a>
       ).

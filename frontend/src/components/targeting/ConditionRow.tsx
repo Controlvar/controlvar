@@ -95,7 +95,7 @@ export function ConditionRow({
         onChange={handleAttributeChange}
         disabled={readOnly}
         placeholder="attribute"
-        className="flex-1 min-w-0 rounded border border-slate-300 px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:bg-slate-100 disabled:text-slate-500"
+        className="flex-1 min-w-0 rounded border border-slate-300 px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-600 disabled:bg-slate-100 disabled:text-slate-500"
       />
       <datalist id={datalistId}>
         {COMMON_ATTRIBUTES.map((attr) => (
@@ -113,7 +113,7 @@ export function ConditionRow({
         value={condition.operator}
         onChange={handleOperatorChange}
         disabled={readOnly}
-        className="rounded border border-slate-300 px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:bg-slate-100 disabled:text-slate-500"
+        className="rounded border border-slate-300 px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-600 disabled:bg-slate-100 disabled:text-slate-500"
       >
         {availableOperators.map((op) => (
           <option key={op} value={op}>
@@ -142,7 +142,7 @@ export function ConditionRow({
           onChange={handleValueChange}
           disabled={readOnly}
           placeholder={isMultiValue ? 'value1, value2' : 'value'}
-          className="flex-1 min-w-0 rounded border border-slate-300 px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:bg-slate-100 disabled:text-slate-500"
+          className="flex-1 min-w-0 rounded border border-slate-300 px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-600 disabled:bg-slate-100 disabled:text-slate-500"
         />
       )}
 
