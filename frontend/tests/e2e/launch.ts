@@ -29,12 +29,12 @@ import type { LaunchOptions } from "@playwright/test";
  * the other projects keep Playwright's default launch.
  */
 
-// Intent: this is playwright-core 1.64.0's default; V112 fails if a bump changes it.
+// Intent: this is playwright-core 1.65.1's default; V112 fails if a bump changes it.
 const DEFAULT =
-  "AvoidUnnecessaryBeforeUnloadCheckSync,DestroyProfileOnBrowserClose,DialMediaRouteProvider," +
-  "GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding," +
-  "ThirdPartyStoragePartitioning,BlockOriginHeaderModificationOnRedirect,Translate," +
-  "AutoDeElevate,OptimizationHints,NetworkTimeServiceQuerying,AimEnabled," +
+  "AvoidUnnecessaryBeforeUnloadCheckSync,DestroyProfileOnBrowserClose,HttpsUpgrades," +
+  "HttpsFirstBalancedModeAutoEnable,LensOverlay,MediaRouter,PaintHolding," +
+  "ThirdPartyStoragePartitioning,AvoidCorsURLLoaderRestartOnRedirect,TcpPortRandomizationWin," +
+  "OptimizationHints,NetworkTimeServiceQuerying,AimEnabled,PreconnectToSearch," +
   "msForceBrowserSignIn,msEdgeUpdateLaunchServicesPreferredVersion";
 
 export const PAINT_HOLDING = "PaintHolding";
