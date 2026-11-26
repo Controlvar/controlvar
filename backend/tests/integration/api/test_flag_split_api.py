@@ -190,6 +190,11 @@ def stored_multi_way(db_session, owner):
     remove()
 
 
+def _refused_at(response) -> list:
+    """Each validation error of a 422, as (type, loc)."""
+    return [(error["type"], error["loc"]) for error in response.json()["detail"]]
+
+
 @pytest.mark.regression
 def test_the_bulk_route_answers_true_or_false_and_agrees_with_evaluate(
     client, keys, stored_multi_way, monkeypatch
@@ -206,12 +211,26 @@ def test_the_bulk_route_answers_true_or_false_and_agrees_with_evaluate(
         asked.setdefault((case["user_id"], json.dumps(case["context"])), []).append(
             case
         )
-    checked, wrong = 0, []
+    checked, refused, wrong = 0, 0, []
     for (user, context), cases in asked.items():
         params = {} if context == "null" else {"context": context}
         response = client.get(
             f"{FLAGS}/user/{user}", params=params, headers=keys["production"]
         )
+        if len(user) > 255:
+            # #2176: both routes refuse an id the evaluation cannot record.
+            assert response.status_code == 422, response.text
+            assert _refused_at(response) == [("string_too_long", ["path", "user_id"])]
+            for case in cases:
+                one = client.get(
+                    f"{FLAGS}/evaluate/{case['flag']}",
+                    params={"user_id": user, **params},
+                    headers=keys["production"],
+                )
+                assert one.status_code == 422, one.text
+                assert _refused_at(one) == [("string_too_long", ["query", "user_id"])]
+                refused += 1
+            continue
         assert response.status_code == 200, response.text
         bulk = response.json()
         assert all(value is True or value is False for value in bulk.values())
@@ -226,8 +245,9 @@ def test_the_bulk_route_answers_true_or_false_and_agrees_with_evaluate(
                 wrong.append((case["id"], one, case["expected"]))
     assert wrong == []
     # Every case of the nine active flags; the inactive and the archived one
-    # are left out of a bulk answer, as any such flag.
-    assert checked == 160
+    # are left out of a bulk answer, as any such flag. The one with a
+    # 300-character user_id is refused by both routes.
+    assert (checked, refused) == (159, 1)
 
 
 # ---------------------------------------------------------------------------
