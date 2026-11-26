@@ -340,10 +340,16 @@ MAX_LIST_ITEMS = 1000
 _DASHBOARD_TOP_KEYS = frozenset(
     {"logical_operator", "groups", "rollout_percentage", "id"}
 )
+#: A flag's rule may carry a value of its own (#2012): the dashboard shape's
+#: one rule at the top, a native rule and ``default_rule`` beside ``rule``.
+#: Experiment and segment rules may not.
+RULE_VALUE_KEY = "value"
+_FLAG_DASHBOARD_TOP_KEYS = _DASHBOARD_TOP_KEYS | {RULE_VALUE_KEY}
 _DASHBOARD_GROUP_KEYS = frozenset({"id", "logical_operator", "conditions"})
 _DASHBOARD_CONDITION_KEYS = frozenset({"id", "attribute", "operator", "value"})
 _NATIVE_TOP_KEYS = frozenset(TargetingRules.model_fields)
 _NATIVE_RULE_KEYS = frozenset(TargetingRule.model_fields)
+_FLAG_NATIVE_RULE_KEYS = _NATIVE_RULE_KEYS | {RULE_VALUE_KEY}
 _NATIVE_GROUP_KEYS = frozenset(RuleGroup.model_fields)
 _NATIVE_CONDITION_KEYS = frozenset(Condition.model_fields)
 _LOGICAL_OPERATOR_NAMES = frozenset({"and", "or", "not"})
@@ -388,6 +394,13 @@ class TargetingRulesError(ValueError):
 #: What ``validate_flag_targeting`` calls the rules when a problem has no path.
 FLAG_RULES_SUBJECT = "targeting rules"
 
+#: The answer to a value on the dashboard shape's rule when the rule has no
+#: condition: no user can match it, so its value would never be served.
+RULE_VALUE_WITHOUT_A_CONDITION = (
+    "a rule with no condition matches no user, so its value is never served; "
+    "add a condition, or remove the value"
+)
+
 _EXPERIMENT = "experiment"
 _FLAG = "flag"
 
@@ -429,6 +442,12 @@ def validate_flag_targeting(value: Any) -> Optional[TargetingRules]:
       without ``rules``. It is checked after the unknown-key check, so a flat
       object still answers ``unknown key``;
     * a problem with no path reads ``targeting rules: <reason>``;
+    * a rule may carry a value of its own (#2012): ``value`` at the top of the
+      dashboard shape, and on a native rule and ``default_rule``. Its type is
+      not checked here, where the flag's type is not known: that is
+      ``flag_values.rule_value_errors``, which every write path calls. A value
+      on dashboard rules with no group is refused (``value: a rule with no
+      condition matches no user, ...``);
     * native rules: a key outside the schema is refused at every level --
       the rule (``rules[0]: unknown key``), its condition group
       (``rules[0].rule``), nested groups at any depth
@@ -744,7 +763,8 @@ def _validated_dashboard(raw: Dict[str, Any], kind: str) -> TargetingRules:
         if kind == _FLAG:
             raise TargetingRulesError("name", "not supported")
         raise TargetingRulesError("name", "not supported for experiment rules")
-    if any(key not in _DASHBOARD_TOP_KEYS for key in raw):
+    top_keys = _FLAG_DASHBOARD_TOP_KEYS if kind == _FLAG else _DASHBOARD_TOP_KEYS
+    if any(key not in top_keys for key in raw):
         raise TargetingRulesError("", "unknown key")
     if "groups" not in raw:
         raise TargetingRulesError("logical_operator", "given without groups")
@@ -775,6 +795,8 @@ def _validated_dashboard(raw: Dict[str, Any], kind: str) -> TargetingRules:
     groups = raw["groups"]
     if not isinstance(groups, list):
         raise TargetingRulesError("groups", "must be a list")
+    if RULE_VALUE_KEY in raw and not groups:
+        raise TargetingRulesError(RULE_VALUE_KEY, RULE_VALUE_WITHOUT_A_CONDITION)
     if kind == _FLAG:
         _check_dashboard_flag_size(groups)
     for gi, group in enumerate(groups):
@@ -963,7 +985,7 @@ def _check_native_flag_rules(raw: Dict[str, Any]) -> None:
     for path, rule in each_rule():
         if not isinstance(rule, dict):
             continue
-        if any(key not in _NATIVE_RULE_KEYS for key in rule):
+        if any(key not in _FLAG_NATIVE_RULE_KEYS for key in rule):
             raise TargetingRulesError(path, "unknown key")
         if "rollout_percentage" in rule:
             _check_flag_percentage(

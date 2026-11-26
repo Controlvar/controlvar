@@ -44,11 +44,12 @@ from backend.app.models.feature_flag import (
     FlagEnvironmentSetting,
     flag_status_name,
 )
+from backend.app.services.audit_service import name_only_fingerprint
 
 #: The settings one environment has of a flag, and the settings a promotion
 #: copies: every column of ``FlagEnvironmentSetting`` that is not an identity
-#: column (``SETTING_IDENTITY_COLUMNS``), as a change sends them. No request
-#: sends a ``split`` (#2012): only a promotion's changes have one.
+#: column (``SETTING_IDENTITY_COLUMNS``), as a change sends them (#2012 adds
+#: ``split``).
 SETTING_FIELDS: Tuple[str, ...] = (
     "is_active",
     "targeting_rules",
@@ -166,7 +167,9 @@ def audit_setting(
     """A snapshot of *flag* in *environment* for ``audit_changes``.
 
     Whether it is configured there, and its on/off and percentage as they are
-    stored; the rules and the split are named only (``#``), never recorded.
+    stored; the rules and the split are named only (``#``), never recorded,
+    and compared as JSON text, so a change ``==`` does not see (``true`` for
+    ``1``) is named too.
     """
     if environment == PRODUCTION:
         stored = effective_settings(flag, None, PRODUCTION)
@@ -178,8 +181,8 @@ def audit_setting(
         "configured": environment == PRODUCTION or setting is not None,
         "is_active": stored["is_active"],
         "rollout_percentage": stored["rollout_percentage"],
-        "#targeting_rules": stored["targeting_rules"],
-        "#split": stored["split"],
+        "#targeting_rules": name_only_fingerprint(stored["targeting_rules"]),
+        "#split": name_only_fingerprint(stored["split"]),
     }
 
 

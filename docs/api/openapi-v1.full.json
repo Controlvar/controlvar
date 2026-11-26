@@ -8158,7 +8158,7 @@
                 "type": "array"
               }
             ],
-            "description": "What a user the flag is on for gets: a user who matches a targeting rule and falls inside its percentage, or matches no rule and falls inside `rollout_percentage`. Required for a string, number or json flag, and of that type; a boolean flag's is `true`. At most 8192 bytes as compact JSON and 10 levels deep; every number in it finite and from -9007199254740991 to 9007199254740991; no NUL or unpaired surrogate character; the two values differ.",
+            "description": "What a user the flag is on for gets: a user who matches a targeting rule and falls inside its percentage, or matches no rule and falls inside `rollout_percentage`. A matched rule's own `value`, or else the `split`, is served instead where one is set. Required for a string, number or json flag, and of that type; a boolean flag's is `true`. At most 8192 bytes as compact JSON and 10 levels deep; every number in it finite and from -9007199254740991 to 9007199254740991; no NUL or unpaired surrogate character; the two values differ.",
             "title": "On Value"
           },
           "owner_id": {
@@ -8172,6 +8172,54 @@
             "minimum": 0,
             "title": "Rollout Percentage",
             "type": "integer"
+          },
+          "split": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "value": {
+                      "anyOf": [
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "object"
+                        },
+                        {
+                          "type": "array"
+                        }
+                      ]
+                    },
+                    "weight": {
+                      "maximum": 100,
+                      "minimum": 0,
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "weight"
+                  ],
+                  "type": "object"
+                },
+                "maxItems": 10,
+                "minItems": 3,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What share of the users the flag is on for gets each value: a list of 3 to 10 entries, each `{\"value\": <value>, \"weight\": <0 to 100>}`, the weights whole numbers adding up to 100, the values of the flag's type and all different. A user's value is picked by the flag's key and the user's ID, and stays theirs while the rollout percentage changes; the entries are used in the order sent. Only a string, number or json flag has one. A matched rule's own `value` is served before it, and `on_value` when there is no split; a release older than 0.49.0 ignores the split and serves `on_value`. null, or leaving it out of a create, means no split; on an update, null clears it and leaving it out keeps it. Each value follows the limits of `on_value`; a split's values and the rules' own values take at most 81920 bytes together.",
+            "title": "Split"
           },
           "stale": {
             "description": "Read-only; ignored.",
@@ -8209,7 +8257,7 @@
                 "type": "null"
               }
             ],
-            "description": "Who gets the flag: the dashboard rule builder's shape ({\"logical_operator\", \"groups\": [{\"logical_operator\", \"conditions\": [{\"attribute\", \"operator\", \"value\"}]}]}) or the native rules shape ({\"rules\": [...]}). null, {} and {\"groups\": []} mean no rules. Rules the flag evaluator would not apply as written answer 422, with the place and the reason in the message, for example \"groups[0].conditions[1].operator: unknown operator\". A list of rules is refused. Stored as sent.",
+            "description": "Who gets the flag: the dashboard rule builder's shape ({\"logical_operator\", \"groups\": [{\"logical_operator\", \"conditions\": [{\"attribute\", \"operator\", \"value\"}]}]}) or the native rules shape ({\"rules\": [...]}). null, {} and {\"groups\": []} mean no rules. Rules the flag evaluator would not apply as written answer 422, with the place and the reason in the message, for example \"groups[0].conditions[1].operator: unknown operator\". A list of rules is refused. Stored as sent. On a string, number or json flag a rule may carry a `value` of its own, of the flag's type, served to the users the rule matches inside its percentage: at the top of the dashboard shape, or on a native rule and `default_rule`.",
             "title": "Targeting Rules"
           },
           "updated_at": {
@@ -8284,7 +8332,7 @@
             "title": "Off Value"
           },
           "on_value": {
-            "description": "What a user the flag is on for gets: a user who matches a targeting rule and falls inside its percentage, or matches no rule and falls inside `rollout_percentage`. Required for a string, number or json flag, and of that type; a boolean flag's is `true`.",
+            "description": "What a user the flag is on for gets: a user who matches a targeting rule and falls inside its percentage, or matches no rule and falls inside `rollout_percentage`. A matched rule's own `value`, or else the `split`, is served instead where one is set. Required for a string, number or json flag, and of that type; a boolean flag's is `true`.",
             "title": "On Value"
           },
           "owner_id": {
@@ -8303,6 +8351,16 @@
           "rollout_percentage": {
             "title": "Rollout Percentage",
             "type": "integer"
+          },
+          "split": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What share of the users the flag is on for gets each value: a list of 3 to 10 entries, each `{\"value\": <value>, \"weight\": <0 to 100>}`, the weights whole numbers adding up to 100, the values of the flag's type and all different. A user's value is picked by the flag's key and the user's ID, and stays theirs while the rollout percentage changes; the entries are used in the order sent. Only a string, number or json flag has one. A matched rule's own `value` is served before it, and `on_value` when there is no split; a release older than 0.49.0 ignores the split and serves `on_value`. null when the flag has none.",
+            "title": "Split"
           },
           "stale": {
             "description": "True when the flag looks ready to remove. Advice only: nothing is archived or changed automatically. The definition is beta: its conditions and threshold may change; the fields will not.",
@@ -8380,6 +8438,7 @@
           "value_type",
           "on_value",
           "off_value",
+          "split",
           "tags",
           "owner_id",
           "created_at",
@@ -8511,7 +8570,7 @@
             "title": "Off Value"
           },
           "on_value": {
-            "description": "What a user the flag is on for gets: a user who matches a targeting rule and falls inside its percentage, or matches no rule and falls inside `rollout_percentage`. Required for a string, number or json flag, and of that type; a boolean flag's is `true`.",
+            "description": "What a user the flag is on for gets: a user who matches a targeting rule and falls inside its percentage, or matches no rule and falls inside `rollout_percentage`. A matched rule's own `value`, or else the `split`, is served instead where one is set. Required for a string, number or json flag, and of that type; a boolean flag's is `true`.",
             "title": "On Value"
           },
           "owner_id": {
@@ -8530,6 +8589,16 @@
           "rollout_percentage": {
             "title": "Rollout Percentage",
             "type": "integer"
+          },
+          "split": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What share of the users the flag is on for gets each value: a list of 3 to 10 entries, each `{\"value\": <value>, \"weight\": <0 to 100>}`, the weights whole numbers adding up to 100, the values of the flag's type and all different. A user's value is picked by the flag's key and the user's ID, and stays theirs while the rollout percentage changes; the entries are used in the order sent. Only a string, number or json flag has one. A matched rule's own `value` is served before it, and `on_value` when there is no split; a release older than 0.49.0 ignores the split and serves `on_value`. null when the flag has none.",
+            "title": "Split"
           },
           "status": {
             "description": "The flag's status, lower-cased.",
@@ -8589,6 +8658,7 @@
           "value_type",
           "on_value",
           "off_value",
+          "split",
           "tags",
           "owner_id",
           "created_at",
@@ -8677,7 +8747,7 @@
       },
       "FeatureFlagUpdate": {
         "additionalProperties": false,
-        "description": "The body of a flag update.\n\nEvery field is optional, and a field left out keeps its value. key, name,\nis_active, rollout_percentage, default_value, value_type, on_value and\noff_value refuse null; description, targeting_rules and tags accept null,\nwhich clears them. A field not listed here answers 422.\n\n``value_type`` and the two values are checked against the stored flag, by\n``FeatureFlagService.update_feature_flag``: this model cannot see the\nstored type.",
+        "description": "The body of a flag update.\n\nEvery field is optional, and a field left out keeps its value. key, name,\nis_active, rollout_percentage, default_value, value_type, on_value and\noff_value refuse null; description, targeting_rules, split and tags accept\nnull, which clears them. A field not listed here answers 422.\n\n``value_type``, the two values, the split and the rules' own values are\nchecked against the stored flag, by\n``FeatureFlagService.update_feature_flag``: this model cannot see the\nstored type.",
         "properties": {
           "created_at": {
             "description": "Read-only; ignored.",
@@ -8762,7 +8832,7 @@
                 "type": "array"
               }
             ],
-            "description": "What a user the flag is on for gets: a user who matches a targeting rule and falls inside its percentage, or matches no rule and falls inside `rollout_percentage`. Required for a string, number or json flag, and of that type; a boolean flag's is `true`. At most 8192 bytes as compact JSON and 10 levels deep; every number in it finite and from -9007199254740991 to 9007199254740991; no NUL or unpaired surrogate character; the two values differ.",
+            "description": "What a user the flag is on for gets: a user who matches a targeting rule and falls inside its percentage, or matches no rule and falls inside `rollout_percentage`. A matched rule's own `value`, or else the `split`, is served instead where one is set. Required for a string, number or json flag, and of that type; a boolean flag's is `true`. At most 8192 bytes as compact JSON and 10 levels deep; every number in it finite and from -9007199254740991 to 9007199254740991; no NUL or unpaired surrogate character; the two values differ.",
             "title": "On Value"
           },
           "owner_id": {
@@ -8775,6 +8845,54 @@
             "minimum": 0,
             "title": "Rollout Percentage",
             "type": "integer"
+          },
+          "split": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "value": {
+                      "anyOf": [
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "object"
+                        },
+                        {
+                          "type": "array"
+                        }
+                      ]
+                    },
+                    "weight": {
+                      "maximum": 100,
+                      "minimum": 0,
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "weight"
+                  ],
+                  "type": "object"
+                },
+                "maxItems": 10,
+                "minItems": 3,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What share of the users the flag is on for gets each value: a list of 3 to 10 entries, each `{\"value\": <value>, \"weight\": <0 to 100>}`, the weights whole numbers adding up to 100, the values of the flag's type and all different. A user's value is picked by the flag's key and the user's ID, and stays theirs while the rollout percentage changes; the entries are used in the order sent. Only a string, number or json flag has one. A matched rule's own `value` is served before it, and `on_value` when there is no split; a release older than 0.49.0 ignores the split and serves `on_value`. null, or leaving it out of a create, means no split; on an update, null clears it and leaving it out keeps it. Each value follows the limits of `on_value`; a split's values and the rules' own values take at most 81920 bytes together.",
+            "title": "Split"
           },
           "stale": {
             "description": "Read-only; ignored.",
@@ -8812,7 +8930,7 @@
                 "type": "null"
               }
             ],
-            "description": "Who gets the flag: the dashboard rule builder's shape ({\"logical_operator\", \"groups\": [{\"logical_operator\", \"conditions\": [{\"attribute\", \"operator\", \"value\"}]}]}) or the native rules shape ({\"rules\": [...]}). null, {} and {\"groups\": []} mean no rules. Rules the flag evaluator would not apply as written answer 422, with the place and the reason in the message, for example \"groups[0].conditions[1].operator: unknown operator\". A list of rules is refused. Stored as sent.",
+            "description": "Who gets the flag: the dashboard rule builder's shape ({\"logical_operator\", \"groups\": [{\"logical_operator\", \"conditions\": [{\"attribute\", \"operator\", \"value\"}]}]}) or the native rules shape ({\"rules\": [...]}). null, {} and {\"groups\": []} mean no rules. Rules the flag evaluator would not apply as written answer 422, with the place and the reason in the message, for example \"groups[0].conditions[1].operator: unknown operator\". A list of rules is refused. Stored as sent. On a string, number or json flag a rule may carry a `value` of its own, of the flag's type, served to the users the rule matches inside its percentage: at the top of the dashboard shape, or on a native rule and `default_rule`.",
             "title": "Targeting Rules"
           },
           "updated_at": {
@@ -8930,6 +9048,16 @@
             "title": "Rollout Percentage",
             "type": "integer"
           },
+          "split": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The environment's split. What share of the users the flag is on for gets each value: a list of 3 to 10 entries, each `{\"value\": <value>, \"weight\": <0 to 100>}`, the weights whole numbers adding up to 100, the values of the flag's type and all different. A user's value is picked by the flag's key and the user's ID, and stays theirs while the rollout percentage changes; the entries are used in the order sent. Only a string, number or json flag has one. A matched rule's own `value` is served before it, and `on_value` when there is no split; a release older than 0.49.0 ignores the split and serves `on_value`. null when the flag has none.",
+            "title": "Split"
+          },
           "status": {
             "description": "`archived` in every environment when the flag is archived; otherwise `active` or `inactive` in this one.",
             "enum": [
@@ -8970,6 +9098,7 @@
           "is_active",
           "rollout_percentage",
           "targeting_rules",
+          "split",
           "configured",
           "updated_at"
         ],
@@ -8978,7 +9107,7 @@
       },
       "FlagEnvironmentUpdate": {
         "additionalProperties": false,
-        "description": "The settings of a flag in one environment to change.\n\nOnly the fields sent change. ``is_active`` and ``rollout_percentage``\nrefuse null; a null ``targeting_rules`` clears the rules. A field not\nlisted here answers 422.",
+        "description": "The settings of a flag in one environment to change.\n\nOnly the fields sent change. ``is_active`` and ``rollout_percentage``\nrefuse null; a null ``targeting_rules`` clears the rules, and a null\n``split`` the split. A field not listed here answers 422. The split and\nthe rules' own values are checked against the flag's type by the route\n(``flag_values.serving_errors``): this model cannot see it.",
         "properties": {
           "is_active": {
             "description": "Turn the flag on or off in this environment.",
@@ -8991,6 +9120,54 @@
             "title": "Rollout Percentage",
             "type": "integer"
           },
+          "split": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "value": {
+                      "anyOf": [
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "object"
+                        },
+                        {
+                          "type": "array"
+                        }
+                      ]
+                    },
+                    "weight": {
+                      "maximum": 100,
+                      "minimum": 0,
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "weight"
+                  ],
+                  "type": "object"
+                },
+                "maxItems": 10,
+                "minItems": 3,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What share of the users the flag is on for gets each value: a list of 3 to 10 entries, each `{\"value\": <value>, \"weight\": <0 to 100>}`, the weights whole numbers adding up to 100, the values of the flag's type and all different. A user's value is picked by the flag's key and the user's ID, and stays theirs while the rollout percentage changes; the entries are used in the order sent. Only a string, number or json flag has one. A matched rule's own `value` is served before it, and `on_value` when there is no split; a release older than 0.49.0 ignores the split and serves `on_value`. null, or leaving it out of a create, means no split; on an update, null clears it and leaving it out keeps it. Each value follows the limits of `on_value`; a split's values and the rules' own values take at most 81920 bytes together.",
+            "title": "Split"
+          },
           "targeting_rules": {
             "anyOf": [
               {},
@@ -8998,7 +9175,7 @@
                 "type": "null"
               }
             ],
-            "description": "Who gets the flag: the dashboard rule builder's shape ({\"logical_operator\", \"groups\": [{\"logical_operator\", \"conditions\": [{\"attribute\", \"operator\", \"value\"}]}]}) or the native rules shape ({\"rules\": [...]}). null, {} and {\"groups\": []} mean no rules. Rules the flag evaluator would not apply as written answer 422, with the place and the reason in the message, for example \"groups[0].conditions[1].operator: unknown operator\". A list of rules is refused. Stored as sent.",
+            "description": "Who gets the flag: the dashboard rule builder's shape ({\"logical_operator\", \"groups\": [{\"logical_operator\", \"conditions\": [{\"attribute\", \"operator\", \"value\"}]}]}) or the native rules shape ({\"rules\": [...]}). null, {} and {\"groups\": []} mean no rules. Rules the flag evaluator would not apply as written answer 422, with the place and the reason in the message, for example \"groups[0].conditions[1].operator: unknown operator\". A list of rules is refused. Stored as sent. On a string, number or json flag a rule may carry a `value` of its own, of the flag's type, served to the users the rule matches inside its percentage: at the top of the dashboard shape, or on a native rule and `default_rule`.",
             "title": "Targeting Rules"
           }
         },
@@ -28706,7 +28883,7 @@
         ]
       },
       "post": {
-        "description": "Create a new feature flag.\n\nThis endpoint allows users to create a new feature flag. The current user\nis automatically set as the owner of the feature flag.\n\nThe request must include:\n- A unique key for the feature flag\n- A name for the feature flag\n- Optional description\n- Optional targeting rules for specific user segments\n- Optional rollout percentage\n- Optional `value_type` (`boolean` when left out) and, for a `string`,\n  `number` or `json` flag, its `on_value` and `off_value`\n\nThe flag is created off (INACTIVE) unless the request sends\n`is_active: true`. A field the API does not read answers 422. The read-only\nfields of a flag response (`id`, `owner_id`, `created_at`, `updated_at`,\n`status`) are accepted and ignored, except that a `status` must be the one\nthe flag is created with. `targeting_rules` the flag evaluator would not\napply as written answer 422, with the place and the reason in the message.\nA value that does not fit `value_type` or its limits answers 422 at that\nfield, with a message that names the field and never the value.\n\nReturns:\n    FeatureFlagRead: The newly created feature flag\n\nRaises:\n    HTTPException 409: Another flag already has this key\n    HTTPException 422: The body is not a valid flag",
+        "description": "Create a new feature flag.\n\nThis endpoint allows users to create a new feature flag. The current user\nis automatically set as the owner of the feature flag.\n\nThe request must include:\n- A unique key for the feature flag\n- A name for the feature flag\n- Optional description\n- Optional targeting rules for specific user segments\n- Optional rollout percentage\n- Optional `value_type` (`boolean` when left out) and, for a `string`,\n  `number` or `json` flag, its `on_value` and `off_value`, an optional\n  `split` and rules with a `value` of their own\n\nThe flag is created off (INACTIVE) unless the request sends\n`is_active: true`. A field the API does not read answers 422. The read-only\nfields of a flag response (`id`, `owner_id`, `created_at`, `updated_at`,\n`status`) are accepted and ignored, except that a `status` must be the one\nthe flag is created with. `targeting_rules` the flag evaluator would not\napply as written answer 422, with the place and the reason in the message.\nA value that does not fit `value_type` or its limits answers 422 at that\nfield, with a message that names the field and never the value: a split's\nat its entry (`[\"body\", \"split\", 2, \"weight\"]`), a rule's own value at\n`targeting_rules` with its place in the message.\n\nReturns:\n    FeatureFlagRead: The newly created feature flag\n\nRaises:\n    HTTPException 409: Another flag already has this key\n    HTTPException 422: The body is not a valid flag",
         "operationId": "create_feature_flag_api_v1_feature_flags__post",
         "parameters": [
           {
@@ -29394,7 +29571,7 @@
         ]
       },
       "put": {
-        "description": "Update a feature flag.\n\nThis endpoint allows users to update an existing feature flag.\nThe user must have access to the feature flag (be the owner or have permission).\n\nOnly the fields sent change. They include:\n- Key, name and description\n- `is_active`, which turns the flag on or off. An archived flag sent\n  `is_active: false` stays archived; sent `is_active: true` it answers\n  400, and nothing is changed: unarchive it first\n- Targeting rules\n- Rollout percentage\n- `on_value` and `off_value`, for a `string`, `number` or `json` flag\n\nA field the API does not read answers 422, and so does an explicit null on\n`key`, `name`, `is_active`, `rollout_percentage`, `default_value`,\n`value_type`, `on_value` or `off_value`. The read-only fields of a flag\nresponse (`id`, `owner_id`, `created_at`, `updated_at`, `status`) are\naccepted and ignored, so a GET body can be sent back unchanged unless its\n`targeting_rules` are ones PUT now refuses (422); omitting the field still\nworks. A `status` must equal the flag's, and a `value_type` the flag's type\n(422 `read_only` otherwise). A value is checked against the flag's type,\nand the two values as they will be stored must differ; a boolean flag's\n`on_value: true` and `off_value: false` are accepted and change nothing.\n\n`targeting_rules` the flag evaluator would not apply as written answer 422,\nwith the place and the reason in the message. Stored rules are not\nre-checked unless they are sent.\n\nReturns:\n    FeatureFlagRead: The updated feature flag\n\nRaises:\n    HTTPException 400: `is_active: true` on an archived flag\n    HTTPException 403: If the user doesn't have permission to update this feature flag\n    HTTPException 409: Another flag already has the key\n    HTTPException 422: The body is not a valid update",
+        "description": "Update a feature flag.\n\nThis endpoint allows users to update an existing feature flag.\nThe user must have access to the feature flag (be the owner or have permission).\n\nOnly the fields sent change. They include:\n- Key, name and description\n- `is_active`, which turns the flag on or off. An archived flag sent\n  `is_active: false` stays archived; sent `is_active: true` it answers\n  400, and nothing is changed: unarchive it first\n- Targeting rules\n- Rollout percentage\n- `on_value` and `off_value`, `split`, which null clears, and the rules'\n  own values, for a `string`, `number` or `json` flag\n\nA field the API does not read answers 422, and so does an explicit null on\n`key`, `name`, `is_active`, `rollout_percentage`, `default_value`,\n`value_type`, `on_value` or `off_value`. The read-only fields of a flag\nresponse (`id`, `owner_id`, `created_at`, `updated_at`, `status`) are\naccepted and ignored, so a GET body can be sent back unchanged unless its\n`targeting_rules` are ones PUT now refuses (422); omitting the field still\nworks. A `status` must equal the flag's, and a `value_type` the flag's type\n(422 `read_only` otherwise). A value is checked against the flag's type,\nand the two values as they will be stored must differ; a boolean flag's\n`on_value: true` and `off_value: false` are accepted and change nothing,\nand so is its `split: null`. A sent `split` and the sent rules' own values\nare checked against the flag's type, as on a create.\n\n`targeting_rules` the flag evaluator would not apply as written answer 422,\nwith the place and the reason in the message. Stored rules and a stored\nsplit are not re-checked unless they are sent.\n\nReturns:\n    FeatureFlagRead: The updated feature flag\n\nRaises:\n    HTTPException 400: `is_active: true` on an archived flag\n    HTTPException 403: If the user doesn't have permission to update this feature flag\n    HTTPException 409: Another flag already has the key\n    HTTPException 422: The body is not a valid update",
         "operationId": "update_feature_flag_api_v1_feature_flags__flag_id__put",
         "parameters": [
           {
@@ -30080,7 +30257,7 @@
         "x-stability": "beta"
       },
       "put": {
-        "description": "Change a feature flag's settings in one environment (beta).\n\nOnly the fields sent change, and only in this environment: `is_active`,\n`rollout_percentage` (0 to 100) and `targeting_rules`, which null clears.\nAn empty body changes nothing. An unknown field answers 422, and so does\nan explicit null on `is_active` or `rollout_percentage`.\n\n`targeting_rules` the flag evaluator would not apply as written, or that\nname a segment that cannot be used, answer 422, as on a flag update. An\narchived flag sent `is_active: true` answers 400, in every environment.\n\nThe change to production is the same as `PUT /feature-flags/{id}`.\n\nThe change and its audit entry are saved together: if the entry cannot be\nwritten, nothing is changed and the request answers 500.\n\n**Permissions**: ADMIN and DEVELOPER may change any flag, and in the full\nprofile so may anyone whose custom role or direct grant gives\nfeature_flag (update); anyone else gets 403.\n\nRaises:\n    HTTPException 400: `is_active: true` on an archived flag\n    HTTPException 403: If the user doesn't have permission to update this feature flag\n    HTTPException 404: No feature flag has this id\n    HTTPException 422: The environment or the body is not valid\n    HTTPException 500: Nothing was changed",
+        "description": "Change a feature flag's settings in one environment (beta).\n\nOnly the fields sent change, and only in this environment: `is_active`,\n`rollout_percentage` (0 to 100), `targeting_rules` and `split`, which null\nclears. An empty body changes nothing. An unknown field answers 422, and\nso does an explicit null on `is_active` or `rollout_percentage`.\n\n`targeting_rules` the flag evaluator would not apply as written, or that\nname a segment that cannot be used, answer 422, as on a flag update; so do\na `split` and rules' own values the flag cannot serve, checked against its\nvalue type exactly as on a flag update. An archived flag sent\n`is_active: true` answers 400, in every environment.\n\nThe change to production is the same as `PUT /feature-flags/{id}`.\n\nThe change and its audit entry are saved together: if the entry cannot be\nwritten, nothing is changed and the request answers 500.\n\n**Permissions**: ADMIN and DEVELOPER may change any flag, and in the full\nprofile so may anyone whose custom role or direct grant gives\nfeature_flag (update); anyone else gets 403.\n\nRaises:\n    HTTPException 400: `is_active: true` on an archived flag\n    HTTPException 403: If the user doesn't have permission to update this feature flag\n    HTTPException 404: No feature flag has this id\n    HTTPException 422: The environment or the body is not valid\n    HTTPException 500: Nothing was changed",
         "operationId": "update_flag_environment_api_v1_feature_flags__flag_id__environments__environment__put",
         "parameters": [
           {
@@ -30174,7 +30351,7 @@
     },
     "/api/v1/feature-flags/{flag_id}/environments/{target}/promote": {
       "post": {
-        "description": "Promote a feature flag's settings into an environment (beta).\n\nCopies `is_active`, `rollout_percentage` and `targeting_rules` from the\nenvironment `from` names into the target, all three together, as a change\nto the target would: the rules are checked again, and the same permission\nis needed. A flag nobody configured in `from` is off there, so promoting\nfrom it turns the target off, and an archived flag is off in every\nenvironment. Nothing else is copied: not the flag's value type and values,\nits rollout schedules or its safety configuration.\n\nThe change and its audit entries are saved together: if an entry cannot be\nwritten, nothing is changed and the request answers 500.\n\n**Permissions**: ADMIN and DEVELOPER may change any flag, and in the full\nprofile so may anyone whose custom role or direct grant gives\nfeature_flag (update); anyone else gets 403.\n\nRaises:\n    HTTPException 403: If the user doesn't have permission to update this feature flag\n    HTTPException 404: No feature flag has this id\n    HTTPException 422: `from` is the target, an environment is not valid,\n        or the rules would be refused in the target\n    HTTPException 500: Nothing was changed",
+        "description": "Promote a feature flag's settings into an environment (beta).\n\nCopies `is_active`, `rollout_percentage`, `targeting_rules` and `split`\nfrom the environment `from` names into the target, all four together, as\na change to the target would: the rules and the split are checked again,\nand the same permission is needed. A flag nobody configured in `from` is\noff there, so promoting from it turns the target off, and an archived flag\nis off in every environment. Nothing else is copied: not the flag's value\ntype, on value and off value, which belong to the flag, its rollout\nschedules or its safety configuration.\n\nThe change and its audit entries are saved together: if an entry cannot be\nwritten, nothing is changed and the request answers 500.\n\n**Permissions**: ADMIN and DEVELOPER may change any flag, and in the full\nprofile so may anyone whose custom role or direct grant gives\nfeature_flag (update); anyone else gets 403.\n\nRaises:\n    HTTPException 403: If the user doesn't have permission to update this feature flag\n    HTTPException 404: No feature flag has this id\n    HTTPException 422: `from` is the target, an environment is not valid,\n        or the rules or the split would be refused in the target\n    HTTPException 500: Nothing was changed",
         "operationId": "promote_flag_environment_api_v1_feature_flags__flag_id__environments__target__promote_post",
         "parameters": [
           {

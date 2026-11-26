@@ -1052,12 +1052,15 @@ create and delete. Start the previous release straight after the downgrade.
 
 This revision adds the column `split` (`jsonb`) to `feature_flags`, for a flag's
 split in production, and to `flag_environment_settings`, for its split in
-staging or development. It is empty on every row. No request sets a split or a
-rule value (a value of its own that a targeting rule carries) yet, so SDKs get
-the same answers as before.
+staging or development. It is empty on every row after the upgrade, so SDKs get
+the same answers as before; a split or a rule value (a value of its own that a
+targeting rule carries) is set through the API afterwards.
 
 The previous release, 0.48.0, runs against this schema unchanged: a flag it
-creates has no split, and a flag it updates keeps the one it has.
+creates has no split, and a flag it updates keeps the one it has. A 0.48.0 task
+ignores splits and rule values and serves each such flag's on value. This holds
+during the rolling upgrade and after an API-only rollback to 0.48.0, until the
+splits and rule values are cleared with 0.49.0 serving.
 
 From 0.48.0, this upgrade waits at most 1 s for the lock it needs on
 `feature_flags`, behind any session that has read that table and not ended its

@@ -72,6 +72,7 @@ from backend.app.schemas.feature_flag import (
     FeatureFlagListResponse,
     FeatureFlagRead,
     FeatureFlagUpdate,
+    error_place,
 )
 from backend.app.schemas.storable_text import storable_text_param
 from backend.app.services.audit_log_service import AuditLogService
@@ -179,12 +180,17 @@ def _values_refused(refused: FlagValuesRefused) -> RequestValidationError:
     """The 422 for an update whose ``value_type`` or values do not fit (#1497).
 
     The same shape as every other request validation error: each refusal at
-    ``["body", <field>]`` with its fixed ``type`` and ``msg``, which name the
-    field and never the value.
+    ``["body", <field>]`` (or below it, ``["body", "split", 2, "weight"]``)
+    with its fixed ``type`` and ``msg``, which name the field and never the
+    value.
     """
     return RequestValidationError(
         [
-            {"type": error.type, "loc": ("body", field), "msg": error.message()}
+            {
+                "type": error.type,
+                "loc": ("body", *error_place(field)),
+                "msg": error.message(),
+            }
             for field, error in refused.errors
         ]
     )
@@ -407,7 +413,8 @@ async def create_feature_flag(
     - Optional targeting rules for specific user segments
     - Optional rollout percentage
     - Optional `value_type` (`boolean` when left out) and, for a `string`,
-      `number` or `json` flag, its `on_value` and `off_value`
+      `number` or `json` flag, its `on_value` and `off_value`, an optional
+      `split` and rules with a `value` of their own
 
     The flag is created off (INACTIVE) unless the request sends
     `is_active: true`. A field the API does not read answers 422. The read-only
@@ -416,7 +423,9 @@ async def create_feature_flag(
     the flag is created with. `targeting_rules` the flag evaluator would not
     apply as written answer 422, with the place and the reason in the message.
     A value that does not fit `value_type` or its limits answers 422 at that
-    field, with a message that names the field and never the value.
+    field, with a message that names the field and never the value: a split's
+    at its entry (`["body", "split", 2, "weight"]`), a rule's own value at
+    `targeting_rules` with its place in the message.
 
     Returns:
         FeatureFlagRead: The newly created feature flag
@@ -650,7 +659,8 @@ async def update_feature_flag(
       400, and nothing is changed: unarchive it first
     - Targeting rules
     - Rollout percentage
-    - `on_value` and `off_value`, for a `string`, `number` or `json` flag
+    - `on_value` and `off_value`, `split`, which null clears, and the rules'
+      own values, for a `string`, `number` or `json` flag
 
     A field the API does not read answers 422, and so does an explicit null on
     `key`, `name`, `is_active`, `rollout_percentage`, `default_value`,
@@ -661,11 +671,13 @@ async def update_feature_flag(
     works. A `status` must equal the flag's, and a `value_type` the flag's type
     (422 `read_only` otherwise). A value is checked against the flag's type,
     and the two values as they will be stored must differ; a boolean flag's
-    `on_value: true` and `off_value: false` are accepted and change nothing.
+    `on_value: true` and `off_value: false` are accepted and change nothing,
+    and so is its `split: null`. A sent `split` and the sent rules' own values
+    are checked against the flag's type, as on a create.
 
     `targeting_rules` the flag evaluator would not apply as written answer 422,
-    with the place and the reason in the message. Stored rules are not
-    re-checked unless they are sent.
+    with the place and the reason in the message. Stored rules and a stored
+    split are not re-checked unless they are sent.
 
     Returns:
         FeatureFlagRead: The updated feature flag
@@ -1255,8 +1267,8 @@ def _evaluate_flag_by_key(
     flag is off -- inactive, archived, no match, outside the percentage,
     ``reason: "error"`` -- serves the off value; a boolean flag's ``value`` is
     ``enabled``. When ``enabled`` it is the matched rule's own value or the
-    value of the flag's split, where one is stored (#2012: no request sets
-    either yet), and otherwise the flag's ``on_value``. A stored value outside
+    value of the flag's split, where one is set (#2012), and otherwise the
+    flag's ``on_value``. A stored value outside
     the value rules is answered with no ``value`` key. ``config`` is always
     ``None``: the value travels in ``value``, never in ``config``.
     """

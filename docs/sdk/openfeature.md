@@ -478,9 +478,9 @@ const value = await client.getBooleanValue('my-flag', false, { targetingKey: use
 ```
 
 For a boolean, string, number or object call only the provider initialization changes, and the
-context's other keys reach the flag's targeting rules as the user's attributes. A flag here serves
-two values, its on value and its off value, so a flag with three or more variations has no
-single equivalent: run a multivariate experiment for that (see
+context's other keys reach the flag's targeting rules as the user's attributes. A flag with three
+or more variations becomes a string, number or object flag with a split of those values (3 to
+10, by weight); to measure which one does better, run a multivariate experiment (see
 [Limitations](../getting-started/limitations.md)).
 
 ### Switching from Split.io
@@ -500,8 +500,8 @@ enabled = client.get_boolean_value('my_feature', False, ctx)
 treatment = client.get_string_value('checkout_copy', 'control', ctx)
 ```
 
-A flag serves two values, its on value and its off value, so a split with three or more
-treatments has no single equivalent: run a multivariate experiment for that (see
+A split with three or more treatments becomes a string flag with a split of those treatments
+(3 to 10, by weight); to measure which one does better, run a multivariate experiment (see
 [Limitations](../getting-started/limitations.md)).
 
 ---

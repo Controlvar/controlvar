@@ -25,16 +25,24 @@ by = ["exempt:label"]
 count = 8
 
 [[unit]]
-text = "A flag that serves one of several values | A flag serves two values: its on value to the users it is on for (a matching targeting rule's percentage, or the rollout percentage), and its off value to everyone else and to everyone while it is off. No rule or rollout splits users among three or more values. GET /api/v1/feature-flags/user/{user_id} answers every flag as on or off. For three or more experiences, run a multivariate experiment: each variant carries a configuration, which POST /api/v1/tracking/assign returns."
+text = "A flag that reports which of its values does better | A flag's split (3 to 10 values by weight, on a string, number or json flag) and a targeting rule's own value change only what the users the flag is on for are served: no exposure, assignment or result is recorded, and GET /api/v1/feature-flags/user/{user_id} answers every flag as on or off. To compare values, run a multivariate experiment: each variant carries a configuration, which POST /api/v1/tracking/assign returns."
 by = [
-    "test:backend/tests/unit/api/test_documented_limits.py::test_a_flag_request_with_variants_is_refused",
-    "test:backend/tests/unit/api/test_documented_limits.py::test_a_boolean_flag_serves_false_when_off_and_a_value_flag_its_off_value",
-    "test:backend/tests/integration/api/test_flag_values_api.py::test_evaluation_serves_on_exactly_when_enabled_and_off_otherwise",
-    "test:backend/tests/integration/api/test_flag_values_api.py::test_the_bulk_route_answers_true_or_false_for_a_value_flag",
+    "test:backend/tests/integration/api/test_flag_split_api.py::test_an_evaluation_is_one_evaluation_and_no_part_of_an_experiment",
+    "test:backend/tests/integration/api/test_flag_split_api.py::test_the_bulk_route_answers_true_or_false_and_agrees_with_evaluate",
+    "test:backend/tests/integration/api/test_flag_split_write_api.py::test_a_split_set_through_the_api_is_served_by_the_hash",
+    "test:backend/tests/integration/api/test_flag_split_write_api.py::test_a_rule_set_through_the_api_serves_its_own_value",
 ]
 
 [[unit]]
-text = "A flag's value in every SDK | An SDK reads a flag's value only where its page documents a value method: JavaScript, Python, Go, OpenFeature (JavaScript and Python), React, React Native, Java and .NET. Android, iOS, Flutter, PHP, Ruby, Elixir and Edge read a value flag as on or off (enabled is true when the user gets the on value). GET /api/v1/feature-flags/evaluate/{key} returns the value in value."
+text = "A split of two values, or weights that add up to less than 100 | A split has 3 to 10 values, and its weights are whole numbers that add up to exactly 100; anything else is refused with 422. For two values, use the on and off values with a rollout percentage, or add a third value with weight 0."
+by = [
+    "test:backend/tests/unit/api/test_documented_limits.py::test_a_split_has_three_to_ten_values_and_variants_stay_refused",
+    "test:backend/tests/unit/schemas/test_flag_split_write.py::test_a_create_refuses_each_split_at_its_place_and_in_its_words",
+    "test:backend/tests/unit/schemas/test_flag_split_write.py::test_a_create_accepts_a_split_of_three_to_ten_values",
+]
+
+[[unit]]
+text = "A flag's value in every SDK | An SDK reads a flag's value only where its page documents a value method: JavaScript, Python, Go, OpenFeature (JavaScript and Python), React, React Native, Java and .NET. Android, iOS, Flutter, PHP, Ruby, Elixir and Edge read a value flag as on or off (enabled is true when the flag is on for the user). GET /api/v1/feature-flags/evaluate/{key} returns the value in value."
 by = [
     "test:backend/tests/integration/api/test_ruleset_published_sdk_compat.py::test_the_published_wheel_reads_the_route_and_obeys_both_kill_switches",
     "test:backend/tests/integration/api/test_flag_values_api.py::test_evaluation_serves_on_exactly_when_enabled_and_off_otherwise",

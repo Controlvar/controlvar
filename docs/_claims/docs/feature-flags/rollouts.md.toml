@@ -77,8 +77,9 @@ by = [
 ]
 
 [[unit]]
-text = "Promoting a flag into Production copies its status, rollout percentage and targeting rules, and leaves its schedules as they are, so the next stage that starts sets the rollout percentage again."
+text = "Promoting a flag into Production copies its status, rollout percentage, targeting rules and split, and leaves its schedules as they are, so the next stage that starts sets the rollout percentage again."
 by = [
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_promotion_copies_the_split_and_changes_no_other",
     "test:backend/tests/integration/api/test_flag_environments_api.py::test_promotion_copies_all_three_fields_and_nothing_else",
     "test:frontend/src/tests/pages/feature-flag-promote.test.tsx::is named when Production has one, as not copied and not changed",
 ]

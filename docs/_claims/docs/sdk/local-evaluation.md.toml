@@ -441,15 +441,6 @@ by = [
 ]
 
 [[unit]]
-text = "No request sets either yet."
-by = [
-    "test:backend/tests/unit/services/test_flag_split_has_no_writer.py::test_a_request_that_sends_a_split_is_refused",
-    "test:backend/tests/unit/services/test_flag_split_has_no_writer.py::test_a_request_that_sends_a_rule_value_is_refused",
-    "test:backend/tests/unit/services/test_flag_split_has_no_writer.py::test_an_environment_request_that_sends_a_split_is_refused",
-    "test:backend/tests/unit/services/test_flag_split_has_no_writer.py::test_an_environment_request_that_sends_a_rule_value_is_refused",
-]
-
-[[unit]]
 text = "While such a flag is on, the ruleset marks it \"remote\" and carries neither its values nor its rules, and bulk calls go to the server, as above;"
 by = [
     "test:backend/tests/unit/services/test_sdk_ruleset_vectors.py::test_a_flag_with_a_split_or_a_rule_value_is_remote_while_it_is_active",

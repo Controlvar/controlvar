@@ -43,6 +43,7 @@ from backend.app.core.flag_environments import (
     PRODUCTION,
     FlagEnvironmentName,
 )
+from backend.app.core.flag_values import SERVING_FIELDS, flag_value_type, serving_errors
 from backend.app.core.logger import unexpected_failure
 from backend.app.core.permissions import (
     Action,
@@ -140,8 +141,9 @@ def _readable_flag(db: Session, flag_id: UUID, current_user: User) -> FeatureFla
 
 
 def _as_requested(changes: Dict[str, Any]) -> Dict[str, Any]:
-    """The part of *changes* a request can send: all but the split, which only
-    a promotion's changes have (#2012)."""
+    """*changes* but the split, which production's update takes as
+    ``update_feature_flag(split=...)`` and :func:`_refuse_what_cannot_be_served`
+    checks (#2012)."""
     return {name: value for name, value in changes.items() if name != "split"}
 
 
@@ -156,6 +158,31 @@ def _rechecked(changes: Dict[str, Any]) -> None:
                 for error in refused.errors(include_url=False)
             ]
         ) from None
+
+
+def _refuse_what_cannot_be_served(
+    flag: FeatureFlag, environment: str, changes: Dict[str, Any], db: Session
+) -> None:
+    """Refuse a split or rules' own values the flag cannot serve in
+    *environment*, with the 422 a flag update gives
+    (``flag_values.serving_errors``, against the flag's type and what the
+    environment stores now). *flag* is locked."""
+    sent = {name: changes[name] for name in SERVING_FIELDS if name in changes}
+    if not sent:
+        return
+    stored = effective_settings(flag, setting_of(db, flag.id, environment), environment)
+    errors = serving_errors(flag_value_type(flag), sent, stored)
+    if errors:
+        raise _serving_refused(errors)
+
+
+def _serving_refused(errors: List[Any]) -> RequestValidationError:
+    return RequestValidationError(
+        [
+            {"type": error.type, "loc": ("body", *where), "msg": error.message()}
+            for where, error in errors
+        ]
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -353,13 +380,15 @@ def update_flag_environment(
     Change a feature flag's settings in one environment (beta).
 
     Only the fields sent change, and only in this environment: `is_active`,
-    `rollout_percentage` (0 to 100) and `targeting_rules`, which null clears.
-    An empty body changes nothing. An unknown field answers 422, and so does
-    an explicit null on `is_active` or `rollout_percentage`.
+    `rollout_percentage` (0 to 100), `targeting_rules` and `split`, which null
+    clears. An empty body changes nothing. An unknown field answers 422, and
+    so does an explicit null on `is_active` or `rollout_percentage`.
 
     `targeting_rules` the flag evaluator would not apply as written, or that
-    name a segment that cannot be used, answer 422, as on a flag update. An
-    archived flag sent `is_active: true` answers 400, in every environment.
+    name a segment that cannot be used, answer 422, as on a flag update; so do
+    a `split` and rules' own values the flag cannot serve, checked against its
+    value type exactly as on a flag update. An archived flag sent
+    `is_active: true` answers 400, in every environment.
 
     The change to production is the same as `PUT /feature-flags/{id}`.
 
@@ -396,6 +425,7 @@ def update_flag_environment(
     if flag is None:
         raise _not_found()
     _refuse_to_turn_an_archived_flag_on(flag, changes)
+    _refuse_what_cannot_be_served(flag, environment, changes, db)
     return _save(db, current_user, flag, environment, changes)
 
 
@@ -421,13 +451,14 @@ def promote_flag_environment(
     """
     Promote a feature flag's settings into an environment (beta).
 
-    Copies `is_active`, `rollout_percentage` and `targeting_rules` from the
-    environment `from` names into the target, all three together, as a change
-    to the target would: the rules are checked again, and the same permission
-    is needed. A flag nobody configured in `from` is off there, so promoting
-    from it turns the target off, and an archived flag is off in every
-    environment. Nothing else is copied: not the flag's value type and values,
-    its rollout schedules or its safety configuration.
+    Copies `is_active`, `rollout_percentage`, `targeting_rules` and `split`
+    from the environment `from` names into the target, all four together, as
+    a change to the target would: the rules and the split are checked again,
+    and the same permission is needed. A flag nobody configured in `from` is
+    off there, so promoting from it turns the target off, and an archived flag
+    is off in every environment. Nothing else is copied: not the flag's value
+    type, on value and off value, which belong to the flag, its rollout
+    schedules or its safety configuration.
 
     The change and its audit entries are saved together: if an entry cannot be
     written, nothing is changed and the request answers 500.
@@ -440,7 +471,7 @@ def promote_flag_environment(
         HTTPException 403: If the user doesn't have permission to update this feature flag
         HTTPException 404: No feature flag has this id
         HTTPException 422: `from` is the target, an environment is not valid,
-            or the rules would be refused in the target
+            or the rules or the split would be refused in the target
         HTTPException 500: Nothing was changed
     """
     flag = db.query(FeatureFlag).filter(FeatureFlag.id == flag_id).first()
@@ -466,6 +497,7 @@ def promote_flag_environment(
     source = promotion.source
     changes = effective_settings(flag, setting_of(db, flag.id, source), source)
     _rechecked(changes)
+    _refuse_what_cannot_be_served(flag, target, changes, db)
     refuse_unusable_segments(db, changes["targeting_rules"])
     return _save(db, current_user, flag, target, changes, promoted_from=source)
 

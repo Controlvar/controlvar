@@ -123,6 +123,8 @@ def check_the_schemas(document: Dict[str, Any]) -> None:
         "is_active",
         "rollout_percentage",
         "targeting_rules",
+        # #2012
+        "split",
         "configured",
         "updated_at",
     }
@@ -139,6 +141,8 @@ def check_the_schemas(document: Dict[str, Any]) -> None:
         "is_active",
         "rollout_percentage",
         "targeting_rules",
+        # #2012
+        "split",
     }
     assert "required" not in update
     assert update["properties"]["is_active"]["type"] == "boolean"

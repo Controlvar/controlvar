@@ -131,10 +131,10 @@ class FeatureFlag(Base, BaseModel):
     on_value = Column(JSONB(none_as_null=True), nullable=True)
     off_value = Column(JSONB(none_as_null=True), nullable=True)
     # The flag's split in production (#2012): the values it serves by weight, or
-    # NULL for none (``flag_values.serve``). No request sets it yet. Nullable
-    # with no default, so the previous release, which does not know the column,
-    # inserts and updates rows without naming it. ``none_as_null``, as for the
-    # two values: Python ``None`` is SQL NULL.
+    # NULL for none (``flag_values.serve``). Nullable with no default, so the
+    # previous release, which does not know the column, inserts and updates
+    # rows without naming it. ``none_as_null``, as for the two values: Python
+    # ``None`` is SQL NULL.
     split = Column(JSONB(none_as_null=True), nullable=True)
     variants = Column(JSONB)  # For multivariate flags
     tags = Column(JSONB)  # For categorization
@@ -276,7 +276,7 @@ class FlagEnvironmentSetting(Base, BaseModel):
         Integer, nullable=False, default=0, server_default=text("0")
     )
     # The flag's split in this environment (#2012), as ``FeatureFlag.split`` is
-    # production's. No request sets it yet, as there.
+    # production's.
     split = Column(JSONB(none_as_null=True), nullable=True)
 
     @declared_attr

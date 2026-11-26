@@ -95,6 +95,7 @@ from backend.scripts.generate_ruleset_vectors import (
 )
 from backend.tests.integration.database import tree_profiles
 from backend.tests.integration.database.split_read_path import without_the_read_path
+from backend.tests.integration.database.split_write_path import without_the_write_path
 from backend.tests.integration.database.test_flag_environments_migration import (
     _captured,
     _columns,
@@ -724,7 +725,9 @@ _ADDED = {
         re.compile(r'(?m)^    "split",\n'),
         re.compile(r'(?m)^    "split": None,\n'),
         re.compile(r'(?m)^        "split": view\.split,\n'),
-        re.compile(r'(?m)^        "#split": stored\["split"\],\n'),
+        re.compile(
+            r'(?m)^        "#split": name_only_fingerprint\(stored\["split"\]\),\n'
+        ),
     ),
     ("api", "v1", "endpoints", "flag_environments.py"): (
         re.compile(r"(?m)\bKEEP_SPLIT, (?=FeatureFlagService$)"),
@@ -735,8 +738,8 @@ _ADDED = {
 
 
 def _previous_release(profile: str, tmp_path) -> Path:
-    """Release N-1: a copy of this tree without the revision, the columns and
-    what carries, writes or reads them."""
+    """Release N-1, 0.48.0: a copy of this tree without the revision, the
+    columns and what carries, writes, reads or takes them in a request."""
     destination = tmp_path / "release-n-minus-1"
     if profile == FULL:
         tree = tree_profiles.full_tree(destination)
@@ -753,6 +756,7 @@ def _previous_release(profile: str, tmp_path) -> Path:
             assert found == 1, f"{found} matches of {addition.pattern}: update it"
         module.write_text(source, encoding="utf-8")
     without_the_read_path(tree)
+    without_the_write_path(tree)
     return tree
 
 

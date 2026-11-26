@@ -95,6 +95,7 @@ OFF = {
     "is_active": False,
     "rollout_percentage": 0,
     "targeting_rules": None,
+    "split": None,
     "configured": False,
     "updated_at": None,
 }
@@ -431,6 +432,7 @@ def test_a_flag_nobody_configured_is_off_outside_production(client, db_session, 
         "is_active": True,
         "rollout_percentage": 40,
         "targeting_rules": _rules(),
+        "split": None,
         "configured": True,
     }
     assert staging == {"environment": "staging", **OFF}
@@ -638,6 +640,7 @@ def test_a_put_changes_only_its_environment(
         "is_active": True,
         "rollout_percentage": 60,
         "targeting_rules": _rules(),
+        "split": None,
         "configured": True,
     }
     after = _side_rows(fresh, flag.id)
@@ -1228,7 +1231,8 @@ def test_promotion_copies_the_split_and_changes_no_other(
     assert _splits(fresh, flag.id) == SPLITS
     response = _promote(client, developer, flag.id, source, target)
     assert response.status_code == 200, response.text
-    assert "split" not in response.json()
+    # The answer carries the split it copied (none before the write path).
+    assert response.json()["split"] == SPLITS[source]
     assert _splits(fresh, flag.id) == {**SPLITS, target: SPLITS[source]}
 
 
@@ -1240,13 +1244,17 @@ def test_promotion_copies_the_split_and_changes_no_other(
 def test_promoting_into_an_environment_nobody_configured_copies_the_split(
     client, fresh, db_session, developer, source, target, stored
 ):
-    """The target has no side row yet: the promotion makes it."""
+    """The target has no side row yet: the promotion makes it. A string flag:
+    a promotion checks the split it copies, and a boolean flag has none."""
     flag = _flag(
         db_session,
         developer,
         ACTIVE,
         20,
         split=stored if source == "production" else None,
+        value_type="string",
+        on_value="on",
+        off_value="off",
     )
     if source != "production":
         row = _setting(db_session, flag, source, True, 20)
@@ -1325,21 +1333,22 @@ def test_promoting_from_an_environment_nobody_configured_clears_the_split(
 
 @pytest.mark.regression
 @pytest.mark.parametrize("environment", FLAG_ENVIRONMENTS)
-def test_a_put_keeps_the_split_and_cannot_set_one(
+def test_a_put_keeps_the_split_and_sets_it_in_its_environment_alone(
     client, fresh, db_session, developer, environment
 ):
+    """Replaces "a PUT keeps the split and cannot set one": leaving it out
+    keeps it; sending one sets it, and null clears it, here and nowhere else."""
     flag = _flag_with_splits(db_session, developer)
     body = {"rollout_percentage": 7, "is_active": False, "targeting_rules": None}
     response = _put(client, developer, flag.id, environment, body)
     assert response.status_code == 200, response.text
     assert _splits(fresh, flag.id) == SPLITS
-    for sent in (SPLITS["staging"], None):
-        refused = _put(client, developer, flag.id, environment, {"split": sent})
-        assert refused.status_code == 422, refused.text
-        assert [(e["type"], e["loc"]) for e in refused.json()["detail"]] == [
-            ("extra_forbidden", ["body", "split"])
-        ]
-    assert _splits(fresh, flag.id) == SPLITS
+    sent = SPLITS["staging"] if environment != "staging" else SPLITS["production"]
+    for split in (sent, None):
+        changed = _put(client, developer, flag.id, environment, {"split": split})
+        assert changed.status_code == 200, changed.text
+        assert changed.json()["split"] == split
+        assert _splits(fresh, flag.id) == {**SPLITS, environment: split}
 
 
 @pytest.mark.regression

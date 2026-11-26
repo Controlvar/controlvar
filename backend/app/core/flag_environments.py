@@ -1,8 +1,8 @@
 """Flag environments: production, staging and development in one install (#2011).
 
 A feature flag has one configuration per environment: whether it is on, its
-targeting rules, its rollout percentage and its split (#2012: no request sets
-one yet). The set is fixed here, in code; there is no table of environments.
+targeting rules, its rollout percentage and its split (#2012). The set is
+fixed here, in code; there is no table of environments.
 
 * ``production`` is the default, and its configuration is the flag row itself:
   ``feature_flags.status``, ``targeting_rules`` and ``rollout_percentage``,

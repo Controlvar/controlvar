@@ -18,8 +18,17 @@ one's on value exactly when ``enabled`` and its off value otherwise. Since
 F5 the ruleset carries each string, number and json flag's ``value_type`` and
 values (both on a local entry, the off value on an inactive one), and the
 published wheels must still answer every value flag's ``enabled`` and
-``reason`` exactly as the server does. No wheel's value is compared (0.1.1 and
-0.2.0 read none).
+``reason`` exactly as the server does. No wheel's local value is compared
+(0.1.1 and 0.2.0 read none).
+
+Since #2012 it also creates, through the API, a string, number and json flag
+with a split and one whose dashboard rule serves a value of its own: 6 more, 30
+in all. Their ruleset entries are ``remote``, so every wheel defers them;
+``/evaluate`` answers each user the value the ground-truth copy of the split's
+hash picks, every value of each split reached; turning one off (deactivation,
+or a safety rollback to 0%) reaches every wheel locally at the next ruleset it
+loads; and in server mode a wheel's typed getters (0.3.0 on) return the value
+``/evaluate`` sent, a split's included.
 
 * The route answers 200 with exactly one entry per stored flag.
 * Each wheel runs in its own ``python -I -S`` process with only its verified
@@ -32,7 +41,8 @@ published wheels must still answer every value flag's ``enabled`` and
   rollback to 0% (which turns the flag off).
 * In server mode its ``get_feature_flag``, ``is_feature_enabled`` and
   ``get_all_flags`` read the same answers as ``/evaluate`` and the bulk route,
-  and every bulk value is a boolean.
+  and every bulk value is a boolean; where it has typed getters, each returns
+  the value ``/evaluate`` sent for a multi-way flag, never its default.
 * A key stored before keys had an environment (#2011) is a production key:
   each wheel answers exactly production's ``/evaluate`` with it, whatever the
   flags are configured to serve in staging; a staging change does not move its
@@ -65,6 +75,13 @@ from backend.app.models.feature_flag import FeatureFlag, FeatureFlagStatus
 from backend.app.models.segment import Segment, SegmentKind, SegmentStatus
 from backend.app.models.user import User, UserRole
 from backend.tests.integration.key_environments import configure, environment_key
+
+#: The ground-truth copy of the hash (standard library only).
+_LIBRARY_ROOT = Path(__file__).resolve().parents[4] / "tests" / "ground_truth"
+if str(_LIBRARY_ROOT) not in sys.path:
+    sys.path.insert(0, str(_LIBRARY_ROOT))
+
+from ground_truth import hashing
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 _spec = importlib.util.spec_from_file_location(
@@ -250,7 +267,45 @@ VALUE_SHAPES = {
     for value_type in VALUE_TYPES
     for served, (body, evaluation) in SERVED_BY.items()
 }
-ALL_SHAPES = {**SHAPES, **VALUE_SHAPES}
+#: A split, and a dashboard rule with a value of its own, for each type that
+#: has values (#2012): set through the API, served by the server alone.
+SPLITS = {
+    "string": ["red", "green", "blue"],
+    "number": [1, 2.5, 4],
+    "json": [{"color": "red"}, {"color": "green"}, ["blue"]],
+}
+MULTI_WAY_SHAPES = {}
+for _type, _values in SPLITS.items():
+    _pair = VALUE_PAIRS[_type]
+    MULTI_WAY_SHAPES[f"{_type}-split"] = (
+        {
+            "is_active": True,
+            "rollout_percentage": 100,
+            "value_type": _type,
+            **_pair,
+            "split": [{"value": v, "weight": w} for v, w in zip(_values, (34, 33, 33))],
+        },
+        "remote",
+    )
+    MULTI_WAY_SHAPES[f"{_type}-rule-value"] = (
+        {
+            "is_active": True,
+            "rollout_percentage": 0,
+            "value_type": _type,
+            **_pair,
+            "targeting_rules": {
+                **SHAPES["dashboard"][0]["targeting_rules"],
+                "value": _values[0],
+            },
+        },
+        "remote",
+    )
+#: The users whose answers to the multi-way flags are compared: enough that
+#: every value of each split is some user's (checked against the hash).
+MULTI_WAY_USERS = [f"mw-user-{n}" for n in range(60)]
+#: What the typed getters are given as their default: no flag's value.
+TYPED_DEFAULTS = {"string": "default", "number": -1, "json": {"default": True}}
+ALL_SHAPES = {**SHAPES, **VALUE_SHAPES, **MULTI_WAY_SHAPES}
 
 
 @pytest.fixture(autouse=True)
@@ -431,7 +486,8 @@ def test_the_published_wheel_reads_the_route_and_obeys_both_kill_switches(
     ours = {shape: entries[key] for shape, key in keys.items()}
     assert len(SHAPES) == 8
     assert len(VALUE_SHAPES) == len(VALUE_TYPES) * len(SERVED_BY) == 16
-    assert len(ours) == len(ALL_SHAPES) == 24
+    assert len(MULTI_WAY_SHAPES) == 6
+    assert len(ours) == len(ALL_SHAPES) == 30
     for shape, (_, evaluation) in ALL_SHAPES.items():
         assert ours[shape]["active"] is (evaluation is not None), (shape, ours[shape])
         assert ours[shape].get("evaluation") == evaluation, (shape, ours[shape])
@@ -484,6 +540,35 @@ def test_the_published_wheel_reads_the_route_and_obeys_both_kill_switches(
         assert answer["value_type"] == value_type, (shape, answer)
         assert answer["config"] is None, answer
         reached.add((shape, answer["enabled"], answer["reason"]))
+    # Every multi-way flag: the split's value by the hash, every value
+    # reached; the rule's own value for a pro user, the off value otherwise.
+    for shape, (body, _) in MULTI_WAY_SHAPES.items():
+        counts = {json.dumps(v, sort_keys=True): 0 for v in SPLITS[body["value_type"]]}
+        for user in MULTI_WAY_USERS:
+            for context in (None, {"plan": "pro"}):
+                params = {"user_id": user}
+                if context is not None:
+                    params["context"] = json.dumps(context)
+                answer = client.get(
+                    f"{FLAGS}/evaluate/{quote(keys[shape], safe='')}",
+                    params=params,
+                    headers={"X-API-Key": api_key},
+                ).json()
+                if "split" in body:
+                    expected = hashing.split_value(user, keys[shape], body["split"])
+                elif context is not None:
+                    expected = body["targeting_rules"]["value"]
+                else:
+                    expected = body["off_value"]
+                assert json.dumps(answer["value"], sort_keys=True) == json.dumps(
+                    expected, sort_keys=True
+                ), (shape, user, answer)
+                assert answer["value_type"] == body["value_type"], answer
+                if "split" in body:
+                    counts[json.dumps(answer["value"], sort_keys=True)] += 1
+        if "split" in body:
+            assert all(counts.values()), (shape, counts)
+
     for value_type in VALUE_TYPES:
         assert (f"{value_type}-rollout", True, "rollout") in reached
         assert (f"{value_type}-rule", True, "targeting_rule") in reached
@@ -491,31 +576,35 @@ def test_the_published_wheel_reads_the_route_and_obeys_both_kill_switches(
         assert (f"{value_type}-default_rule", True, "targeting_rule") in reached
         assert (f"{value_type}-off", False, "inactive") in reached
 
-    # 2. Kill switch one: the DEVELOPER deactivates the rollout flag.
-    deactivated = client.post(
-        f"{FLAGS}/{stored['flags']['rollout']['id']}/deactivate",
-        headers=_auth(stored["developer"]),
-    )
-    assert deactivated.status_code == 200, deactivated.text
+    # 2. Kill switch one: the DEVELOPER deactivates the rollout flag, and a
+    # flag with a split, which every wheel asked the server about until now.
+    for shape in ("rollout", "string-split"):
+        deactivated = client.post(
+            f"{FLAGS}/{stored['flags'][shape]['id']}/deactivate",
+            headers=_auth(stored["developer"]),
+        )
+        assert deactivated.status_code == 200, deactivated.text
     second = _ruleset(client, api_key, first.headers["etag"])
     assert second.headers["etag"] != first.headers["etag"]
-    probes_second = _probes([keys["rollout"]])
+    probes_second = _probes([keys["rollout"], keys["string-split"]])
     expected_second = [
         _evaluate(client, api_key, p["flag"], p["user_id"], p["context"])
         for p in probes_second
     ]
     assert all(answer == INACTIVE for answer in expected_second)
 
-    # 3. Kill switch two: a safety rollback to 0% of the native-rules flag.
-    rollback = client.post(
-        f"/api/v1/safety/feature-flags/{stored['flags']['native']['id']}/rollback",
-        params={"percentage": 0, "reason": "G2 kill switch"},
-        headers=_auth(superuser),
-    )
-    assert rollback.status_code == 200, rollback.text
+    # 3. Kill switch two: a safety rollback to 0% of the native-rules flag,
+    # and of a flag whose rule serves a value of its own.
+    for shape in ("native", "json-rule-value"):
+        rollback = client.post(
+            f"/api/v1/safety/feature-flags/{stored['flags'][shape]['id']}/rollback",
+            params={"percentage": 0, "reason": "G2 kill switch"},
+            headers=_auth(superuser),
+        )
+        assert rollback.status_code == 200, rollback.text
     third = _ruleset(client, api_key, second.headers["etag"])
     assert third.headers["etag"] != second.headers["etag"]
-    probes_third = _probes([keys["native"], keys["rollout"]])
+    probes_third = _probes([keys["native"], keys["rollout"], keys["json-rule-value"]])
     expected_third = [
         _evaluate(client, api_key, p["flag"], p["user_id"], p["context"])
         for p in probes_third
@@ -551,6 +640,23 @@ def test_the_published_wheel_reads_the_route_and_obeys_both_kill_switches(
         "body_file": _write(tmp_path / "bulk.json", bulk.content),
     }
     calls.append({"op": "get_all_flags", "user_id": "user-1"})
+    # Each multi-way flag through the typed getter of its type, where the
+    # release has one: the value /evaluate sent, never the default.
+    typed = []
+    for shape, (body, _) in MULTI_WAY_SHAPES.items():
+        value_type = body["value_type"]
+        target = f"GET {FLAGS}/evaluate/{quote(keys[shape], safe='')}?user_id=user-1"
+        served = json.loads(Path(replies[target]["body_file"]).read_bytes())["value"]
+        typed.append((shape, f"get_{value_type}_value", served))
+        calls.append(
+            {
+                "op": "typed",
+                "getter": f"get_{value_type}_value",
+                "flag": keys[shape],
+                "user_id": "user-1",
+                "default": TYPED_DEFAULTS[value_type],
+            }
+        )
 
     # The published wheel, in its own process.
     extraction = tmp_path / "artefact"
@@ -597,7 +703,7 @@ def test_the_published_wheel_reads_the_route_and_obeys_both_kill_switches(
         first.headers["etag"],
         second.headers["etag"],
     ]
-    remote = sorted(keys[s] for s, (_, e) in SHAPES.items() if e == "remote")
+    remote = sorted(keys[s] for s, (_, e) in ALL_SHAPES.items() if e == "remote")
     assert set(remote) <= set(steps[0]["server_evaluated_flags"])
     assert not {keys["rollout"], keys["dashboard"], keys["native"]} & set(
         steps[0]["server_evaluated_flags"]
@@ -612,7 +718,7 @@ def test_the_published_wheel_reads_the_route_and_obeys_both_kill_switches(
         assert len(step["probes"]) == len(planned["probes"]) == len(expected)
         for probe, answer, server in zip(planned["probes"], step["probes"], expected):
             shape = shape_of[probe["flag"]]
-            if ALL_SHAPES[shape][1] == "remote":
+            if ALL_SHAPES[shape][1] == "remote" and step is steps[0]:
                 deferred += 1
                 if answer != "DEFER":
                     problems.append(f"{shape} answered locally: {probe} -> {answer}")
@@ -626,13 +732,17 @@ def test_the_published_wheel_reads_the_route_and_obeys_both_kill_switches(
                 local += 1
     assert not problems, problems[:10]
     total = len(probes_first) + len(probes_second) + len(probes_third)
-    assert deferred == 3 * len(USERS) * len(CONTEXTS)
+    # The three remote shapes and the six multi-way ones, in the first step.
+    assert deferred == (3 + len(MULTI_WAY_SHAPES)) * len(USERS) * len(CONTEXTS)
     assert local == total - deferred
     log.info("%s: %d probes answered locally, each the server's", artefact.label, local)
 
-    # Both kill switches reached it.
+    # Both kill switches reached it: a multi-way flag turned off is a local
+    # entry at the next ruleset, so the wheel answers it off without asking.
     assert steps[1]["probes"] and all(a == INACTIVE for a in steps[1]["probes"])
     assert steps[2]["probes"] and all(a == INACTIVE for a in steps[2]["probes"])
+    for step, turned_off in ((1, "string-split"), (2, "json-rule-value")):
+        assert keys[turned_off] not in steps[step]["server_evaluated_flags"]
 
     # Server mode reads what /evaluate and the bulk route send.
     server = report["server"]
@@ -645,6 +755,26 @@ def test_the_published_wheel_reads_the_route_and_obeys_both_kill_switches(
         enabled = next(results)
         assert type(enabled) is bool and enabled == answer["enabled"], key
     assert next(results) == bulk_body
+    # The typed getters (0.3.0 on) return what /evaluate sent: a split's
+    # value, a rule's own value, or the off value of a flag turned off.
+    has_getters = tuple(int(part) for part in artefact.version.split(".")) >= (0, 3, 0)
+    for shape, getter, served in typed:
+        answer = next(results)
+        if not has_getters:
+            assert answer == {"absent": getter}, (shape, answer)
+            continue
+        assert json.dumps(answer, sort_keys=True) == json.dumps(
+            {"value": served}, sort_keys=True
+        ), (artefact.label, shape, answer)
+    # The two splits still on at the end serve user-1 the hash's pick.
+    for shape in ("number-split", "json-split"):
+        body = MULTI_WAY_SHAPES[shape][0]
+        served = next(s for name, _, s in typed if name == shape)
+        expected = hashing.split_value("user-1", keys[shape], body["split"])
+        assert json.dumps(served, sort_keys=True) == json.dumps(
+            expected, sort_keys=True
+        )
+    assert next(results, None) is None
 
 
 def _configure_the_other_way_round(db_session, stored, percentage):

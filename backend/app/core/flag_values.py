@@ -11,7 +11,8 @@ A string, number or json flag may also have, in each environment, a split and
 targeting rules with a value of their own. Neither changes who the flag is on
 for; they change what those users are served (:func:`serve`): the matched
 rule's own value if it has one, otherwise the split's value for the user, and
-only then ``on_value``. No request sets either yet. A boolean flag's are never
+only then ``on_value``. A request sets them (:func:`serving_errors` is what it
+is checked against); a boolean flag has neither, and a stored one is never
 read.
 
 A boolean flag serves ``true`` and ``false``. It stores neither value (both
@@ -36,7 +37,10 @@ disagree:
   the API answers 422 first rather than letting that become a 500.
 
 A split's values and a rule's own value follow the same rules;
-:func:`split_errors` gives the rest of a split's.
+:func:`split_errors` gives the rest of a split's, and :func:`serving_errors`
+everything a write of a split or of rules is refused for, including the most
+bytes a split's values and the rules' own values take together
+(:data:`MAX_SERVED_VALUE_BYTES`).
 
 Every message names the field and never the value.
 """
@@ -114,6 +118,21 @@ SPLIT_ENTRY = "An entry of a split has a value and a weight, and nothing else."
 SPLIT_WEIGHT = f"A weight is a whole number from 0 to {SPLIT_TOTAL}."
 SPLIT_VALUES_EQUAL = (
     "value equals an earlier entry's value; the values of a split must differ"
+)
+
+#: Most bytes, as compact JSON in UTF-8, that a split's values and the rules'
+#: own values of one flag take together in one environment: a split's own
+#: most, so that no split :func:`split_errors` accepts is refused for its size
+#: alone, while rules' values share what it leaves.
+MAX_SERVED_VALUE_BYTES = MAX_SPLIT_ENTRIES * MAX_VALUE_BYTES
+SERVED_VALUES_TOO_LARGE = (
+    f"A split's values and the rules' own values can be at most "
+    f"{MAX_SERVED_VALUE_BYTES} bytes together in one environment."
+)
+#: The answer to a rule's own value on a boolean flag: its rules turn it on.
+RULE_VALUE_ON_A_BOOLEAN_FLAG = (
+    "a rule of a boolean flag has no value of its own; create a string, number "
+    "or json flag to serve one"
 )
 
 _TYPE_WORDS = {
@@ -592,3 +611,135 @@ def rule_values(stored_rules: Any) -> Dict[str, Any]:
         for rule in native
         if isinstance(rule, dict) and "value" in rule
     }
+
+
+def rule_value_places(stored_rules: Any) -> List[Tuple[str, Any]]:
+    """``(path, value)`` for each rule in *stored_rules* that carries a value,
+    in document order: the rules :func:`rule_values` finds, by where they are
+    rather than by id. *path* is ``value`` for the dashboard shape's rule, and
+    ``rules[i].value`` or ``default_rule.value`` for the native shape's."""
+    if not isinstance(stored_rules, dict):
+        return []
+    if "groups" in stored_rules:
+        return [("value", stored_rules["value"])] if "value" in stored_rules else []
+    if "rules" not in stored_rules:
+        return []
+    rules = stored_rules["rules"]
+    places = [
+        (f"rules[{index}].value", rule["value"])
+        for index, rule in enumerate(rules if isinstance(rules, list) else ())
+        if isinstance(rule, dict) and "value" in rule
+    ]
+    default_rule = stored_rules.get("default_rule")
+    if isinstance(default_rule, dict) and "value" in default_rule:
+        places.append(("default_rule.value", default_rule["value"]))
+    return places
+
+
+def rule_value_errors(
+    value_type: str, stored_rules: Any
+) -> List[Tuple[str, PydanticCustomError]]:
+    """Why the rules' own values in *stored_rules* cannot be a *value_type*
+    flag's, as ``(path, error)`` pairs; none when they can.
+
+    A boolean flag's rules carry none (the first one found is named). Any
+    other flag's follow :func:`value_error` for its type, ``null`` included,
+    which is never a value. The message names the place, never the value.
+    """
+    places = rule_value_places(stored_rules)
+    if not places:
+        return []
+    if value_type == BOOLEAN:
+        path = places[0][0]
+        text = f"{path}: {RULE_VALUE_ON_A_BOOLEAN_FLAG}"
+        return [(path, PydanticCustomError("rule_value_boolean", text))]
+    errors = []
+    for path, value in places:
+        error = value_error(path, value_type, value)
+        if error is not None:
+            errors.append((path, error))
+    return errors
+
+
+def _served_bytes(value: Any) -> int:
+    """The bytes *value* takes as compact JSON; a stored value nested too
+    deeply to measure is one the evaluate route does not serve, and takes none."""
+    if nested_deeper_than(value, MAX_VALUE_DEPTH):
+        return 0
+    return compact_size(value)
+
+
+def served_value_bytes(split: Any, stored_rules: Any) -> int:
+    """The bytes *split*'s values and the own values of *stored_rules* take
+    together, as :data:`MAX_SERVED_VALUE_BYTES` counts them."""
+    total = 0
+    if isinstance(split, list):
+        total += sum(
+            _served_bytes(entry["value"])
+            for entry in split
+            if isinstance(entry, dict) and "value" in entry
+        )
+    total += sum(_served_bytes(value) for _, value in rule_value_places(stored_rules))
+    return total
+
+
+#: The fields of a write that :func:`serving_errors` checks.
+SERVING_FIELDS = ("split", "targeting_rules")
+
+
+def serving_errors(
+    value_type: str,
+    sent: Mapping[str, Any],
+    stored: Optional[Mapping[str, Any]] = None,
+) -> List[Tuple[Tuple[Any, ...], PydanticCustomError]]:
+    """The refusals of a write's split and rules' own values, as
+    ``(where, error)`` pairs; none when the write may store them.
+
+    *value_type* is the flag's. *sent* holds the fields of
+    :data:`SERVING_FIELDS` the write carries (a field left out is absent);
+    *stored* the environment's split and rules before the write, ``None`` on a
+    create. Every write path checks with this one function: a create, ``PUT
+    /feature-flags/{id}``, the environment ``PUT`` and a promotion.
+
+    * A sent split other than ``None`` follows :func:`split_errors`, at
+      ``("split", ...)``; ``None`` clears the split and is always accepted.
+    * Sent rules' own values follow :func:`rule_value_errors`, at
+      ``("targeting_rules",)``, the path in the message.
+    * Then, if the write adds a split or a rule's value, the split's values and
+      the rules' own values as they will be stored (each as sent, otherwise as
+      stored) take at most :data:`MAX_SERVED_VALUE_BYTES`, at the split when
+      one was sent, otherwise at the rules.
+
+    Stored rules and a stored split are not checked again unless they are
+    sent; they count only towards the size.
+    """
+    errors: List[Tuple[Tuple[Any, ...], PydanticCustomError]] = []
+    split_sent = "split" in sent and sent["split"] is not None
+    if split_sent:
+        errors += [
+            (("split", *where), error)
+            for where, error in split_errors(value_type, sent["split"])
+        ]
+    rules_sent = "targeting_rules" in sent
+    if rules_sent:
+        errors += [
+            (("targeting_rules",), error)
+            for _, error in rule_value_errors(value_type, sent["targeting_rules"])
+        ]
+    adds_values = split_sent or (
+        rules_sent and bool(rule_value_places(sent["targeting_rules"]))
+    )
+    if errors or not adds_values or value_type == BOOLEAN:
+        return errors
+    stored = stored or {}
+    split = sent["split"] if "split" in sent else stored.get("split")
+    rules = sent["targeting_rules"] if rules_sent else stored.get("targeting_rules")
+    if served_value_bytes(split, rules) > MAX_SERVED_VALUE_BYTES:
+        where = ("split",) if split_sent else ("targeting_rules",)
+        errors.append(
+            (
+                where,
+                PydanticCustomError("served_values_too_large", SERVED_VALUES_TOO_LARGE),
+            )
+        )
+    return errors
