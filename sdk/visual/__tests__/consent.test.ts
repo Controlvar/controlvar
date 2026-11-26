@@ -28,12 +28,17 @@ interface Visual {
 }
 const visual = (window: Window) => (window as unknown as { controlvar: { visual: Visual } }).controlvar.visual;
 
-function answering(changes: unknown = CHANGE, previewRules = [{ match: 'prefix', path: '/' }], host = 'shop.example') {
+/** A page_view goal on every page of the shop. */
+const PAGE_GOAL = { event_name: 'page_shop', kind: 'page_view', page: { match: 'prefix', url: 'https://shop.example/' } };
+
+/** The API's answers; with *goals*, the experiment has them, and the call that sends their events is left unanswered. */
+function answering(changes: unknown = CHANGE, previewRules = [{ match: 'prefix', path: '/' }], host = 'shop.example', goals: unknown[] = []) {
   return (call: FetchCall): Answer | undefined => {
     const path = new URL(call.url).pathname;
     const pages = { host, rules: previewRules, max_age: 60 };
+    if (path === '/api/v1/tracking/batch' && goals.length > 0) return undefined;
     if (path === '/api/v1/tracking/visual') {
-      const experiments = [{ experiment_key: 'headline', variant_id: 'v1', variant_name: 'B', assigned: true, reason: 'assigned', changes, goals: [] }];
+      const experiments = [{ experiment_key: 'headline', variant_id: 'v1', variant_name: 'B', assigned: true, reason: 'assigned', changes, goals }];
       return { status: 200, body: { experiments, pages } };
     }
     if (path === '/api/v1/tracking/visual/preview') {
@@ -91,7 +96,7 @@ const SITE_KEYS = ['local:site_cart', 'session:site_tab'];
 
 describe('consent()', () => {
   test('before it, a tag that waits reads, stores and sends nothing; after it, the page is asked for', async () => {
-    const p = page(answering(), { 'data-require-consent': '' });
+    const p = page(answering(CHANGE, undefined, undefined, [PAGE_GOAL]), { 'data-require-consent': '' });
     await settle();
     expect(p.fetches).toEqual([]);
     expect(p.window.document.cookie).toBe('');
@@ -102,11 +107,13 @@ describe('consent()', () => {
     expect(p.fetches).toEqual([]);
     expect(visual(p.window).consent()).toBeUndefined();
     await settle();
-    expect(paths(p.fetches)).toEqual(['/api/v1/tracking/visual']);
+    expect(paths(p.fetches)).toEqual(['/api/v1/tracking/visual', '/api/v1/tracking/batch']);
     expect(p.window.document.getElementById('t')!.textContent).toBe('Changed');
     expect(p.window.document.cookie).toMatch(/^controlvar_uid=/);
     expect(storageKeys(p.window)).toEqual([
       'local:controlvar_assigned',
+      'local:controlvar_goals',
+      'local:controlvar_outbox',
       'local:controlvar_pages',
       'local:controlvar_seen',
       'local:controlvar_visit',
@@ -114,7 +121,7 @@ describe('consent()', () => {
     visual(p.window).consent();
     await settle();
     // A second consent() asks nothing more.
-    expect(paths(p.fetches)).toEqual(['/api/v1/tracking/visual']);
+    expect(paths(p.fetches)).toEqual(['/api/v1/tracking/visual', '/api/v1/tracking/batch']);
     p.close();
   });
 });

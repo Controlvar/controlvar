@@ -1,6 +1,6 @@
 /**
  * Error reports (tests/sdk-contract/visual-error-reports.json lists them:
- * visual_change_not_applied and own_ui in this version).
+ * visual_change_not_applied, own_ui, goal_not_found and goal_ambiguous).
  * Each is one POST /api/v1/tracking/errors with exactly error_type,
  * experiment_key, message and metadata: never a feature flag key, the
  * visitor's id, the page's address or its text. At most 5 per page view,
@@ -35,6 +35,15 @@ export const MESSAGES: Record<NotApplied, string> = {
 export const OWN_UI_MESSAGE =
   "A visual change was not applied: it would have changed the page's root element or the script's own banner.";
 
+/** Why a click goal counted nothing on a page view: its selector matched no element, or several. */
+export type GoalMiss = "goal_not_found" | "goal_ambiguous";
+
+/** One fixed message per goal report type. */
+export const GOAL_MESSAGES: Record<GoalMiss, string> = {
+  goal_not_found: "A click goal counted nothing on this page view: its selector matched no element.",
+  goal_ambiguous: "A click goal counted nothing on this page view: its selector matched more than one element.",
+};
+
 export interface ReportOptions {
   /** Sent as the page goes away: the request outlives it (fetch keepalive). */
   keepalive?: boolean;
@@ -44,6 +53,8 @@ export interface Reporter {
   notApplied(experimentKey: string, index: number | null, reason: NotApplied, options?: ReportOptions): void;
   /** A change whose element is <html>, or the script's own UI. */
   ownUi(experimentKey: string, index: number): void;
+  /** A click goal (its position in the experiment's goals) whose selector matched no element or several. */
+  goalMissed(experimentKey: string, index: number, type: GoalMiss): void;
 }
 
 export function createReporter(send: Send): Reporter {
@@ -72,6 +83,9 @@ export function createReporter(send: Send): Reporter {
     },
     ownUi(experimentKey, index) {
       report({ error_type: "own_ui", experiment_key: experimentKey, message: OWN_UI_MESSAGE, metadata: { index } }, {});
+    },
+    goalMissed(experimentKey, index, type) {
+      report({ error_type: type, experiment_key: experimentKey, message: GOAL_MESSAGES[type], metadata: { index } }, {});
     },
   };
 }

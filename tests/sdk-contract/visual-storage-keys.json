@@ -1,5 +1,5 @@
 {
-  "description": "Every browser storage key the visual script (sdk/visual) may use: the closed list. The names are final. revokeConsent() deletes all of them. `written` says whether this version of the script writes the key; the others are reserved for the goal features. No key ever holds a raw URL, a query string, a referrer, an editor link or a token.",
+  "description": "Every browser storage key the visual script (sdk/visual) may use: the closed list. The names are final. revokeConsent() deletes all of them. `written` says whether this version of the script writes the key. No key ever holds a raw URL, a query string, a referrer, an editor link or a token.",
   "prefix": "controlvar_",
   "keys": [
     {
@@ -33,16 +33,16 @@
     {
       "name": "controlvar_goals",
       "storage": "localStorage",
-      "written": false,
-      "holds": "The goals already counted for this visitor.",
-      "kept": "30 days"
+      "written": true,
+      "holds": "The goals of the experiments this visitor was assigned to (each goal's event name, kind, selector and page rule), so a goal on another page counts, and the page rules (match and path) that covered the page where each was named, so an answer there that no longer names it removes them.",
+      "kept": "30 days per experiment"
     },
     {
       "name": "controlvar_outbox",
       "storage": "localStorage",
-      "written": false,
-      "holds": "Goal events not yet delivered.",
-      "kept": "until delivered; at most 50 events, each at most 24 hours"
+      "written": true,
+      "holds": "Goal events the API has not yet accepted, each with the time it was made, so a later page sends them again.",
+      "kept": "until the API accepts or refuses it; at most 50 events, each at most 24 hours"
     },
     {
       "name": "controlvar_pages",

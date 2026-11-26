@@ -5,7 +5,7 @@ import { TEST_USERS } from "../fixtures/auth.fixture";
 import { SITE } from "./editor";
 import { exportWindowStart, readExport, type Counts } from "./export-read";
 import { expect, test, type VisualPackage } from "./runtime.fixture";
-import { BATCH_PATH, PREVIEW_PATH, sitePage, VISUAL_PATH } from "./visual";
+import { BATCH_PATH, PREVIEW_PATH, shown, sitePage, VISUAL_PATH } from "./visual";
 
 /**
  * Preview links and track() against the real API (#1545), as
@@ -16,7 +16,7 @@ import { BATCH_PATH, PREVIEW_PATH, sitePage, VISUAL_PATH } from "./visual";
  * assignments and its event rows.
  *
  * Preview links can be made only for pages on an origin the API accepts
- * requests from, so the preview test's site is http://localhost:3300, which
+ * requests from, so the preview tests' site is http://localhost:3300, which
  * the API accepts in development with no CORS setting (DEFAULT_CORS_ORIGINS)
  * and which is not a dashboard origin. Nothing listens there: page.route
  * answers every request to it.
@@ -28,6 +28,7 @@ const ORIGINAL = '<h1 id="headline">Original</h1>';
 const HEADLINE = { op: "set_text", selector: "#headline", text: "Changed" };
 const DEVELOPER = TEST_USERS.developer;
 const PREVIEW_LOADS = 50;
+const GOAL_BODY = '<h1 id="headline">Original</h1><button id="buy">Buy</button>';
 
 interface Forwarded {
   path: string;
@@ -68,20 +69,27 @@ test.afterAll(async () => {
   await api?.dispose();
 });
 
-/** A running visual experiment on *pageUrl*: Control and B, with the traffic given, B holding *changes*. */
-async function running(name: string, pageUrl: string, control: number, metric: string): Promise<Made> {
+/**
+ * A running visual experiment on *pageUrl*: Control and B, with the traffic
+ * given, B holding the headline change; *goals* and the other metrics' event
+ * names when given.
+ */
+async function running(name: string, pageUrl: string, control: number, metric: string, goals: unknown[] = [], others: string[] = []): Promise<Made> {
   const page = { match: "exact", url: pageUrl };
   const created = await api.post("/api/v1/experiments/", {
     headers: bearer,
     data: {
       name: `${name} ${RUN}`,
       experiment_type: "a_b",
-      visual_config: { version: 1, editor_url: page.url, pages: [page], goals: [] },
+      visual_config: { version: 1, editor_url: page.url, pages: [page], goals },
       variants: [
         { name: "Control", is_control: true, traffic_allocation: control },
         { name: "B", is_control: false, traffic_allocation: 100 - control, visual_changes: { version: 1, changes: [HEADLINE] } },
       ],
-      metrics: [{ name: "Buy", event_name: metric, metric_type: "conversion", is_primary: true }],
+      metrics: [
+        { name: "Buy", event_name: metric, metric_type: "conversion", is_primary: true },
+        ...others.map((other, index) => ({ name: `Other ${index + 1}`, event_name: other, metric_type: "conversion", is_primary: false })),
+      ],
     },
   });
   expect(created.status(), `create ${name}: ${await created.text()}`).toBe(201);
@@ -94,12 +102,18 @@ async function running(name: string, pageUrl: string, control: number, metric: s
   return { id, key, variants: detail.variants };
 }
 
+/** The URLs at *origin* that page.route answered, for a test that checks none went to the network. */
+const answered = new Map<string, string[]>();
+
 /** *origin*'s pages (each with the snippet first in <head>), the packed script, and its /api/ passed on to the API. */
-async function site(page: Page, visualPackage: VisualPackage, origin: string, paths: string[]): Promise<Forwarded[]> {
+async function site(page: Page, visualPackage: VisualPackage, origin: string, paths: string[], body = ORIGINAL): Promise<Forwarded[]> {
   const forwarded: Forwarded[] = [];
+  const routed: string[] = [];
+  answered.set(origin, routed);
   await page.route(`${origin}/**`, async (route) => {
     const request = route.request();
     const url = new URL(request.url());
+    routed.push(request.url());
     if (url.pathname.startsWith("/api/")) {
       let body: unknown = request.postData();
       try {
@@ -117,7 +131,7 @@ async function site(page: Page, visualPackage: VisualPackage, origin: string, pa
       return;
     }
     if (paths.includes(url.pathname)) {
-      const html = sitePage(ORIGINAL, { "data-api-url": origin, "data-api-key": pageKey });
+      const html = sitePage(body, { "data-api-url": origin, "data-api-key": pageKey });
       await route.fulfill({ contentType: "text/html; charset=utf-8", body: html });
       return;
     }
@@ -199,11 +213,56 @@ test("an event sent on another page counts for the experiment the visitor saw fi
   arms.push({ arm: "event on another page", id: made.id, report: { assignments: 1, events: 2 } });
 });
 
+test("a preview tab records no goal: 20 clicks and 5 page views of the goals' pages send nothing", async ({ page, visualPackage }) => {
+  test.setTimeout(120_000);
+  const path = `/preview-goals-${RUN}`;
+  const thanks = `${path}/thanks`;
+  const click = `click_preview_${RUN}`;
+  const view = `page_preview_${RUN}`;
+  const goals = [
+    { event_name: click, kind: "click", selector: "#buy", page: { match: "exact", url: `${PREVIEW_SITE}${path}` } },
+    { event_name: view, kind: "page_view", page: { match: "exact", url: `${PREVIEW_SITE}${thanks}` } },
+  ];
+  // Everyone gets Control (100 %); only the preview shows B.
+  const made = await running("Preview goals", `${PREVIEW_SITE}${path}`, 100, click, goals, [view]);
+  const b = made.variants.find((variant) => variant.name === "B")!;
+  const link = await api.post(`/api/v1/experiments/${made.id}/visual/preview-links`, { headers: bearer, data: { variant_id: b.id } });
+  expect(link.status(), `preview link: ${await link.text()}`).toBe(201);
+  const token = new URL((await link.json()).url).hash.replace("#controlvar-preview=", "");
+  const seen: string[] = [];
+  page.on("request", (request) => {
+    if (new URL(request.url()).origin === PREVIEW_SITE) seen.push(request.url());
+  });
+  const forwarded = await site(page, visualPackage, PREVIEW_SITE, [path, thanks], GOAL_BODY);
+
+  // An ordinary page view first: the visitor is assigned Control, and its goals are kept in this tab's site storage.
+  await page.goto(`${PREVIEW_SITE}${path}`, { waitUntil: "load" });
+  await expect.poll(() => statuses(forwarded, VISUAL_PATH), { message: "the visitor's call" }).toEqual([200]);
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("controlvar_goals") !== null), { message: "the goals kept" }).toBe(true);
+  for (let load = 1; load <= 20; load += 1) {
+    await page.goto(`${PREVIEW_SITE}${path}?load=${load}#controlvar-preview=${token}`, { waitUntil: "load" });
+    await expect(page.locator("#headline"), `preview load ${load}`).toHaveText("Changed");
+    await page.click("#buy");
+  }
+  for (let load = 1; load <= 5; load += 1) {
+    await page.goto(`${PREVIEW_SITE}${thanks}?load=${load}`, { waitUntil: "load" });
+    // Each read is answered before the next page, as on the loads above.
+    await expect.poll(() => statuses(forwarded, PREVIEW_PATH).length, { message: `thanks load ${load}: the preview read` }).toBe(20 + load);
+    await expect.poll(() => shown(page), { message: `thanks load ${load}: the page is shown` }).toBe(true);
+  }
+  expect(new Set(statuses(forwarded, PREVIEW_PATH)), "preview read statuses").toEqual(new Set([200]));
+  expect(statuses(forwarded, BATCH_PATH).length, "goal events sent from the preview tab").toBe(0);
+  expect(statuses(forwarded, VISUAL_PATH), "page calls: only the ordinary page view").toEqual([200]);
+  expect(seen.filter((url) => !answered.get(PREVIEW_SITE)!.includes(url)), "requests to the preview site that page.route did not answer").toEqual([]);
+
+  arms.push({ arm: "preview goals", id: made.id, report: { assignments: 1, events: 1 } });
+});
+
 test("the API recorded what each page view sent", async () => {
   expect(
     arms.map(({ arm }) => arm),
     "the page views of this file",
-  ).toEqual(["preview", "event on another page"]);
+  ).toEqual(["preview", "event on another page", "preview goals"]);
   const counts = await readExport(api, bearer, since, Object.fromEntries(arms.map(({ arm, id }) => [arm, id])));
   for (const { arm, id, report } of arms) {
     expect(counts[id], `${arm}: the experiment's report`).toEqual(report);
