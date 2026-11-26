@@ -153,6 +153,32 @@ def test_the_u_admin_day_changes_what_another_owns_and_finds_the_admin_area_clos
     assert [o.kind for o in persona.day[2].oracles] == ["api_refused", "text_exact"]
 
 
+def test_the_u_owner_day_decides_each_change_by_the_api_and_audits_who_made_it():
+    """The superuser's day: ten steps on people and access. Every change is
+    decided by the state read back, the two that end access (a revoked key,
+    a deactivated user) are flagged so on the card, the custom role and the
+    workspace invitation are the full profile's, and the two pages it only
+    reads are decided against the API's answer, the failure included."""
+    personas = catalogue.load_personas(PERSONAS_ROOT / "personas", REPO_ROOT)
+    (persona,) = [p for p in personas if p.id == "U-OWNER"]
+    assert (persona.role, persona.account) == ("ADMIN", "admin@demo.com")
+    assert [s.n for s in persona.day] == list(range(1, 11))
+    assert {s.layer for s in persona.day} == {"A"}
+    assert [s.n for s in persona.day if not s.writes] == [6, 7]
+    assert [s.n for s in persona.day if s.security] == [3, 10]
+    assert [s.n for s in persona.day if s.profile == "full"] == [8, 9]
+    # Who made each change is read from the audit log where the API keeps it.
+    audited = [s.n for s in persona.day if "audit_entry" in {o.kind for o in s.oracles}]
+    assert audited == [1, 2, 3, 4, 7, 8, 10]
+    assert [o.kind for o in persona.day[5].oracles] == ["ui_matches_api", "text_exact"]
+    assert [o.kind for o in persona.day[6].oracles] == ["ui_matches_api", "audit_entry"]
+    assert [o.kind for o in persona.day[9].oracles] == [
+        "text_exact",
+        "api_refused",
+        "audit_entry",
+    ]
+
+
 def test_the_real_matrix_loads_and_the_row_count_is_pinned():
     matrix = catalogue.load_matrix(PERSONAS_ROOT / "role-matrix.yaml", REPO_ROOT)
     assert len(matrix.rows) == MATRIX_ROWS
