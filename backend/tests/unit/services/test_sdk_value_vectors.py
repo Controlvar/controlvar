@@ -6,8 +6,8 @@
   ``--check``) and must match byte for byte. It reads the file by path and
   never shells out to git, so it runs the same in a checkout, in CI and in
   ``scripts/core_build.sh``'s copy (no ``.git``, no ``modules/``).
-* **Counts.** 35 served vectors and 14 malformed ones, pinned here. Every SDK
-  that consumes the file asserts it answered exactly 49, so a vector lost from
+* **Counts.** 42 served vectors and 14 malformed ones, pinned here. Every SDK
+  that consumes the file asserts it answered exactly 56, so a vector lost from
   the file fails here and in each of them.
 * **The contract's fields.** Every vector has exactly the seven fields, a
   known getter and error code, the getter's default, and ``reported`` true
@@ -38,13 +38,13 @@ pytestmark = pytest.mark.unit
 
 #: Pinned. A change here is a change to what every consuming SDK answers:
 #: regenerate the file and say why in the pull request. Each consumer asserts
-#: the total, 49 (sdk/js/__tests__/value-vectors.test.ts,
+#: the total, 56 (sdk/js/__tests__/value-vectors.test.ts,
 #: sdk/python/tests/test_value_vectors.py,
 #: sdk/react/src/__tests__/valueVectors.test.ts,
 #: sdk/react-native/__tests__/valueVectors.test.ts,
 #: sdk/java/core/src/test/java/com/controlvar/sdk/ValueVectorsTest.java,
 #: sdk/dotnet/tests/Controlvar.Tests/ValueVectorsTests.cs).
-EXPECTED_COUNTS = {"served": 35, "malformed": 14}
+EXPECTED_COUNTS = {"served": 42, "malformed": 14}
 
 FIELDS = ["name", "response", "getter", "default", "expect", "error_code", "reported"]
 GETTERS = ("string", "number", "json")
@@ -207,6 +207,36 @@ def test_the_served_half_covers_each_outcome(vectors):
     assert (
         sum(1 for v in served if v["response"]["body"].get("reason") == "inactive") == 1
     )
+
+
+@pytest.mark.regression
+def test_a_split_and_a_rules_own_value_are_served_and_typed_as_any_value(vectors):
+    """#2012: the body of a flag with a split, or with a rule's own value, has
+    exactly the keys every answer has, its ``value_type`` is the flag's, and its
+    ``value`` is the split's, the rule's or the off value, never the on value."""
+    found = {}
+    for vector in vectors["served"]:
+        body = vector["response"]["body"]
+        spec = generator.FLAGS.get(body.get("key"), {})
+        if "served_on" not in spec:
+            continue
+        assert list(body) == [
+            "key",
+            "enabled",
+            "value",
+            "value_type",
+            "config",
+            "reason",
+        ]
+        served = spec["served_on"] if body["enabled"] else spec["off_value"]
+        assert generator.ordered_json(body["value"]) == generator.ordered_json(served)
+        assert served != spec["on_value"]
+        assert body["value_type"] == spec["value_type"] == vector["getter"]
+        assert body["reason"] == (
+            "targeting_rule" if "targeting_rules" in spec else "rollout"
+        )
+        found[(body["key"], body["enabled"])] = body["value"]
+    assert len(found) == 7, sorted(found)
 
 
 #: Run in a fresh interpreter from the repository root: build the vectors,

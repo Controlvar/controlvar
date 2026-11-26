@@ -172,7 +172,7 @@ describe('the vectors through evaluateFlag', () => {
       .filter((f: { active?: boolean; evaluation?: string }) => f.active && f.evaluation === 'remote')
       .map((f: { key: string }) => f.key)
       .sort();
-    expect(remoteKeys).toHaveLength(45);
+    expect(remoteKeys).toHaveLength(54);
     expect([...client.status().serverEvaluatedFlags].sort()).toEqual(remoteKeys);
 
     let expectedRemote = 0;
@@ -231,7 +231,7 @@ describe('the vectors through evaluateFlag', () => {
     expect(unsendable.filter(id => isWellFormedString(userIdOf(id)))).toEqual([]);
     expect(server.requests('/feature-flags/evaluate/')).toHaveLength(expectedRemote);
     // Every must_local case except the three whose context holds 10**400 (see above).
-    expect(localAnswers).toBe(1333 - 3);
+    expect(localAnswers).toBe(1337 - 3);
   });
 });
 

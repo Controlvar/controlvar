@@ -1600,14 +1600,13 @@ text = "It is empty on every row."
 by = ["test:backend/tests/integration/database/test_flag_split_migration.py::test_an_earlier_database_gains_the_two_columns_and_no_data"]
 
 [[unit]]
-text = "The columns are storage only: no request sets a split or a rule value (a value of its own that a targeting rule carries), and no evaluation reads one, so SDKs get the same answers as before."
+text = "No request sets a split or a rule value (a value of its own that a targeting rule carries) yet, so SDKs get the same answers as before."
 by = [
     "test:backend/tests/unit/services/test_flag_split_has_no_writer.py::test_a_request_that_sends_a_split_is_refused",
     "test:backend/tests/unit/services/test_flag_split_has_no_writer.py::test_a_request_that_sends_a_rule_value_is_refused",
     "test:backend/tests/unit/services/test_flag_split_has_no_writer.py::test_an_environment_request_that_sends_a_split_is_refused",
     "test:backend/tests/unit/services/test_flag_split_has_no_writer.py::test_the_only_writer_is_a_promotion",
-    "test:backend/tests/unit/services/test_flag_split_has_no_writer.py::test_the_only_readers_are_the_environment_view_and_a_promotion",
-    "test:backend/tests/unit/core/test_flag_rule_values.py::test_nothing_in_the_application_calls_it_yet",
+    "test:backend/tests/unit/services/test_sdk_ruleset_vectors.py::test_the_flags_without_a_split_or_a_rule_value_are_what_they_were",
     "test:backend/tests/integration/database/test_flag_split_migration.py::test_the_upgrade_changes_no_answer",
 ]
 
@@ -1717,12 +1716,19 @@ by = [
 ]
 
 [[unit]]
-text = "Once the downgrade has committed, this release answers 500 to every flag evaluation, flag read and flag change, and to a ruleset request with a staging or development key, until the API is rolled back."
+text = "Once the downgrade has committed, this release answers 500 to every flag evaluation, flag read, flag change and ruleset request, until the API is rolled back."
 by = ["test:backend/tests/integration/database/test_flag_split_migration.py::test_this_release_answers_500_to_flag_evaluations_and_reads_on_the_downgraded_schema"]
 
 [[unit]]
-text = "A bulk toggle answers 200 with every flag failed, and a ruleset request with a production key is still answered, unless the run also undoes t2011_flag_environments: then every request that presents an API key answers 500."
+text = "A bulk toggle answers 200 with every flag failed."
 by = ["test:backend/tests/integration/database/test_flag_split_migration.py::test_this_release_answers_500_to_flag_evaluations_and_reads_on_the_downgraded_schema"]
+
+[[unit]]
+text = "If the run also undoes t2011_flag_environments, every request that presents an API key answers 500."
+by = [
+    "test:backend/tests/integration/database/test_flag_split_migration.py::test_this_release_answers_500_to_flag_evaluations_and_reads_on_the_downgraded_schema",
+    "test:backend/tests/integration/database/test_flag_environments_migration.py::test_this_release_answers_500_to_a_production_key_on_the_downgraded_schema",
+]
 
 [[unit]]
 text = "Roll back to a specific revision:"

@@ -24,10 +24,10 @@ Then:
    previous release before it and by this one after it, with a key created
    before it; the ruleset's body and ETag are the same;
 6. the previous release's code (this tree without the revision, the columns
-   and what reads or writes them) creates, sets, lists, builds the ruleset and
-   evaluates on this schema with a split flag and rule-value flags present: it
-   serves each flag's on value to the users it is on for, its ruleset says the
-   same, and its PUT keeps the split and the rule values;
+   and what carries, reads or writes them) creates, sets, lists, builds the
+   ruleset and evaluates on this schema with a split flag and rule-value flags
+   present: it serves each flag's on value to the users it is on for, its
+   ruleset says the same, and its PUT keeps the split and the rule values;
 7. the statements each direction runs, captured online: each ALTER of the
    upgrade straight between its bound and the reset, with no data step, and
    the downgrade's two locks, its read and its two drops;
@@ -45,8 +45,7 @@ Then:
 10. offline (``--sql``), both directions refuse and emit no DDL, with and
     without a flag in use;
 11. this release, still running against the downgraded schema, answers 500 to
-    every flag evaluation, flag read and flag change, and to the ruleset of a
-    staging or development key; a production key's ruleset still answers;
+    every flag evaluation, flag read, flag change and ruleset request;
 12. one downgrade from this revision to 0.48.0's head, met by an SDK request
     that has read ``api_keys`` and then reads ``feature_flags``, ends in success
     or in a refusal with nothing changed, and never hangs;
@@ -95,6 +94,7 @@ from backend.scripts.generate_ruleset_vectors import (
     VECTORS_PATH,
 )
 from backend.tests.integration.database import tree_profiles
+from backend.tests.integration.database.split_read_path import without_the_read_path
 from backend.tests.integration.database.test_flag_environments_migration import (
     _captured,
     _columns,
@@ -736,7 +736,7 @@ _ADDED = {
 
 def _previous_release(profile: str, tmp_path) -> Path:
     """Release N-1: a copy of this tree without the revision, the columns and
-    what carries or writes them."""
+    what carries, writes or reads them."""
     destination = tmp_path / "release-n-minus-1"
     if profile == FULL:
         tree = tree_profiles.full_tree(destination)
@@ -752,6 +752,7 @@ def _previous_release(profile: str, tmp_path) -> Path:
             source, found = addition.subn("", source)
             assert found == 1, f"{found} matches of {addition.pattern}: update it"
         module.write_text(source, encoding="utf-8")
+    without_the_read_path(tree)
     return tree
 
 
@@ -1676,10 +1677,9 @@ def test_this_release_answers_500_to_flag_evaluations_and_reads_on_the_downgrade
 ):
     """Why the database-first rollback's paragraph names the outage: until every
     task of this release is replaced, it selects a column the downgrade dropped,
-    from the flag rows and from the side rows. The ruleset of a production key is
-    built from its own columns of the flag rows, and not that one; a staging or
-    development key's reads the side rows. A run that goes on to 0.48.0's head
-    undoes ``t2011_flag_environments`` too, and no request that presents a key, no
+    from the flag rows and from the side rows: the ruleset's query of the flag
+    rows names it too. A run that goes on to 0.48.0's head undoes
+    ``t2011_flag_environments`` too, and no request that presents a key, no
     signed-in API key route and no segment route that reads the flags is answered."""
     tree = _at_this_revision(test_db, CORE, scratch_schema, tmp_path)
     user = _user(test_db, scratch_schema)
@@ -1807,9 +1807,9 @@ def test_this_release_answers_500_to_flag_evaluations_and_reads_on_the_downgrade
     measured = {name: answer[0] for name, answer in after.items()}
     print(f"on the downgraded schema: {measured}")
     bulk_names = [name for name in once if name.startswith("bulk ")]
-    # With ``t2011_flag_environments`` left in place.
+    # With ``t2011_flag_environments`` left in place: these read what it added
+    # and nothing that this revision did.
     answered = {
-        "ruleset, production": 200,
         "archive a segment": 200,
         "delete a segment": 204,
         "the keys": 200,

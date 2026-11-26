@@ -260,6 +260,7 @@ def _ruleset_response(request: Request, environment: str, db: Session) -> Respon
                     FeatureFlag.value_type,
                     FeatureFlag.on_value,
                     FeatureFlag.off_value,
+                    FeatureFlag.split,
                 )
             )
             .all()

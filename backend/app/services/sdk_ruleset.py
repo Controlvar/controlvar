@@ -38,7 +38,7 @@ The contract (``schema`` 1, beta)::
   server returns it without evaluating its conditions.
 * A flag is ``"evaluation": "remote"`` -- and ships no rules -- when it uses
   the legacy list shape, an operator outside :data:`LOCAL_OPERATORS`, or a
-  rule value outside that operator's portable domain (see
+  condition's value outside that operator's portable domain (see
   :func:`condition_is_local`). An SDK asks the server about such a flag.
   Pattern conditions are always remote, because Python and JavaScript regular
   expressions are different dialects; this module classifies them by operator
@@ -54,17 +54,33 @@ The contract (``schema`` 1, beta)::
   before. ``evaluation`` and the rule shapes are unchanged: a release that
   does not read values answers such a flag's ``enabled`` and ``reason``
   locally, as for any other flag.
+* An active string, number or json flag with a split, or with a targeting rule
+  that has a value of its own (#2012), is
+  ``{"key", "active": true, "evaluation": "remote"}``: no release evaluates
+  either itself, so every one asks the server, and neither the values nor the
+  rules reach the document. Inactive and archived, it is the entry any other
+  string, number or json flag is. What that costs, in every release:
+
+  - turning such a flag off (or rolling it back to 0%) reaches a local client
+    at its next refresh, as for any other flag, because an SDK reads the entry
+    before it reads its cache. Every other change to it while it is on (the
+    split's weights, the rollout percentage, a safety rollback to 1-99%, its
+    rules) reaches a user the SDK has already cached only when that answer
+    expires, up to 300 s by default, not at the next refresh;
+  - while one is on, every local ``getAllFlags`` / ``get_all_flags`` call goes
+    to the server, one request each and not cached, so a process that makes
+    more than 100 of them a second from one address reaches the SDK rate limit
+    (6000 a minute by default) and is answered 429.
 * A flag whose stored values cannot be served (a type this release does not
-  know, or a value outside the value rules, which only a direct database
-  write or a release with wider limits leaves:
+  know, or a value, split or rule value outside the value rules, which only a
+  direct database write or a release with wider limits leaves:
   :func:`~backend.app.core.flag_values.servable_values`, the evaluate route's
   own test) is ``{"key", "active": true, "evaluation": "remote"}`` whatever
   its status: the SDK asks the server, which answers it without a value. Its
   values never reach the document. The cost is when an inactive such flag
-  (a kill switch) reaches a local client: the 0.1.1 and 0.2.0 SDKs answer a
-  remote entry from their cache of the server's answer for the same user and
-  flag, kept up to 300 s by default, and ``getAllFlags`` always asks the
-  server.
+  (a kill switch) reaches a local client: every release answers a remote entry
+  from its cache of the server's answer for the same user and flag, kept up to
+  300 s by default, and ``getAllFlags`` always asks the server.
 * An active flag whose stored rules cannot be read (they raise when read,
   which only a direct database write leaves: #1674) is the same remote entry,
   and the server answers it ``enabled: false``, ``reason: "error"``. The rest
@@ -94,6 +110,7 @@ from typing import Any, Dict, Iterable, List, Optional
 from backend.app.core.flag_values import (
     BOOLEAN,
     flag_value_type,
+    has_split_or_rule_value,
     is_portable_number,
     servable_values,
 )
@@ -258,6 +275,10 @@ def build_flag_entry(flag: FeatureFlag) -> Dict[str, Any]:
             inactive["value_type"] = values["value_type"]
             inactive["off_value"] = values["off_value"]
         return inactive
+    if has_split_or_rule_value(flag):
+        # No release evaluates either itself; a local entry would have it
+        # serve the on value in place of the split's or the rule's.
+        return remote
 
     stored = flag.targeting_rules
     if isinstance(stored, list) and stored:

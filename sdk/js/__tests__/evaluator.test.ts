@@ -68,7 +68,7 @@ const vectors = JSON.parse(readFileSync(VECTORS_PATH, 'utf8')) as Vectors;
  * Pinned. A change here is a change to what this SDK must answer locally: it moves only with a
  * regenerated vectors file (and the backend pin in test_sdk_ruleset_vectors.py).
  */
-const EXPECTED_COUNTS = { cases: 2242, flags: 161, must_local: 1333 };
+const EXPECTED_COUNTS = { cases: 2406, flags: 172, must_local: 1337 };
 
 /**
  * A case's context is what the server received, so it is evaluated as parsed, not round-tripped
@@ -131,8 +131,9 @@ describe('differential: every case is deferred or answered exactly as the server
 
   test("every value flag's must_local case is answered locally with the server's value and type", () => {
     const valueCases = results.filter(({ testCase }) => 'expected_value' in testCase && testCase.must_local);
-    // Every value type the ruleset names, each as a local and an inactive/archived flag (F5's corpus).
-    expect(valueCases).toHaveLength(39);
+    // Every value type the ruleset names, each as a local and an inactive/archived flag (F5's corpus),
+    // and 4 of a flag with a split, inactive and archived (#2012; active, it is remote).
+    expect(valueCases).toHaveLength(43);
     const flags = new Map((vectors.ruleset as { flags: Array<{ key: string; value_type?: string }> }).flags.map(f => [f.key, f]));
     const types = new Set(valueCases.map(({ testCase }) => flags.get(testCase.flag)?.value_type));
     expect([...types].sort()).toEqual([...VALUE_TYPES].sort());

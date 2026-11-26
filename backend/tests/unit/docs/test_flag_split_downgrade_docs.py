@@ -149,13 +149,14 @@ PAGE_SECTION = (
 #: What the release still serving answers, as
 #: ``test_flag_split_migration.py`` measures it.
 SERVING = (
-    "answers `500` to every flag evaluation, flag read and flag change, and to a "
-    "ruleset request with a staging or development key, until the API is rolled back",
-    "a bulk toggle answers `200` with every flag failed, and a ruleset request with "
-    "a production key is still answered, unless the run also undoes "
-    "`t2011_flag_environments`: then every request that presents an API key answers "
-    "`500`",
+    "answers `500` to every flag evaluation, flag read, flag change and ruleset "
+    "request, until the API is rolled back",
+    "a bulk toggle answers `200` with every flag failed",
+    "the run also undoes `t2011_flag_environments`, every request that presents an "
+    "API key answers `500`",
 )
+#: The four it answers `500` to, however the sentence around them goes.
+ANSWERED = "flag evaluation, flag read, flag change and ruleset request"
 #: The migrations page's section about ``t2011_flag_environments``.
 ENVIRONMENTS_SECTION = (
     "`t2011_flag_environments` adds each flag's staging and development settings"
@@ -166,6 +167,11 @@ FIRST = (
     "`t2012_flag_split` is undone first, so every flag read and flag change answers "
     "`500` too, the dashboard's flag list included, and a bulk toggle `200` with "
     "every flag failed"
+)
+#: And what else answers `500` then, as the same test measures it.
+BESIDE = (
+    "Archiving or deleting a segment and listing a segment's experiments answer "
+    "`500`, as do the signed-in API key list, create and delete"
 )
 
 
@@ -213,7 +219,23 @@ def test_the_sections_about_t2011_say_that_this_revision_is_undone_first(path, h
     routes that revision alone would leave answering still does."""
     section = _section(path, heading)
     assert FIRST in section
+    assert BESIDE in section
     assert "still answer" not in section
+
+
+def test_every_place_that_says_what_is_answered_says_all_of_it():
+    """The runbook says it twice: in its section, and where it lists the targets
+    for the workflow. Each page names the four together, and never three."""
+    said = {
+        path.name: " ".join(path.read_text(encoding="utf-8").split())
+        for path in (ROLLBACK_RUNBOOK, MIGRATIONS_PAGE)
+    }
+    assert {name: text.count(ANSWERED) for name, text in said.items()} == {
+        "rollback-runbook.md": 2,
+        "migrations.md": 1,
+    }
+    for name, text in said.items():
+        assert "flag evaluation, flag read and flag change" not in text, name
 
 
 @pytest.mark.skipif(
@@ -227,20 +249,9 @@ def test_the_workflows_help_says_what_the_release_still_serving_answers():
     _, _, rest = description.partition(f"from a release that carries {REVISION} ")
     clause, undone, _ = rest.partition("t2011_flag_environments undoes it alone")
     assert undone, "the clause about this revision is gone"
-    said = "; ".join(
-        ["once it has committed, the release still serving " + SERVING[0], SERVING[1]]
-    ).replace("`", "")
-    # The workflow names no deployment environment outside its list, so it says
-    # which flag environments without their names (as t2011's clause does).
-    for name, stands_for in (
-        (
-            "a staging or development key",
-            "a key of the two non-default flag environments",
-        ),
-        ("a production key", "a key of the default one"),
-    ):
-        assert name in said
-        said = said.replace(name, stands_for)
+    answers, toggle, also = SERVING
+    once = "once it has committed, the release still serving "
+    said = "; ".join([once + answers, toggle, "if " + also]).replace("`", "")
     assert said in clause, clause
 
 

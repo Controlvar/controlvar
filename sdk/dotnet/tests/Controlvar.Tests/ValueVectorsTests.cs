@@ -21,14 +21,14 @@ namespace Controlvar.Tests;
 /// file holds, so the client's own HTTP call and JSON deserialisation read it, as they read a
 /// server's.</para>
 /// <para>One test, not one per vector: it counts the vectors it answered and checked, and
-/// requires 49, so an empty or truncated file fails here instead of running nothing. The file is
+/// requires 56, so an empty or truncated file fails here instead of running nothing. The file is
 /// found by walking up from the test assembly's directory; the test fails when it is not
 /// there.</para>
 /// </remarks>
 public class ValueVectorsTests
 {
-    /// <summary>Pinned: 35 served + 14 malformed (backend/tests/unit/services/test_sdk_value_vectors.py).</summary>
-    private const int Expected = 49;
+    /// <summary>Pinned: 42 served + 14 malformed (backend/tests/unit/services/test_sdk_value_vectors.py).</summary>
+    private const int Expected = 56;
 
     private const string FlagKey = "value-vector";
     private const string UserId = "value-vector-user";

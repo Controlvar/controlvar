@@ -1,10 +1,18 @@
-"""What a feature flag serves: its value type and its two values (#1497).
+"""What a feature flag serves: its value type and its two values (#1497), and
+its split and its rules' own values (#2012).
 
 A flag has one ``value_type``: ``boolean`` (the default), ``string``, ``number``
 or ``json``. It serves ``on_value`` to the users it is on for -- a user who
 matches a targeting rule and falls inside its percentage, or matches no rule
 and falls inside the rollout percentage -- and ``off_value`` to everyone else,
 and to everyone while it is off (DECISIONS T229).
+
+A string, number or json flag may also have, in each environment, a split and
+targeting rules with a value of their own. Neither changes who the flag is on
+for; they change what those users are served (:func:`serve`): the matched
+rule's own value if it has one, otherwise the split's value for the user, and
+only then ``on_value``. No request sets either yet. A boolean flag's are never
+read.
 
 A boolean flag serves ``true`` and ``false``. It stores neither value (both
 columns NULL, as the ``check_flag_values`` constraint requires), reads
@@ -27,14 +35,15 @@ disagree:
   (:func:`values_equal`): the database's own check refuses an equal pair, and
   the API answers 422 first rather than letting that become a 500.
 
-Every message names the field and never the value.
+A split's values and a rule's own value follow the same rules;
+:func:`split_errors` gives the rest of a split's.
 
-:func:`rule_values` reads the values a flag's targeting rules carry (#2012).
-Storage only: no request accepts one and no evaluation serves one yet.
+Every message names the field and never the value.
 """
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import math
 from collections.abc import Iterable, Mapping
@@ -73,6 +82,15 @@ MAX_VALUE_BYTES = 8192
 #: itself counted as level 1.
 MAX_VALUE_DEPTH = 10
 
+#: Fewest and most entries of a split.
+MIN_SPLIT_ENTRIES = 3
+MAX_SPLIT_ENTRIES = 10
+#: What a split's weights add up to: a weight is a percentage of the users the
+#: flag is on for.
+SPLIT_TOTAL = 100
+#: Exactly the keys of a split's entry.
+SPLIT_ENTRY_KEYS = frozenset({"value", "weight"})
+
 #: The answer to a boolean flag sent any other value.
 BOOLEAN_VALUES = (
     "a boolean flag's on_value is true and its off_value is false; to serve "
@@ -83,6 +101,19 @@ BOOLEAN_VALUES = (
 VALUE_TYPE_READ_ONLY = (
     "value_type is read-only once a flag is created. "
     "Create a new flag to serve another type."
+)
+
+#: What :func:`split_errors` answers, whatever the split holds.
+SPLIT_ON_A_BOOLEAN_FLAG = (
+    "A boolean flag has no split; create a string, number or json flag to serve one."
+)
+SPLIT_IS_A_LIST = "A split is a list of values and weights."
+SPLIT_TOO_SHORT = f"A split needs at least {MIN_SPLIT_ENTRIES} values."
+SPLIT_TOO_LONG = f"A split can have at most {MAX_SPLIT_ENTRIES} values."
+SPLIT_ENTRY = "An entry of a split has a value and a weight, and nothing else."
+SPLIT_WEIGHT = f"A weight is a whole number from 0 to {SPLIT_TOTAL}."
+SPLIT_VALUES_EQUAL = (
+    "value equals an earlier entry's value; the values of a split must differ"
 )
 
 _TYPE_WORDS = {
@@ -309,15 +340,17 @@ def flag_value_type(flag: Any) -> str:
 def servable_values(flag: Any) -> Optional[Tuple[Any, Any]]:
     """``(on_value, off_value)``: the two values *flag* serves, or ``None``.
 
-    A boolean flag serves ``True`` and ``False``. A string, number or json
-    flag serves its stored pair. ``None`` when the flag has no value to serve:
-    a type this release does not know, or a stored value outside the rules
-    above (only a direct database write, or a release with wider limits, can
-    leave one). Both stored values are checked, so the flag answers the same
-    way for every user, and the flag's key, never a value, is logged once per
-    process.
+    A boolean flag serves ``True`` and ``False``; its split and its rules'
+    values, if a direct database write left any, are not read. A string,
+    number or json flag serves its stored pair, and its split's and its rules'
+    values where :func:`serve` says so. ``None`` when the flag has no value to
+    serve: a type this release does not know, or a stored value, split or
+    rule's value outside the rules above (only a direct database write, or a
+    release with wider limits, can leave one). All of them are checked, so the
+    flag answers the same way for every user, and the flag's key, never a
+    value, is logged once per process.
 
-    The evaluate route (:func:`served_value`) and the SDK ruleset
+    The evaluate route (:func:`serve`) and the SDK ruleset
     (``backend.app.services.sdk_ruleset``) both read a stored row through this
     function, so they cannot disagree about which rows have a value (PF-1).
     """
@@ -326,16 +359,15 @@ def servable_values(flag: Any) -> Optional[Tuple[Any, Any]]:
         return True, False
     on_value = getattr(flag, "on_value", None)
     off_value = getattr(flag, "off_value", None)
-    if value_type not in VALUE_TYPES or any(
-        value_error(field, value_type, value) is not None
-        for field, value in (("on_value", on_value), ("off_value", off_value))
+    if value_type not in VALUE_TYPES or _unservable(
+        value_type, on_value, off_value, flag
     ):
         key = getattr(flag, "key", None)
         if EVALUATION_NOTES.first(f"flag:{key}", "unservable value"):
             logger.warning(
-                "Flag %s: a stored value is outside the value rules (type %s); "
-                "evaluation answers it without a value, and the SDK ruleset "
-                "lists it as evaluated by the server",
+                "Flag %s: a stored value, split or rule value is outside the value "
+                "rules (type %s); evaluation answers it without a value, and the "
+                "SDK ruleset lists it as evaluated by the server",
                 key,
                 value_type if value_type in VALUE_TYPES else "unknown",
             )
@@ -343,18 +375,179 @@ def servable_values(flag: Any) -> Optional[Tuple[Any, Any]]:
     return on_value, off_value
 
 
+def _unservable(value_type: str, on_value: Any, off_value: Any, flag: Any) -> bool:
+    """Whether any value *flag* stores is outside the rules of *value_type*."""
+    values = [on_value, off_value]
+    values += rule_values(getattr(flag, "targeting_rules", None)).values()
+    if any(value_error("value", value_type, value) is not None for value in values):
+        return True
+    split = _split_of(flag)
+    return split is not None and bool(split_errors(value_type, split))
+
+
 def served_value(flag: Any, enabled: bool) -> Tuple[bool, Any]:
-    """``(True, value)``: what *flag* serves a user it is *enabled* for or not.
+    """``(True, value)``: which of *flag*'s two values a user it is *enabled*
+    for, or not, is served.
 
     ``on_value`` when *enabled*, ``off_value`` otherwise; a boolean flag's
     value is *enabled* itself. ``(False, None)`` when the flag has no value to
     serve (:func:`servable_values`): the evaluate route then answers without
-    ``value``.
+    ``value``. A split or a rule's own value is :func:`serve`'s.
     """
     pair = servable_values(flag)
     if pair is None:
         return False, None
     return True, pair[0] if enabled else pair[1]
+
+
+def serve(flag: Any, evaluation: Mapping[str, Any], user_id: str) -> Tuple[bool, Any]:
+    """``(True, value)``: what *flag* serves *user_id*, given its *evaluation*
+    for them (``FeatureFlagService.evaluate_flag_detailed``'s answer).
+
+    Not enabled: the off value. Enabled: the value of the rule that matched
+    (``rule_id``) if it has one, otherwise the split's value for this user
+    (:func:`split_value`), otherwise the on value. A boolean flag's value is
+    ``enabled``. ``(False, None)`` when the flag has no value to serve
+    (:func:`servable_values`), whatever the evaluation says.
+
+    *flag* is the flag row, or its view in an environment: the rules and the
+    split are that environment's. Pure: it reads nothing but its arguments.
+    """
+    servable, value = served_value(flag, evaluation["enabled"])
+    if not servable or not evaluation["enabled"] or flag_value_type(flag) == BOOLEAN:
+        return servable, value
+    own = rule_values(getattr(flag, "targeting_rules", None))
+    if evaluation["rule_id"] in own:
+        return True, own[evaluation["rule_id"]]
+    split = _split_of(flag)
+    if split is not None:
+        return True, split_value(split, split_bucket(user_id, flag.key))
+    return True, value
+
+
+def has_split_or_rule_value(flag: Any) -> bool:
+    """Whether *flag* has a split or a rule with a value of its own, in the
+    environment it is given for. A boolean flag's are never read, so it has
+    neither."""
+    if flag_value_type(flag) == BOOLEAN:
+        return False
+    return _split_of(flag) is not None or bool(
+        rule_values(getattr(flag, "targeting_rules", None))
+    )
+
+
+# ---------------------------------------------------------------------------
+# The split (#2012)
+# ---------------------------------------------------------------------------
+
+
+def _split_of(flag: Any) -> Any:
+    """The flag's split, or ``None`` for none."""
+    return getattr(flag, "split", None)
+
+
+def _is_weight(weight: Any) -> bool:
+    """A whole number from 0 to 100, as a targeting rule's
+    ``rollout_percentage`` is read: ``100.0`` is one; ``33.5``, ``true`` and
+    text are not."""
+    whole = isinstance(weight, int) or (
+        isinstance(weight, float) and weight.is_integer()
+    )
+    return whole and not isinstance(weight, bool) and 0 <= weight <= SPLIT_TOTAL
+
+
+def split_errors(
+    value_type: str, split: Any
+) -> List[Tuple[Tuple[Any, ...], PydanticCustomError]]:
+    """Why *split* cannot be the split of a *value_type* flag, as
+    ``(where, error)`` pairs; none when it can.
+
+    A split is a list of :data:`MIN_SPLIT_ENTRIES` to :data:`MAX_SPLIT_ENTRIES`
+    entries, each exactly ``{"value", "weight"}``. A value follows
+    :func:`value_error`; a weight is a whole number from 0 to 100; the weights
+    add up to :data:`SPLIT_TOTAL`; no two values are equal
+    (:func:`values_equal`). A value may be the flag's on or off value, and a
+    weight may be 0. ``None`` is not a split: a flag without one has ``None``.
+
+    *where* is below the split: ``()`` for the split itself (its type, the
+    number of entries, the total, a boolean flag's), ``(i,)`` for an entry that
+    is not one, ``(i, "value")`` and ``(i, "weight")`` otherwise; of two equal
+    values the later one is named.
+    """
+    if value_type == BOOLEAN:
+        return [((), PydanticCustomError("split_boolean", SPLIT_ON_A_BOOLEAN_FLAG))]
+    if not isinstance(split, list):
+        return [((), PydanticCustomError("split_type", SPLIT_IS_A_LIST))]
+    if len(split) < MIN_SPLIT_ENTRIES:
+        return [((), PydanticCustomError("split_too_short", SPLIT_TOO_SHORT))]
+    if len(split) > MAX_SPLIT_ENTRIES:
+        return [((), PydanticCustomError("split_too_long", SPLIT_TOO_LONG))]
+
+    errors: List[Tuple[Tuple[Any, ...], PydanticCustomError]] = []
+    total, values = 0, []
+    for index, entry in enumerate(split):
+        if not isinstance(entry, dict) or entry.keys() != SPLIT_ENTRY_KEYS:
+            error = PydanticCustomError("split_entry", SPLIT_ENTRY)
+            errors.append(((index,), error))
+            continue
+        value = entry["value"]
+        error = value_error("value", value_type, value)
+        # ``==`` first, because evaluation asks this of every split it serves:
+        # two values ``values_equal`` holds equal are ``==``, and ``==`` is
+        # quick to say no. Alone it is not the test: ``True == 1``.
+        if error is None and any(v == value and values_equal(v, value) for v in values):
+            error = PydanticCustomError("split_values_equal", SPLIT_VALUES_EQUAL)
+        if error is None:
+            values.append(value)
+        else:
+            errors.append(((index, "value"), error))
+        if _is_weight(entry["weight"]):
+            total += int(entry["weight"])
+        else:
+            error = PydanticCustomError("split_weight", SPLIT_WEIGHT)
+            errors.append(((index, "weight"), error))
+    if not errors and total != SPLIT_TOTAL:
+        text = f"Weights must add up to {SPLIT_TOTAL}; they add up to {total}."
+        errors.append(((), PydanticCustomError("split_total", text)))
+    return errors
+
+
+def percent_bucket(text: str) -> int:
+    """The bucket of *text*, 0 to 99: its whole MD5 digest, read as one
+    big-endian number, modulo 100.
+
+    The flag rollout (``"{user_id}:{flag_key}"``) and the split
+    (:func:`split_bucket`) share it. It is not
+    ``consistent_hash.bucket_of``, which reads the digest's first four bytes.
+    """
+    digest = hashlib.md5(text.encode(), usedforsecurity=False).hexdigest()
+    return int(digest, 16) % 100
+
+
+def split_bucket(user_id: str, flag_key: str) -> int:
+    """The user's bucket in the flag's split, 0 to 99.
+
+    Not the rollout's: the text hashed has ``:split`` after it, so a flag on
+    for some of the users still serves every one of its split's values to
+    them, and a user's value stays theirs while the percentage moves. No
+    environment enters it: the same split serves a user the same value in
+    every environment.
+    """
+    return percent_bucket(f"{user_id}:{flag_key}:split")
+
+
+def split_value(split: Any, bucket: int) -> Any:
+    """The value *split* serves in *bucket*: its entries take the buckets in
+    stored order, each as many as its weight, so one of weight 0 takes none.
+
+    *split* is one that :func:`split_errors` refuses nothing of.
+    """
+    below = 0
+    for entry in split:
+        below += int(entry["weight"])
+        if bucket < below:
+            return entry["value"]
+    raise ValueError("the weights of a split add up to 100")
 
 
 #: The id of the one rule a dashboard-shape value without an id stands for:

@@ -105,7 +105,11 @@ from backend.scripts.generate_ruleset_vectors import (
     VECTORS_PATH,
 )
 from backend.tests.integration.database import tree_profiles
+from backend.tests.integration.database.split_read_path import without_the_read_path
 from backend.tests.integration.database.tree_profiles import CORE, FULL
+from backend.tests.unit.services.test_sdk_ruleset_vectors import (
+    without_split_or_rule_value,
+)
 
 pytestmark = [pytest.mark.integration]
 
@@ -1541,7 +1545,8 @@ _WITHOUT_SIDE_ROWS = {
 def _previous_release(profile: str, tmp_path) -> Path:
     """Release N-1 (0.48.0): a copy of this tree without the revision and the
     ones after it, the models' additions and the environment routes, where every
-    key is a production key and nothing reads or writes a side row.
+    key is a production key, nothing reads or writes a side row and no flag
+    serves a split or a rule's own value.
     ``core/flag_environments.py`` stays: the names of the environments, and a
     view of a side row that nothing left in the copy makes."""
     destination = tmp_path / "release-n-minus-1"
@@ -1564,6 +1569,7 @@ def _previous_release(profile: str, tmp_path) -> Path:
             source, found = declaration.subn(replacement, source)
             assert found == 1, f"{found} matches of {declaration.pattern}: update it"
         model.write_text(source, encoding="utf-8")
+    without_the_read_path(tree)
     return tree
 
 
@@ -2330,6 +2336,20 @@ def _has_lone_surrogate(value) -> bool:
     return isinstance(value, list) and any(map(_has_lone_surrogate, value))
 
 
+def _vectors_0_48_0_stored() -> dict:
+    """The vectors' flags that 0.48.0 could store, their entries and their
+    cases: all but the ones with a split or a rule's own value (#2012)."""
+    part = without_split_or_rule_value(
+        json.loads(VECTORS_PATH.read_text(encoding="utf-8"))
+    )
+    return {
+        "stored_flags": part["stored_flags"],
+        "cases": part["cases"],
+        "counts": {"cases": len(part["cases"])},
+        "ruleset": {"flags": part["entries"]},
+    }
+
+
 def _store_vectors(engine, schema: str, vectors: dict) -> None:
     """The vectors' 161 flags, as 0.48.0 stores a flag, and their segment."""
     with engine.begin() as conn:
@@ -2398,7 +2418,7 @@ def test_the_upgrade_changes_no_answer_whatever_the_deployments_environment(
 
     2231 of the 2242 cases are sent; the other 11 hold a lone surrogate, which
     no client can put in a URL."""
-    vectors = json.loads(VECTORS_PATH.read_text(encoding="utf-8"))
+    vectors = _vectors_0_48_0_stored()
     cases = [
         case
         for case in vectors["cases"]

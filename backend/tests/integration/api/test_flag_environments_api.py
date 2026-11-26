@@ -1083,8 +1083,16 @@ def test_a_promotion_checks_the_rules_again(
 #: A split per environment, no two the same. No request sets one: these are
 #: stored through the models.
 SPLITS = {
-    "production": [{"value": "red", "weight": 50}, {"value": "blue", "weight": 50}],
-    "staging": [{"value": "red", "weight": 10}, {"value": "blue", "weight": 90}],
+    "production": [
+        {"value": "red", "weight": 50},
+        {"value": "green", "weight": 20},
+        {"value": "blue", "weight": 30},
+    ],
+    "staging": [
+        {"value": "red", "weight": 10},
+        {"value": "green", "weight": 10},
+        {"value": "blue", "weight": 80},
+    ],
     "development": None,
 }
 
@@ -1193,7 +1201,11 @@ def test_a_promotion_copies_what_is_stored_when_it_has_the_lock(
 ):
     """What another session stores until then is what is copied."""
     flag = _flag_with_splits(db_session, developer)
-    newer = [{"value": "green", "weight": 30}, {"value": "blue", "weight": 70}]
+    newer = [
+        {"value": "red", "weight": 0},
+        {"value": "green", "weight": 30},
+        {"value": "blue", "weight": 70},
+    ]
     lock = routes.lock_flag
 
     def stored_by_another_then_locked(db, flag_id):
@@ -1304,7 +1316,8 @@ def test_production_answers_as_staging_did_after_a_promotion(
     client, db_session, developer, key_of
 ):
     """For a flag with a split, user by user; staging and development answer as
-    before. (No evaluation serves a split yet.)"""
+    before. The users it is on for are served the environment's own split, and
+    in development, which has none, the on value."""
     flag = _flag_with_splits(db_session, developer, rollout=10, rules=None)
     staging = (
         db_session.query(FlagEnvironmentSetting)
@@ -1330,6 +1343,10 @@ def test_production_answers_as_staging_did_after_a_promotion(
 
     before = {name: answers(name) for name in FLAG_ENVIRONMENTS}
     assert before["production"] != before["staging"]
+    for name, split in SPLITS.items():
+        served = {value for on, value, _ in before[name].values() if on}
+        may_be_served = {entry["value"] for entry in split} if split else {"on"}
+        assert served <= may_be_served, (name, served)
     response = _promote(client, developer, flag.id, "staging", "production")
     assert response.status_code == 200, response.text
     after = {name: answers(name) for name in FLAG_ENVIRONMENTS}

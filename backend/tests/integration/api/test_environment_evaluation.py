@@ -592,9 +592,10 @@ def _has_lone_surrogate(value) -> bool:
 
 @pytest.fixture
 def staging_corpus(db_session, owner):
-    """The vectors' 161 flags, configured in staging only: each one's status,
-    rules and percentage are staging's, and production has the flag off, with
-    no rules, at 0% (an archived flag is archived, in every environment)."""
+    """The vectors' 172 flags, configured in staging only: each one's status,
+    rules, percentage and split are staging's, and production has the flag off,
+    with no rules and no split, at 0% (an archived flag is archived, in every
+    environment)."""
     vectors = json.loads(VECTORS_PATH.read_text(encoding="utf-8"))
     flag_keys = [spec["key"] for spec in vectors["stored_flags"]]
 
@@ -633,6 +634,7 @@ def staging_corpus(db_session, owner):
                 is_active=spec["status"] == "ACTIVE",
                 rollout_percentage=spec["rollout_percentage"],
                 targeting_rules=spec["targeting_rules"],
+                split=spec.get("split"),
             )
         )
     db_session.add(
@@ -660,7 +662,7 @@ def test_a_staging_keys_ruleset_is_the_vectors_ruleset(client, staging_corpus, k
     entries = {entry["key"]: entry for entry in served["flags"]}
     assert (served["schema"], served["bucketing"]) == (1, "md5-mod100-v1")
     expected = staging_corpus["ruleset"]["flags"]
-    assert len(expected) == 161
+    assert len(expected) == 172
     for entry in expected:
         assert entries[entry["key"]] == entry
 
@@ -675,9 +677,11 @@ def test_a_staging_keys_ruleset_is_the_vectors_ruleset(client, staging_corpus, k
 def test_a_staging_key_is_answered_every_vector_a_url_can_carry(
     client, db_session, staging_corpus, keys
 ):
-    """2231 of the 2242 cases, through ``GET /evaluate`` with a real staging
+    """2395 of the 2406 cases, through ``GET /evaluate`` with a real staging
     key. The other 11 hold a lone surrogate, which no client can put in a URL,
-    and are not sent, as in the production run of the same file."""
+    and are not sent, as in the production run of the same file. 215 of them
+    expect a value: the value flags' 51 and the 164 of the flags with a split
+    or a rule's own value, which staging alone has here (#2012)."""
     checked = values = skipped = 0
     wrong = []
     rows_before = db_session.query(RawMetric).count()
@@ -699,9 +703,9 @@ def test_a_staging_key_is_answered_every_vector_a_url_can_carry(
                 wrong.append((case["id"], served, case["expected_value"]))
         checked += 1
     assert not wrong, f"{len(wrong)} wrong; first {wrong[:5]}"
-    assert (checked, skipped, values) == (2231, 11, 51)
+    assert (checked, skipped, values) == (2395, 11, 215)
     total = len(staging_corpus["cases"])
-    assert checked + skipped == total == staging_corpus["counts"]["cases"] == 2242
+    assert checked + skipped == total == staging_corpus["counts"]["cases"] == 2406
     # Not one of them was recorded, and production answers each flag off.
     db_session.rollback()
     assert db_session.query(RawMetric).count() == rows_before

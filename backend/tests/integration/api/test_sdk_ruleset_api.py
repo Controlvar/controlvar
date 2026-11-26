@@ -463,6 +463,67 @@ class TestQueries:
             counts[total] = len(statements)
         assert counts[0] == counts[1] == counts[20], counts
 
+    @pytest.mark.regression
+    def test_flags_with_a_split_or_a_rule_value_add_no_query(
+        self, client, db_session, developer, scoped_key
+    ):
+        """#2012: the split is among the columns that one query loads, so the
+        statements do not grow with the flags that have one: the same with 0, 1
+        and 20, every other one a rule's own value instead."""
+        engine = db_session.get_bind()
+        split = [{"value": v, "weight": w} for v, w in ((1, 50), (2, 30), (3, 20))]
+        ruled = {
+            "logical_operator": "AND",
+            "groups": [
+                {
+                    "logical_operator": "AND",
+                    "conditions": [
+                        {"attribute": "plan", "operator": "equals", "value": "pro"}
+                    ],
+                }
+            ],
+            "value": 4,
+        }
+        counts, keys = {}, set()
+        for total in (0, 1, 20):
+            while len(keys) < total:
+                own = (
+                    {"split": split}
+                    if len(keys) % 2 == 0
+                    else {"targeting_rules": ruled}
+                )
+                flag = _store(
+                    db_session,
+                    developer,
+                    value_type="number",
+                    on_value=10,
+                    off_value=2.5,
+                    **own,
+                )
+                keys.add(flag.key)
+            statements = []
+
+            def count(conn, cursor, statement, parameters, context, executemany):
+                statements.append(statement)
+
+            # Once unmeasured, as above.
+            assert _get(client, scoped_key).status_code == 200
+            event.listen(engine, "before_cursor_execute", count)
+            try:
+                response = _get(client, scoped_key)
+            finally:
+                event.remove(engine, "before_cursor_execute", count)
+            assert response.status_code == 200
+            remote = {
+                entry["key"]
+                for entry in response.json()["flags"]
+                if entry
+                == {"key": entry["key"], "active": True, "evaluation": "remote"}
+            }
+            assert keys <= remote
+            counts[total] = len(statements)
+        assert counts[0] == counts[1] == counts[20], counts
+
 
 # ---------------------------------------------------------------------------
 # Contents
@@ -715,6 +776,7 @@ class TestVectorsThroughTheRoutes:
                     value_type=spec.get("value_type", "boolean"),
                     on_value=spec.get("on_value"),
                     off_value=spec.get("off_value"),
+                    split=spec.get("split"),
                 )
             )
         # The segment the segment flags name, stored with the members the
@@ -807,8 +869,9 @@ class TestVectorsThroughTheRoutes:
         # `checked >= must_local` let through.
         assert skipped == 11
         total = len(stored_corpus["cases"])
-        assert total == stored_corpus["counts"]["cases"] == 2242
+        assert total == stored_corpus["counts"]["cases"] == 2406
         assert checked + skipped == total
         assert checked >= stored_corpus["counts"]["must_local"]
-        # Every value flag's case, all 51 of them well-formed.
-        assert values == 51
+        # Every value flag's case, all 51 of them well-formed, and the 164 of
+        # the flags with a split or a rule's own value (#2012).
+        assert values == 215

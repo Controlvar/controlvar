@@ -59,6 +59,7 @@ def configure(
     is_active: bool = True,
     rollout_percentage: int = 100,
     targeting_rules: Any = None,
+    split: Any = None,
 ) -> FlagEnvironmentSetting:
     """Set what *flag* serves in *environment*, replacing what it served there."""
     setting = (
@@ -77,5 +78,6 @@ def configure(
     setting.is_active = is_active
     setting.rollout_percentage = rollout_percentage
     setting.targeting_rules = targeting_rules
+    setting.split = split
     db.commit()
     return setting

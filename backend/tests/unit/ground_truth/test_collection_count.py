@@ -47,7 +47,7 @@ EXPECTED = {
     "test_fault_library.py": 135,
     "test_flag_rollout_use_cases.py": 2,
     "test_generator.py": 24,
-    "test_hashing.py": 23,
+    "test_hashing.py": 36,
     "test_independence.py": 3,
     "test_ledger.py": 66,
     "test_nightly_fx.py": 27,

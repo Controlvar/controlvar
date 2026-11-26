@@ -55,6 +55,7 @@ def flag(
     tags=None,
     created_at=OLD,
     updated_at=OLD,
+    split=None,
 ):
     return SimpleNamespace(
         id=uuid.uuid4(),
@@ -65,6 +66,7 @@ def flag(
         tags=tags,
         created_at=created_at,
         updated_at=updated_at,
+        split=split,
     )
 
 
@@ -233,6 +235,27 @@ def test_v4_any_rule_or_unreadable_rules_count_as_rules(rules):
     assert (
         reasons(flag(rollout_percentage=0, targeting_rules=rules), evaluated=True) == []
     )
+
+
+@pytest.mark.parametrize(
+    "weights",
+    [(34, 33, 33), (100, 0, 0), (0, 0, 100)],
+    ids=["three-ways", "all-of-it-the-first", "all-of-it-the-last"],
+)
+def test_a_flag_with_a_split_is_never_on_for_everyone(weights):
+    """#2012: at 100% with no rules it serves its split, not its on value, even
+    when one value has all the weight; the hint invites removing the flag as if
+    it were always on. Without the split it is on for everyone."""
+    split = [{"value": v, "weight": w} for v, w in zip("ABC", weights)]
+    assert reasons(flag(rollout_percentage=100, split=split), evaluated=True) == []
+    assert reasons(flag(rollout_percentage=100), evaluated=True) == [ON]
+    # Any split that is stored, one evaluation would not serve among them.
+    assert reasons(flag(rollout_percentage=100, split=[]), evaluated=True) == []
+    # The other reasons are decided as before.
+    assert reasons(flag(rollout_percentage=100, split=split)) == [NO_EVAL]
+    assert reasons(flag(rollout_percentage=0, split=split), evaluated=True) == [OFF]
+    inactive = flag(status=FeatureFlagStatus.INACTIVE, split=split)
+    assert reasons(inactive, evaluated=True) == [OFF]
 
 
 def test_v4_an_inactive_flag_is_off_for_everyone_whatever_its_rules():

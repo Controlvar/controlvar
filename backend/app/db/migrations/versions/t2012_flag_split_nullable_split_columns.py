@@ -13,7 +13,7 @@ The same name and type as the models (``FeatureFlag.split`` and
 
 **Storage only, and expand only.** No default, no check and no data step: the
 column is NULL on every row, and adding a nullable column with no default
-rewrites no row. No request sets a split and no evaluation reads one. The
+rewrites no row, so no answer changes: no request sets a split. The
 previous release names the column in no statement, so its inserts store NULL
 and its updates keep what is stored. ``feature_flags.variants`` is not touched.
 Each step runs only when its column is absent: a schema built by

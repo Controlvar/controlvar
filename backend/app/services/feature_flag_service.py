@@ -1,7 +1,6 @@
 # Feature flag management service
 # backend/app/services/feature_flag_service.py
 import enum
-import hashlib
 import logging
 import time
 from datetime import datetime, timezone
@@ -19,6 +18,7 @@ from backend.app.core.flag_values import (
     VALUE_FIELDS,
     VALUE_TYPE_READ_ONLY,
     flag_value_type,
+    percent_bucket,
     stored_values,
     values_equal_refusal,
     write_errors,
@@ -984,14 +984,9 @@ class FeatureFlagService:
         if percentage >= 100:
             return True
 
-        # Create a hash using user ID and flag key for deterministic assignment
-        hash_input = f"{user_id}:{flag.key}"
-        hash_value = int(
-            hashlib.md5(hash_input.encode(), usedforsecurity=False).hexdigest(), 16
-        )
-
-        # Get bucket (0-99)
-        bucket = hash_value % 100
+        # The user's bucket (0-99), from their id and the flag's key: the same one
+        # every time, in every environment. The flag's split hashes another text.
+        bucket = percent_bucket(f"{user_id}:{flag.key}")
 
         # User is in the rollout if their bucket is less than the percentage
         return bucket < percentage

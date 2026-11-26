@@ -262,6 +262,15 @@ NOT_COMPARED = {
     "rollout-25",
     "rollout-50",
     "rollout-99",
+    # A split, and no rules (#2012): the value is the split's, so there is
+    # nothing here for an experiment to evaluate.
+    "split-json",
+    "split-number",
+    "split-string",
+    "split-string-30",
+    "split-string-archived",
+    "split-string-inactive",
+    "split-zero-weight",
     "unconvertible-attribute",
     "unconvertible-number",
     "unconvertible-operator",
@@ -288,12 +297,13 @@ def vector_cases():
 
 def test_the_vectors_get_the_same_answer_from_both_evaluators():
     cases, with_time_window, not_compared = vector_cases()
-    # Exact, so a case cannot stop being compared unseen: 2039 of the 2242
+    # Exact, so a case cannot stop being compared unseen: 2097 of the 2406
     # cases have rules to evaluate, the time_window flag's two among them (it
-    # was left out until #1145) and the value flags' 51 (#1497), and the 203
-    # others are NOT_COMPARED's.
+    # was left out until #1145), the value flags' 51 (#1497) and the 58 of the
+    # flags with a split or a rule's own value that have rules (#2012: which
+    # rule matches is the same question), and the 309 others are NOT_COMPARED's.
     assert not_compared == NOT_COMPARED
-    assert len(cases) == 2039, len(cases)
+    assert len(cases) == 2097, len(cases)
     assert with_time_window == 2, with_time_window
     found = disagreements(cases)
     assert not found, f"{len(found)} of {len(cases)} cases disagree:\n" + "\n".join(
