@@ -27,8 +27,12 @@ export interface Answer {
   body?: unknown;
 }
 
-/** Answers each request; undefined leaves it pending for ever. */
-export type Responder = (call: FetchCall) => Answer | undefined;
+/**
+ * Answers each request; undefined leaves it pending for ever. A promise
+ * answers when it resolves, and when it rejects the call fails as a network
+ * failure does (fetch rejects with a TypeError).
+ */
+export type Responder = (call: FetchCall) => Answer | Promise<Answer> | undefined;
 
 export function runClassic(
   url: string,
@@ -54,12 +58,23 @@ export function runClassic(
     fetches.push(call);
     const answer = respond(call);
     if (answer === undefined) return new window.Promise<Response>(() => undefined);
-    const text = JSON.stringify(answer.body ?? null);
-    return window.Promise.resolve({
-      ok: answer.status >= 200 && answer.status < 300,
-      status: answer.status,
-      json: () => window.Promise.resolve(window.JSON.parse(text)),
-    });
+    const response = (given: Answer) => {
+      const text = JSON.stringify(given.body ?? null);
+      return {
+        ok: given.status >= 200 && given.status < 300,
+        status: given.status,
+        json: () => window.Promise.resolve(window.JSON.parse(text)),
+      };
+    };
+    if (answer instanceof Promise) {
+      return new window.Promise((resolve, reject) =>
+        answer.then(
+          (given) => resolve(response(given)),
+          () => reject(new window.TypeError('Failed to fetch')),
+        ),
+      );
+    }
+    return window.Promise.resolve(response(answer));
   };
   setup(window);
   const script = window.document.createElement('script');
