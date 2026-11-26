@@ -61,7 +61,7 @@ The type can't be changed after the flag is created; the two values can, on the 
 A new flag starts off, so everyone gets its off value until you turn it on. Its page names
 its type beside the status, and reads *Everyone gets the off value* while it is off and
 *Rules and rollout decide who gets the on value* while it is on. Every application that
-evaluates the flag can read both values, so don't put secrets in them.
+evaluates the flag can read every value it serves, so don't put secrets in them.
 [Serve a value](#serve-a-value) creates the same kind of flag with the API.
 
 ### Step 3: Add targeting rules (optional)
@@ -182,6 +182,8 @@ The request takes these fields:
 - `value_type`: `boolean` (the default), `string`, `number` or `json` (see
   [Serve a value](#serve-a-value));
 - `on_value` and `off_value`: what a `string`, `number` or `json` flag serves;
+- `split`: the values such a flag serves instead of its on value, each with a weight (see
+  [Multi-way flags](multi-way.md));
 - `default_value`: deprecated, `off_value` replaces it. Only `false` is accepted, for every
   flag, and it is the default; `true` answers `422`;
 - `tags`.
@@ -467,9 +469,9 @@ KEY=$(curl -s -X POST localhost:8000/api/v1/api-keys \
 
 A flag can serve a string, a number or a JSON value instead of on or off. Its `value_type`
 is set when it is created, and it has an `on_value`, what the users it is on for get, and an
-`off_value`, what everyone else gets, and everyone while the flag is off. Through the API, a
-`split` or a targeting rule's own `value` can give the users it is on for other values of its
-type instead. This
+`off_value`, what everyone else gets, and everyone while the flag is off. Through the API or on
+the flag's page, a `split` or a targeting rule's own `value` can give the users it is on for other
+values of its type instead: see [Multi-way flags](multi-way.md). This
 creates a string flag for a checkout button's label, on for enterprise-plan users, and
 turns it on:
 
@@ -567,7 +569,7 @@ stored must still differ. A boolean flag's `on_value` is `true` and its `off_val
 value answers `422`. `default_value` is deprecated and accepts only `false`, for every flag;
 read `off_value`.
 
-Every application that evaluates the flag can read both of its values, so do not put
+Every application that evaluates the flag can read every value it serves, so do not put
 secrets in them.
 
 ---
@@ -591,6 +593,9 @@ boolean flag), when:
 - the user matches a rule but falls outside that rule's own rollout percentage
   (`reason: "targeting_rule"`);
 - evaluation fails on the server (`reason: "error"`).
+
+A safety rollback to 1–100% lowers only the global rollout percentage: a user it takes away gets
+the off value, and a user the flag stays on for keeps the value they had, a split's included.
 
 When the call itself fails (a network error or a wrong API key), the SDKs'
 `isFeatureEnabled` and `is_feature_enabled` return `false`. So a flag your code can't
@@ -757,6 +762,7 @@ What is stored for each report, on both endpoints:
 
 ## Next Steps
 
+- [Multi-way Flags](multi-way.md) — serve one of several values, by weight or by targeting rule
 - [Gradual Rollouts](rollouts.md) — set up a staged rollout schedule with automatic progression
 - [Safety Monitoring](safety.md) — automatic rollback if error rates spike: off by default, and a
   superuser turns it on in **Admin → Safety**

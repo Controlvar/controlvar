@@ -124,6 +124,9 @@ string, number or object call gets the caller's default.
 | a string, number or object call, and a `value` that is not of the flag's type | the caller's default | `ERROR`, `errorCode: PARSE_ERROR` | not set |
 
 - A server reason this provider does not know, or none, answers the value with reason `UNKNOWN`.
+- The variant is `"on"` for every user the flag is on for, whichever value a
+  [split](../feature-flags/multi-way.md) or a rule gives them, and `"off"` for a user it is off
+  for, as the table says.
 - `flagMetadata` is `{ flagKey, enabled }` on every successful resolution.
 - Errors never throw: 404 (an unknown flag key) → `FLAG_NOT_FOUND`; a 2xx whose body is not JSON
   → `PARSE_ERROR`; anything else (401, 422, 5xx, timeout, network) → `GENERAL`. All return the
@@ -315,6 +318,9 @@ rather than the caller's default.
 | a `value` that is not of the flag's type | the caller's default | `ERROR`, `error_code` `PARSE_ERROR` | not set |
 
 - A server reason this provider does not know answers the value with reason `UNKNOWN`.
+- The variant is `"on"` for every user the flag is on for, whichever value a
+  [split](../feature-flags/multi-way.md) or a rule gives them, and `"off"` for a user it is off
+  for, as the table says.
 - Errors never raise: 404 (an unknown flag key) → `FLAG_NOT_FOUND`; anything else (401, 422,
   5xx, a 2xx whose body is not an evaluation, timeout, network) → `GENERAL`. Both return the
   default with reason `ERROR`, and a failed

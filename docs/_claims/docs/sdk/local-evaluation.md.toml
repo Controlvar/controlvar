@@ -487,6 +487,79 @@ by = [
 ]
 
 [[unit]]
+text = "A flag with a split or a rule's own value (Multi-way flags)."
+by = ["exempt:label"]
+
+[[unit]]
+text = "Every SDK asks the server about such a flag: no release of either SDK evaluates it locally."
+by = [
+    "test:backend/tests/unit/services/test_sdk_ruleset_vectors.py::test_a_flag_with_a_split_or_a_rule_value_is_remote_while_it_is_active",
+    "test:backend/tests/integration/api/test_ruleset_published_sdk_compat.py::test_the_published_wheel_reads_the_route_and_obeys_both_kill_switches",
+    "test:sdk/js/__tests__/local.test.ts::an unknown key and a remote flag are evaluated by the server",
+    "test:sdk/python/tests/test_local.py::test_an_unknown_key_and_a_remote_flag_go_to_the_server",
+]
+
+[[unit]]
+text = "Its answer from the server has the fields any flag's has, and a reason of targeting_rule or rollout for a user it is on for."
+by = [
+    "test:backend/tests/unit/services/test_flag_split_serving.py::test_every_answer_has_exactly_the_keys_it_had",
+    "test:backend/tests/unit/services/test_flag_split_serving.py::test_the_exact_answer_for_each_way_a_rule_decides",
+]
+
+[[unit]]
+text = "Turning one off (the switch, or a safety rollback to 0%) reaches every release within one refresh: an inactive flag is an entry the SDK answers locally, before any answer it has cached."
+by = [
+    "test:backend/tests/integration/api/test_ruleset_published_sdk_compat.py::test_the_published_wheel_reads_the_route_and_obeys_both_kill_switches",
+    "test:tests/sdk-contract/test_published_ruleset.py::test_the_published_evaluator_meets_its_expectation",
+    "test:sdk/js/__tests__/local.test.ts::turning a value flag off reaches the client at the next refresh: everyone gets the off value",
+    "test:sdk/python/tests/test_local.py::test_turning_a_value_flag_off_reaches_the_client_at_the_next_refresh",
+]
+
+[[unit]]
+text = "Any other change (its weights, the rollout percentage, a safety rollback to 1–99%, its rules) reaches a user an SDK has already cached only after the cache lifetime, 300 s by default (cacheTtlMs / cache_ttl_seconds), in every release."
+by = [
+    "test:backend/tests/unit/services/test_sdk_ruleset_vectors.py::test_a_flag_with_a_split_or_a_rule_value_is_remote_while_it_is_active",
+    "test:sdk/js/__tests__/client.test.ts::caches a success for 300000 ms by default",
+    "test:sdk/python/tests/test_client.py::TestGetFeatureFlag::test_cache_expires_after_ttl",
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_every_sdk_but_the_edge_sdk_keeps_an_answer_five_minutes_and_the_edge_sdk_one",
+]
+
+[[unit]]
+text = "Each user's first evaluation of such a flag in a cache lifetime is a request."
+by = [
+    "test:sdk/js/__tests__/local.test.ts::an unknown key and a remote flag are evaluated by the server",
+    "test:sdk/python/tests/test_local.py::test_an_unknown_key_and_a_remote_flag_go_to_the_server",
+    "test:sdk/js/__tests__/client.test.ts::caches a success for 300000 ms by default",
+    "test:sdk/python/tests/test_client.py::TestGetFeatureFlag::test_cache_expires_after_ttl",
+]
+
+[[unit]]
+text = "While any such flag is active, a local getAllFlags / get_all_flags call goes from 0 requests to 1."
+by = [
+    "test:sdk/js/__tests__/local.test.ts::getAllFlags: every active flag locally, inactive omitted",
+    "test:sdk/js/__tests__/local.test.ts::getAllFlags: one remote flag sends the whole call to the server",
+    "test:sdk/python/tests/test_local.py::test_get_all_flags_locally_with_inactive_omitted",
+    "test:sdk/python/tests/test_local.py::test_get_all_flags_one_remote_flag_sends_the_whole_call",
+]
+
+[[unit]]
+text = "A single evaluation is counted once per IP address and flag key, because the user ID is in the query and not in the path, so above about 100 new users a second for one multi-way flag from one IP address the server answers 429; after one retry the getters return the caller's default."
+by = [
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestSdkRateLimitIsPerPath::test_sdk_paths_with_different_ids_are_counted_separately",
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestRateLimitMiddleware::test_returns_429_when_limit_exceeded",
+    "test:sdk/python/tests/test_client.py::TestRateLimit::test_second_429_raises",
+    "test:sdk/python/tests/test_client.py::TestTypedValues::test_each_returns_the_default_and_reports",
+]
+
+[[unit]]
+text = "The bulk route of each user ID is a path of its own under the SDK rate limit, 6000 requests a minute per IP address and path by default (SDK_RATE_LIMIT_PER_MINUTE), so above about 100 bulk calls a second for one user from one IP address the server answers 429."
+by = [
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestSdkRateLimitIsPerPath::test_sdk_paths_with_different_ids_are_counted_separately",
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestRateLimitConfig::test_the_sdk_paths_default_to_6000_a_minute",
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestRateLimitMiddleware::test_returns_429_when_limit_exceeded",
+]
+
+[[unit]]
 text = "Rollout percentages bucket users exactly as the server does (md5-mod100-v1: the whole MD5 digest of \"{userId}:{flagKey}\" read as a big-endian integer, mod 100)."
 by = [
     "test:sdk/js/__tests__/evaluator.test.ts::is the server bucket: the whole digest, big-endian, mod 100",
@@ -514,6 +587,14 @@ by = [
     "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p6_the_ruleset_and_local_sdk_agree_with_the_server",
     "test:sdk/js/__tests__/local.test.ts::a new ruleset that %s: a pair answered locally goes to the server",
     "test:sdk/python/tests/test_local.py::test_a_new_ruleset_that_makes_the_flag_remote_or_removes_it_sends_a_pair_answered_locally_to_the_server",
+]
+
+[[unit]]
+text = "For a flag with a split or a rule's own value, which the SDK asks the server about, a change other than turning it off follows the cache lifetime instead (above)."
+by = [
+    "test:backend/tests/unit/services/test_sdk_ruleset_vectors.py::test_a_flag_with_a_split_or_a_rule_value_is_remote_while_it_is_active",
+    "test:sdk/js/__tests__/client.test.ts::caches a success for 300000 ms by default",
+    "test:sdk/python/tests/test_client.py::TestGetFeatureFlag::test_cache_expires_after_ttl",
 ]
 
 [[unit]]

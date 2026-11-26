@@ -359,7 +359,9 @@ try {
 
 A flag serves its on value to the users it is on for, and its off value to everyone else, and
 to everyone while it is turned off; a string, number or json flag with a split, or a matched
-rule with a value of its own, serves those users that value instead. For a string, number or json flag, read the value
+rule with a value of its own, serves those users that value instead. Who the flag is on for, and
+the `reason` the server gives (`targeting_rule` or `rollout`), are decided as for any flag: see
+[Multi-way flags](../feature-flags/multi-way.md). For a string, number or json flag, read the value
 with the getter of its type: `getStringValue`, `getNumberValue` or `getJsonValue`.
 
 ```typescript
@@ -561,8 +563,11 @@ const { enabled, reason, source } = await client.evaluateFlag('new_search', user
 await client.close();                            // on shutdown: sends the evaluation counts
 ```
 
-A value flag's value is answered locally too: its on value when the flag is on for the user, its
-off value otherwise, and its off value to everyone while it is turned off. A flag entry this SDK
+A value flag's value is answered locally too, unless it has a split or a rule with a value of its
+own: its on value when the flag is on for the user, its off value otherwise, and its off value to
+everyone while it is turned off. A flag with a split or a rule's own value is evaluated by the
+server while it is on, and answered locally, its off value to everyone, once it is turned off
+(see [Local evaluation](local-evaluation.md#what-is-evaluated-locally)). A flag entry this SDK
 cannot read (an `evaluation` or `value_type` from a newer server, or a value of the wrong type) is
 evaluated by the server, the rest of the ruleset is still answered locally, and, while the flag is
 active, `status().serverEvaluatedFlags` lists it.
@@ -574,7 +579,9 @@ ruleset. So a local client of any version keeps the server's answer it cached fo
 flag for up to `cacheTtlMs` (5 minutes by default) before it sees the flag off, and while the flag exists
 `getAllFlags` asks the server on every call.
 
-A change made in the dashboard reaches the process at its next successful refresh. While the API
+A change made in the dashboard reaches the process at its next successful refresh. For a flag
+with a split or a rule's own value, a change other than turning it off reaches a user the client
+has already cached once that answer expires, `cacheTtlMs` (5 minutes by default). While the API
 is unreachable the last ruleset keeps being served (set `maxStaleMs` to bound that); a 401 or 403
 on refresh discards it. What is answered locally, the refresh failure table, safety monitoring and
 troubleshooting: [Local evaluation](local-evaluation.md).

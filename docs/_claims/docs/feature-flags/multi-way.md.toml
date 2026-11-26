@@ -1,0 +1,612 @@
+# What verifies each unit of docs/feature-flags/multi-way.md (#2012).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`. The page's commands run in Doc
+# Examples; its user ids and its words are held by
+# backend/tests/unit/docs/test_multi_way_guide.py.
+document = "docs/feature-flags/multi-way.md"
+
+[[unit]]
+text = "Multi-way Flags"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A string, number or json flag serves its on value to the users it is on for."
+by = ["test:backend/tests/unit/services/test_flag_split_serving.py::test_every_answer_has_exactly_the_keys_it_had"]
+
+[[unit]]
+text = "It can serve several values instead."
+by = [
+    "test:backend/tests/integration/api/test_flag_split_write_api.py::test_a_split_set_through_the_api_is_served_by_the_hash",
+    "test:backend/tests/integration/api/test_flag_split_write_api.py::test_a_rule_set_through_the_api_serves_its_own_value",
+]
+
+[[unit]]
+text = "A split lists 3 to 10 values, each with a weight: the share of those users who get it."
+by = [
+    "test:backend/tests/unit/schemas/test_flag_split_write.py::test_a_create_accepts_a_split_of_three_to_ten_values",
+    "test:backend/tests/unit/schemas/test_flag_split_write.py::test_a_create_refuses_each_split_at_its_place_and_in_its_words",
+    "test:backend/tests/unit/services/test_flag_split_serving.py::test_the_exact_distribution_over_10000_ids",
+]
+
+[[unit]]
+text = "A targeting rule can also have a value of its own, which the users it matches get."
+by = [
+    "test:backend/tests/integration/api/test_flag_split_write_api.py::test_a_rule_set_through_the_api_serves_its_own_value",
+    "test:backend/tests/unit/services/test_flag_split_serving.py::test_the_exact_answer_for_each_way_a_rule_decides",
+]
+
+[[unit]]
+text = "Neither changes who the flag is on for: its targeting rules and its rollout percentage decide that, as for any flag."
+by = [
+    "test:backend/tests/unit/services/test_flag_split_serving.py::test_the_exact_answer_for_each_way_a_rule_decides",
+    "test:backend/tests/unit/services/test_flag_split_serving.py::test_every_value_is_reachable_while_the_flag_is_on_for_some",
+]
+
+[[unit]]
+text = "A boolean flag has neither."
+by = [
+    "test:backend/tests/unit/schemas/test_flag_split_write.py::test_a_boolean_flag_has_no_split",
+    "test:backend/tests/unit/schemas/test_flag_split_write.py::test_a_boolean_flags_rules_have_no_value",
+]
+
+[[unit]]
+text = "The commands on this page run as written against the stack from the Quick Start, in one terminal, top to bottom."
+by = ["docex:docs/feature-flags/multi-way.md#\"ADMIN\""]
+
+[[unit]]
+text = "Each one uses the shell variables set by the ones before it."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "What a split is"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A split is a list of values and weights."
+by = ["test:backend/tests/unit/schemas/test_flag_split_write.py::test_a_create_refuses_each_split_at_its_place_and_in_its_words"]
+
+[[unit]]
+text = "The weights are whole numbers that add up to 100."
+by = [
+    "test:backend/tests/unit/schemas/test_flag_split_write.py::test_a_create_refuses_each_split_at_its_place_and_in_its_words",
+    "docex:docs/feature-flags/multi-way.md#{\"loc\":[\"body\",\"split\"],\"msg\":\"Weights must add up to 100; they add up to 90.\"}",
+]
+
+[[unit]]
+text = "A user's value comes from a hash of their user ID and the flag's key, which puts each user in one of 100 buckets."
+by = [
+    "test:backend/tests/unit/services/test_flag_split_serving.py::test_the_exact_distribution_over_10000_ids",
+    "test:backend/tests/unit/services/test_flag_split_serving.py::test_the_same_user_is_served_the_same_value_by_every_process",
+]
+
+[[unit]]
+text = "The values take the buckets in the order the split lists them, each as many as its weight, so the split gives a value of weight 0 to nobody."
+by = [
+    "test:backend/tests/unit/services/test_flag_split_serving.py::test_the_exact_distribution_over_10000_ids",
+    "test:backend/tests/unit/services/test_flag_split_serving.py::test_changing_the_weights_moves_exactly_these_users",
+]
+
+[[unit]]
+text = "The hash is not the rollout percentage's hash."
+by = ["test:backend/tests/unit/services/test_flag_split_serving.py::test_every_value_is_reachable_while_the_flag_is_on_for_some"]
+
+[[unit]]
+text = "Changing the rollout percentage changes who the flag is on for, and never which value a user gets."
+by = [
+    "test:backend/tests/unit/services/test_flag_split_serving.py::test_raising_the_rollout_changes_nobodys_value",
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_a_partial_rollback_lowers_only_the_percentage_of_a_split",
+]
+
+[[unit]]
+text = "The flag still has an on value and an off value."
+by = ["test:backend/tests/integration/api/test_flag_split_write_api.py::test_the_responses_carry_the_split_in_every_environment"]
+
+[[unit]]
+text = "The off value is what everyone else gets, and everyone while the flag is off."
+by = [
+    "test:backend/tests/unit/services/test_flag_split_serving.py::test_every_answer_has_exactly_the_keys_it_had",
+    "test:backend/tests/unit/services/test_flag_split_serving.py::test_the_exact_answer_for_each_way_a_rule_decides",
+]
+
+[[unit]]
+text = "The on value is not served while a split is set: it is served again once the split is removed."
+by = [
+    "test:backend/tests/unit/services/test_flag_split_serving.py::test_every_answer_has_exactly_the_keys_it_had",
+    "test:backend/tests/integration/api/test_flag_split_write_api.py::test_null_clears_the_split_and_leaving_it_out_keeps_it",
+]
+
+[[unit]]
+text = "Each environment has its own split, and a promotion copies it."
+by = [
+    "test:backend/tests/integration/api/test_flag_split_write_api.py::test_a_staging_split_set_through_the_api_is_served_by_staging_alone",
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_promotion_copies_the_split_and_changes_no_other",
+]
+
+[[unit]]
+text = "The flag's value type, on value and off value belong to the flag, in every environment."
+by = ["test:backend/tests/unit/core/test_flag_environments.py::test_identity_and_values_are_the_flag_rows"]
+
+[[unit]]
+text = "See Flag environments."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "A split or an experiment"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A split serves values and measures nothing."
+by = ["test:backend/tests/integration/api/test_flag_split_api.py::test_an_evaluation_is_one_evaluation_and_no_part_of_an_experiment"]
+
+[[unit]]
+text = "To learn which value does better on a metric, create an experiment."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "| Do I get results? | Can I change shares while live? | Is a user's value stable?"
+by = ["exempt:label"]
+
+[[unit]]
+text = "An on/off flag with a rollout | No | Yes: raise or lower the rollout percentage | Yes: each user always lands on the same side of the percentage"
+by = [
+    "test:backend/tests/integration/api/test_flag_split_api.py::test_an_evaluation_is_one_evaluation_and_no_part_of_an_experiment",
+    "test:backend/tests/unit/ground_truth/test_flag_rollout_use_cases.py::test_a_user_keeps_their_side_as_the_rollout_moves",
+]
+
+[[unit]]
+text = "A flag with a split | No | Yes: change the weights; only the users in the buckets that change hands get another value | Yes: the same user gets the same value until the weights change, whatever the rollout percentage"
+by = [
+    "test:backend/tests/integration/api/test_flag_split_api.py::test_an_evaluation_is_one_evaluation_and_no_part_of_an_experiment",
+    "test:backend/tests/unit/services/test_flag_split_serving.py::test_changing_the_weights_moves_exactly_these_users",
+    "test:backend/tests/unit/services/test_flag_split_serving.py::test_the_same_user_is_served_the_same_value_by_every_service_and_call",
+    "test:backend/tests/unit/services/test_flag_split_serving.py::test_raising_the_rollout_changes_nobodys_value",
+]
+
+[[unit]]
+text = "A rule serving a value | No | There are no shares: the users the rule matches get its value | Yes, while the user matches the rule"
+by = [
+    "test:backend/tests/integration/api/test_flag_split_api.py::test_an_evaluation_is_one_evaluation_and_no_part_of_an_experiment",
+    "test:backend/tests/unit/services/test_flag_split_serving.py::test_the_exact_answer_for_each_way_a_rule_decides",
+]
+
+[[unit]]
+text = "An experiment | Yes: each variant's metrics, compared with the control | No: the variants are fixed once it starts; a bandit moves new users by itself | Yes: the server stores each user's variant"
+by = [
+    "test:backend/tests/integration/api/test_results_difference_intervals.py::test_a_mean_metric_carries_the_relative_interval_and_the_impact",
+    "test:backend/tests/integration/api/test_experiments_lifecycle_api.py::TestUpdateExperimentAdditional::test_update_restricted_field_on_active_experiment_returns_400",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestBanditAssignment::test_existing_assignment_is_sticky_when_weights_change",
+]
+
+[[unit]]
+text = "Set a split with the API"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Log in as the demo administrator:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It prints \"ADMIN\"."
+by = ["docex:docs/feature-flags/multi-way.md#\"ADMIN\""]
+
+[[unit]]
+text = "Create a string flag for a checkout button's text, on for everyone:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It prints {\"key\":\"checkout-button-text\",\"status\":\"active\",\"on_value\":\"Buy now\",\"off_value\":\"Checkout\",\"split\":null}."
+by = ["docex:docs/feature-flags/multi-way.md#{\"key\":\"checkout-button-text\",\"status\":\"active\",\"on_value\":\"Buy now\",\"off_value\":\"Checkout\",\"split\":null}"]
+
+[[unit]]
+text = "split is null: the flag has none, and serves its on value."
+by = [
+    "test:backend/tests/integration/api/test_flag_split_write_api.py::test_the_responses_carry_the_split_in_every_environment",
+    "test:backend/tests/unit/services/test_flag_split_serving.py::test_every_answer_has_exactly_the_keys_it_had",
+]
+
+[[unit]]
+text = "Give it a split of three values."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "A PUT changes only the fields it sends:"
+by = ["test:backend/tests/integration/api/test_flag_split_write_api.py::test_null_clears_the_split_and_leaving_it_out_keeps_it"]
+
+[[unit]]
+text = "It prints the split as stored."
+by = ["docex:docs/feature-flags/multi-way.md#[{\"value\":\"Buy now\",\"weight\":34},{\"value\":\"Complete purchase\",\"weight\":33},{\"value\":\"Pay now\",\"weight\":33}]"]
+
+[[unit]]
+text = "A split can also be sent when the flag is created, and \"split\": null removes it."
+by = [
+    "test:backend/tests/integration/api/test_flag_split_write_api.py::test_every_write_path_stores_what_it_accepts_as_sent",
+    "test:backend/tests/integration/api/test_flag_split_write_api.py::test_null_clears_the_split_and_leaving_it_out_keeps_it",
+]
+
+[[unit]]
+text = "Create an API key, then evaluate the flag for three users:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "user-1 gets Buy now, user-2 gets Complete purchase and user-11 gets Pay now."
+by = [
+    "docex:docs/feature-flags/multi-way.md#{\"enabled\":true,\"value\":\"Complete purchase\",\"reason\":\"rollout\"}",
+    "test:backend/tests/integration/api/test_flag_split_write_api.py::test_a_split_set_through_the_api_is_served_by_the_hash",
+]
+
+[[unit]]
+text = "These three IDs were picked by running the server's hash, so that each gets a different value."
+by = ["test:backend/tests/integration/api/test_flag_split_write_api.py::test_a_split_set_through_the_api_is_served_by_the_hash"]
+
+[[unit]]
+text = "Your IDs will land differently; what is fixed is that the same ID always gets the same value."
+by = [
+    "test:backend/tests/unit/services/test_flag_split_serving.py::test_the_same_user_is_served_the_same_value_by_every_service_and_call",
+    "test:backend/tests/unit/services/test_flag_split_serving.py::test_the_same_user_is_served_the_same_value_by_every_process",
+]
+
+[[unit]]
+text = "The answer has the fields it always had."
+by = ["test:backend/tests/unit/services/test_flag_split_serving.py::test_every_answer_has_exactly_the_keys_it_had"]
+
+[[unit]]
+text = "reason is rollout or targeting_rule, decided as for any flag: a split changes the value, not the reason."
+by = [
+    "test:backend/tests/unit/services/test_flag_split_serving.py::test_every_answer_has_exactly_the_keys_it_had",
+    "test:backend/tests/unit/services/test_flag_split_serving.py::test_the_exact_answer_for_each_way_a_rule_decides",
+]
+
+[[unit]]
+text = "Lower the rollout percentage to 50."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The users the flag is still on for keep their value, and the others get the off value:"
+by = [
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_a_partial_rollback_lowers_only_the_percentage_of_a_split",
+    "docex:docs/feature-flags/multi-way.md#{\"enabled\":false,\"value\":\"Checkout\",\"reason\":\"rollout\"}",
+]
+
+[[unit]]
+text = "user-2 is outside 50% and gets Checkout, the off value; user-1 and user-11 keep theirs."
+by = ["docex:docs/feature-flags/multi-way.md#{\"enabled\":false,\"value\":\"Checkout\",\"reason\":\"rollout\"}"]
+
+[[unit]]
+text = "Give a rule a value of its own"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A targeting rule with a value serves it to the users it matches, instead of the split."
+by = [
+    "test:backend/tests/unit/services/test_flag_split_serving.py::test_the_exact_answer_for_each_way_a_rule_decides",
+    "test:backend/tests/integration/api/test_flag_split_write_api.py::test_a_rule_set_through_the_api_serves_its_own_value",
+]
+
+[[unit]]
+text = "This gives enterprise-plan users Request a quote:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It prints 200, then {\"enabled\":true,\"value\":\"Request a quote\",\"reason\":\"targeting_rule\"}: user-2 matches the rule, so the rule's percentage (100 unless the rule sets one) decides, not the flag's 50%, and the rule's value is served."
+by = [
+    "docex:docs/feature-flags/multi-way.md#{\"enabled\":true,\"value\":\"Request a quote\",\"reason\":\"targeting_rule\"}",
+    "test:backend/tests/unit/services/test_flag_split_serving.py::test_the_exact_answer_for_each_way_a_rule_decides",
+]
+
+[[unit]]
+text = "A user the rule does not match gets the split, as above."
+by = ["test:backend/tests/unit/services/test_flag_split_serving.py::test_the_exact_answer_for_each_way_a_rule_decides"]
+
+[[unit]]
+text = "The value goes at the top of the dashboard shape, beside logical_operator and groups."
+by = ["test:backend/tests/unit/schemas/test_flag_split_write.py::test_a_rule_carries_a_value_of_the_flags_type_in_either_shape"]
+
+[[unit]]
+text = "In the native shape ({\"rules\": [...]}) each rule and the default_rule may carry one."
+by = ["test:backend/tests/unit/schemas/test_flag_split_write.py::test_a_rule_carries_a_value_of_the_flags_type_in_either_shape"]
+
+[[unit]]
+text = "A rule with no value serves the split, or the on value when there is no split."
+by = [
+    "test:backend/tests/unit/services/test_flag_split_serving.py::test_the_exact_answer_for_each_way_a_rule_decides",
+    "test:backend/tests/unit/services/test_flag_split_serving.py::test_a_rule_without_a_value_serves_the_on_value_when_there_is_no_split",
+]
+
+[[unit]]
+text = "A user who matches a rule but falls outside that rule's own rollout_percentage gets the off value."
+by = ["test:backend/tests/unit/services/test_flag_split_serving.py::test_the_exact_answer_for_each_way_a_rule_decides"]
+
+[[unit]]
+text = "In the dashboard"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A string, number or json flag's page has a Split section in each environment; in Staging it reads Split in Staging."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-split.test.tsx::in Production: the table, its caption, a labelled input per value and weight, the notes",
+    "test:frontend/src/tests/pages/feature-flag-split.test.tsx::in Staging the heading names it, and the rows are Staging’s own split",
+]
+
+[[unit]]
+text = "A boolean flag's page has none."
+by = ["test:frontend/src/tests/pages/feature-flag-split.test.tsx::in %s: absent, not disabled"]
+
+[[unit]]
+text = "Add a split starts three empty values at weights 34, 33 and 33, so nothing is served until each is typed."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-split.test.tsx::without a split: \"Add a split\" starts three empty values at 34/33/33, focus on the first",
+    "test:frontend/src/tests/utils/flagSplit.test.ts::a new split of empty strings is refused, so nothing is served until each is typed",
+]
+
+[[unit]]
+text = "Each row has a Value and a Weight (%)."
+by = ["test:frontend/src/tests/pages/feature-flag-split.test.tsx::in Production: the table, its caption, a labelled input per value and weight, the notes"]
+
+[[unit]]
+text = "Add value adds a value at the end, at weight 0, up to 10 values, and Remove takes one out, down to 3."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-split.test.tsx::Add value appends an empty row at weight 0 and moves focus to it; at ten it is explained",
+    "test:frontend/src/tests/pages/feature-flag-split.test.tsx::Remove is labelled per row, moves focus to the row before, and at three is explained",
+]
+
+[[unit]]
+text = "Spread evenly shares the 100 between them, the extra to the first rows."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-split.test.tsx::Spread evenly gives 34/33/33 and then the save goes",
+    "test:frontend/src/tests/utils/flagSplit.test.ts::a new split is three empty values at 34/33/33",
+]
+
+[[unit]]
+text = "The total reads Total 100%, or for example Total 90%: 10% more needed."
+by = [
+    "test:frontend/src/tests/utils/flagSplit.test.ts::the Total says what is missing or over",
+    "test:frontend/src/tests/pages/feature-flag-split.test.tsx::in %s, 90 is refused at the Total in words, nothing is sent, the first weight takes focus",
+]
+
+[[unit]]
+text = "A split whose weights do not add up to 100 is not sent, and the page says Weights must add up to 100; they add up to 90."
+by = ["test:frontend/src/tests/pages/feature-flag-split.test.tsx::in %s, 90 is refused at the Total in words, nothing is sent, the first weight takes focus"]
+
+[[unit]]
+text = "When you change the weights of a split, the page says, before you save, about how many in every 100 users the flag is on for move, and from which value to which."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-split.test.tsx::the impact line names every move, read off the running totals",
+    "test:frontend/src/tests/utils/flagSplit.test.ts::reads the server's eight weight changes",
+]
+
+[[unit]]
+text = "Remove the split removes it when you save: the users the flag is on for then get the on value."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-split.test.tsx::in %s, removing the split sends null, and only then",
+    "test:backend/tests/integration/api/test_flag_split_write_api.py::test_null_clears_the_split_and_leaving_it_out_keeps_it",
+]
+
+[[unit]]
+text = "Users these rules match get, under the targeting rules, offers A value of the split (the default) (or The on value (the default) with no split) and A value of their own."
+by = ["test:frontend/src/tests/pages/feature-flag-split.test.tsx::a %s flag sends the value typed as its type"]
+
+[[unit]]
+text = "Someone who may not change flags reads Serving 3 values and the table without inputs."
+by = ["test:frontend/src/tests/pages/feature-flag-split.test.tsx::%s in %s: the bar, the table, \"Serving 3 values\", the note, no input"]
+
+[[unit]]
+text = "The flag list marks a flag that has a split in the environment it shows with Split."
+by = [
+    "test:frontend/src/tests/pages/feature-flags-index-split.test.tsx::Production: \"Split\" in text for the flag with a split there, none without, none on a boolean flag",
+    "test:frontend/src/tests/pages/feature-flags-index-split.test.tsx::Staging: the badge follows Staging's own split, not Production's",
+]
+
+[[unit]]
+text = "The section ends with a note that links to the experiments page: A split does not measure anything."
+by = ["test:frontend/src/tests/pages/feature-flag-split.test.tsx::%s in %s: the bar, the table, \"Serving 3 values\", the note, no input"]
+
+[[unit]]
+text = "To compare values on a metric, create an experiment."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Limits"
+by = ["exempt:label"]
+
+[[unit]]
+text = "What a request is refused with 422 for, at the field named:"
+by = ["test:backend/tests/unit/schemas/test_flag_split_write.py::test_a_create_refuses_each_split_at_its_place_and_in_its_words"]
+
+[[unit]]
+text = "a split of fewer than 3 or more than 10 values, or weights that do not add up to exactly 100;"
+by = [
+    "test:backend/tests/unit/schemas/test_flag_split_write.py::test_a_create_refuses_each_split_at_its_place_and_in_its_words",
+    "test:backend/tests/integration/api/test_flag_split_write_api.py::test_every_write_path_refuses_the_same_split_with_the_same_answer",
+]
+
+[[unit]]
+text = "a weight that is not a whole number from 0 to 100 (33.5, true and \"33\" are refused);"
+by = ["test:backend/tests/unit/schemas/test_flag_split_write.py::test_a_create_refuses_each_split_at_its_place_and_in_its_words"]
+
+[[unit]]
+text = "a value that is not of the flag's type, null, or two values that are equal (3 and 3.0 are the same number); a value may equal the on value or the off value;"
+by = [
+    "test:backend/tests/unit/schemas/test_flag_split_write.py::test_a_create_refuses_each_split_at_its_place_and_in_its_words",
+    "test:backend/tests/unit/schemas/test_flag_split_write.py::test_a_duplicate_is_named_at_the_later_value_and_compared_as_json",
+    "test:backend/tests/unit/schemas/test_flag_split_write.py::test_a_create_accepts_a_split_of_three_to_ten_values",
+]
+
+[[unit]]
+text = "a value of more than 8192 bytes as compact JSON, or more than 10 levels deep, as for the on and off values;"
+by = ["test:backend/tests/unit/schemas/test_flag_split_write.py::test_a_split_value_follows_the_value_limits"]
+
+[[unit]]
+text = "more than 81920 bytes of split values and rules' own values together, in one environment;"
+by = [
+    "test:backend/tests/unit/schemas/test_flag_split_write.py::test_the_largest_split_fits_and_rules_values_share_what_it_leaves",
+    "test:backend/tests/integration/api/test_flag_split_write_api.py::test_a_split_and_rules_sent_at_once_never_store_more_than_the_limit",
+]
+
+[[unit]]
+text = "a split, or a rule's own value, on a boolean flag;"
+by = [
+    "test:backend/tests/unit/schemas/test_flag_split_write.py::test_a_boolean_flag_has_no_split",
+    "test:backend/tests/unit/schemas/test_flag_split_write.py::test_a_boolean_flags_rules_have_no_value",
+]
+
+[[unit]]
+text = "a value on dashboard rules with no condition, which match no user."
+by = ["test:backend/tests/unit/schemas/test_flag_split_write.py::test_a_value_on_a_rule_with_no_condition_is_refused"]
+
+[[unit]]
+text = "The message names the field, never the value."
+by = [
+    "test:backend/tests/unit/schemas/test_flag_split_write.py::test_a_create_refuses_each_split_at_its_place_and_in_its_words",
+    "test:backend/tests/unit/schemas/test_flag_split_write.py::test_a_rule_value_is_refused_at_the_rules_with_its_place",
+]
+
+[[unit]]
+text = "These weights add up to 90:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It prints {\"loc\":[\"body\",\"split\"],\"msg\":\"Weights must add up to 100; they add up to 90.\"}, and the stored split is unchanged."
+by = [
+    "docex:docs/feature-flags/multi-way.md#{\"loc\":[\"body\",\"split\"],\"msg\":\"Weights must add up to 100; they add up to 90.\"}",
+    "test:backend/tests/integration/api/test_flag_split_write_api.py::test_every_write_path_refuses_the_same_split_with_the_same_answer",
+]
+
+[[unit]]
+text = "For two values, use the on and off values with a rollout percentage, or add a third value with weight 0."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Changing a flag that serves a split"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Weights."
+by = ["exempt:label"]
+
+[[unit]]
+text = "A user's bucket never changes, so a user moves only when the value at their bucket changes."
+by = [
+    "test:backend/tests/unit/services/test_flag_split_serving.py::test_the_transitions_are_the_ones_the_cumulative_ranges_say",
+    "test:backend/tests/integration/api/test_flag_split_write_api.py::test_a_save_that_changes_one_weight_keeps_the_order_and_moves_only_neighbours",
+]
+
+[[unit]]
+text = "Raising one value's weight by 10 and lowering the weight of the value next to it by 10 moves about 10 in every 100 users the flag is on for, from that value to the raised one, and nobody else."
+by = [
+    "test:backend/tests/unit/services/test_flag_split_serving.py::test_moving_one_boundary_leaves_the_raised_values_users_where_they_are",
+    "test:backend/tests/unit/services/test_flag_split_serving.py::test_changing_the_weights_moves_exactly_these_users",
+]
+
+[[unit]]
+text = "The rollout percentage."
+by = ["exempt:label"]
+
+[[unit]]
+text = "Raising it adds users, each with the value the split gives them; lowering it gives the users it takes away the off value."
+by = [
+    "test:backend/tests/unit/services/test_flag_split_serving.py::test_raising_the_rollout_changes_nobodys_value",
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_a_partial_rollback_lowers_only_the_percentage_of_a_split",
+]
+
+[[unit]]
+text = "Nobody else's value changes."
+by = [
+    "test:backend/tests/unit/services/test_flag_split_serving.py::test_raising_the_rollout_changes_nobodys_value",
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_a_partial_rollback_lowers_only_the_percentage_of_a_split",
+]
+
+[[unit]]
+text = "Turning the flag off."
+by = ["exempt:label"]
+
+[[unit]]
+text = "Everyone gets the off value."
+by = ["test:backend/tests/unit/services/test_flag_split_serving.py::test_every_answer_has_exactly_the_keys_it_had"]
+
+[[unit]]
+text = "A safety rollback."
+by = ["exempt:label"]
+
+[[unit]]
+text = "A rollback to 0% turns the flag off, and everyone gets the off value."
+by = ["test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_a_rollback_to_0_gives_every_user_of_a_split_the_off_value"]
+
+[[unit]]
+text = "A rollback to 1–100% lowers only the global rollout percentage: the users it takes away get the off value, and every user who stays on keeps their value."
+by = ["test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_a_partial_rollback_lowers_only_the_percentage_of_a_split"]
+
+[[unit]]
+text = "Users a rule matches keep their rule's percentage and its value."
+by = ["test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_a_partial_rollback_lowers_only_the_percentage_of_a_split"]
+
+[[unit]]
+text = "See Safety monitoring."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "A rollout schedule."
+by = ["exempt:label"]
+
+[[unit]]
+text = "Each stage sets the rollout percentage: the users it adds get a value of the split, and nobody else's value changes."
+by = ["test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_a_rollout_stage_raises_only_the_percentage_of_a_split"]
+
+[[unit]]
+text = "The audit log names split among the fields a change made, and never stores its values."
+by = [
+    "test:backend/tests/integration/api/test_flag_split_write_api.py::test_every_write_path_stores_what_it_accepts_as_sent",
+    "test:backend/tests/integration/api/test_flag_split_write_api.py::test_a_create_records_the_flag_and_never_the_splits_values",
+]
+
+[[unit]]
+text = "SDKs and local evaluation"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Every SDK asks the server about a flag with a split or a rule's own value: the JavaScript and Python SDKs' local evaluation (beta) leaves such a flag to the server."
+by = [
+    "test:backend/tests/unit/services/test_sdk_ruleset_vectors.py::test_a_flag_with_a_split_or_a_rule_value_is_remote_while_it_is_active",
+    "test:sdk/js/__tests__/local.test.ts::an unknown key and a remote flag are evaluated by the server",
+    "test:sdk/python/tests/test_local.py::test_an_unknown_key_and_a_remote_flag_go_to_the_server",
+    "test:backend/tests/integration/api/test_ruleset_published_sdk_compat.py::test_the_published_wheel_reads_the_route_and_obeys_both_kill_switches",
+]
+
+[[unit]]
+text = "Turning it off reaches every release within one ruleset refresh."
+by = [
+    "test:backend/tests/integration/api/test_ruleset_published_sdk_compat.py::test_the_published_wheel_reads_the_route_and_obeys_both_kill_switches",
+    "test:tests/sdk-contract/test_published_ruleset.py::test_the_published_evaluator_meets_its_expectation",
+]
+
+[[unit]]
+text = "Any other change reaches a user an SDK has already cached only after the cache lifetime, 300 s by default."
+by = [
+    "test:backend/tests/unit/services/test_sdk_ruleset_vectors.py::test_a_flag_with_a_split_or_a_rule_value_is_remote_while_it_is_active",
+    "test:sdk/js/__tests__/client.test.ts::caches a success for 300000 ms by default",
+    "test:sdk/python/tests/test_client.py::TestGetFeatureFlag::test_cache_expires_after_ttl",
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_every_sdk_but_the_edge_sdk_keeps_an_answer_five_minutes_and_the_edge_sdk_one",
+]
+
+[[unit]]
+text = "Local evaluation has the details, and the cost of bulk calls."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "The OpenFeature providers report the variant \"on\" for every user the flag is on for, whichever value they get, and \"off\" for a user it is off for."
+by = [
+    "test:sdk/openfeature/__tests__/provider.test.ts::rollout, on → the on value, SPLIT, variant \"on\"",
+    "test:sdk/openfeature/__tests__/provider.test.ts::rollout, off → the off value, SPLIT, variant \"off\"",
+    "test:sdk/openfeature-python/tests/test_provider.py::TestResolutionTable::test_the_on_or_off_value_with_the_servers_reason",
+]
+
+[[unit]]
+text = "Older releases"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A 0.48.0 task ignores splits and rules' own values, and serves each such flag's on value to every user the flag is on for: during the rolling upgrade to 0.49.0, and after a rollback of the API alone to 0.48.0."
+by = ["test:backend/tests/integration/database/test_flag_split_migration.py::test_the_previous_release_ignores_splits_and_rule_values_and_keeps_them"]
+
+[[unit]]
+text = "See Rolling back past flag splits."
+by = ["exempt:navigation"]

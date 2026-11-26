@@ -22,6 +22,13 @@ passed and every stage before it is complete. Once the schedule's `end_date` has
 scheduler passes the schedule over: no stage starts or completes by itself, and the schedule
 stays `active`.
 
+A stage changes only the flag's rollout percentage. On a flag with a
+[split](multi-way.md), the users a stage adds get a value of the split, and nobody else's value
+changes. An SDK evaluating locally asks the server about such a flag, so a stage reaches a user
+it has already cached once that answer expires, 300 s by default, in every release, not at the
+next ruleset refresh (see
+[Turning a Flag Off](kill-switch.md#local-evaluation-javascript-and-python-beta)).
+
 ---
 
 ## Environments
@@ -411,7 +418,10 @@ curl -s -X POST localhost:8000/api/v1/rollout-schedules/$SCHEDULE_ID/cancel \
 It prints `"cancelled"`. The flag's current rollout percentage is not changed. To roll back,
 change the flag itself (see [Creating Feature Flags](create.md)), or use a
 [safety rollback](safety.md#manual-rollback): a rollback to 0% turns the flag off and pauses
-its schedule. For a string, number or json flag, every user then gets its off value.
+its schedule. For a string, number or json flag, every user then gets its off value. A rollback
+to 1–100% lowers only the global rollout percentage and pauses the schedule too: a user it takes
+away gets the off value, and a user the flag stays on for keeps the value they had, a split's
+included.
 
 ---
 

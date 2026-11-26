@@ -59,6 +59,12 @@ within 33 seconds. A flag it sends to the server (see
 [what the server still evaluates](../sdk/local-evaluation.md#what-is-evaluated-locally)) follows
 the cache lifetime above.
 
+A flag with a [split](multi-way.md) or a rule's own value is one the SDK sends to the server, in
+every release. Turning it off (the switch, or a safety rollback to 0%) makes it a flag the SDK
+answers locally, so it reaches every release at the next refresh. Any other change to it (its
+weights, the rollout percentage, a safety rollback to 1–99%, its rules) reaches a user the SDK has
+already cached once that answer expires, in every release.
+
 ## While a client cannot reach the API
 
 | Client | What it serves |
@@ -85,6 +91,8 @@ stop evaluating a flag locally (`maxStaleMs` / `max_stale_seconds` passed, the r
 ## Safety rollbacks
 
 A safety rollback changes the flag on the server like any other change, and reaches clients on the
-same timetable. The safety monitor looks for a breach every 5 minutes by default
+same timetable. A rollback to 0% turns the flag off, and everyone gets the off value. A rollback to
+1–100% lowers only the global rollout percentage: a user it takes away gets the off value, and a
+user the flag stays on for keeps the value they had, a [split](multi-way.md)'s included. The safety monitor looks for a breach every 5 minutes by default
 (`SAFETY_CHECK_INTERVAL_MINUTES`), so from a breach to every client serving the rolled-back answer
 can take that long plus the client's time above.

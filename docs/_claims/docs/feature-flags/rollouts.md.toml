@@ -62,6 +62,26 @@ by = [
 ]
 
 [[unit]]
+text = "A stage changes only the flag's rollout percentage."
+by = ["test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_a_rollout_stage_raises_only_the_percentage_of_a_split"]
+
+[[unit]]
+text = "On a flag with a split, the users a stage adds get a value of the split, and nobody else's value changes."
+by = [
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_a_rollout_stage_raises_only_the_percentage_of_a_split",
+    "test:backend/tests/unit/services/test_flag_split_serving.py::test_raising_the_rollout_changes_nobodys_value",
+]
+
+[[unit]]
+text = "An SDK evaluating locally asks the server about such a flag, so a stage reaches a user it has already cached once that answer expires, 300 s by default, in every release, not at the next ruleset refresh (see Turning a Flag Off)."
+by = [
+    "test:backend/tests/unit/services/test_sdk_ruleset_vectors.py::test_a_flag_with_a_split_or_a_rule_value_is_remote_while_it_is_active",
+    "test:backend/tests/integration/api/test_ruleset_published_sdk_compat.py::test_the_published_wheel_reads_the_route_and_obeys_both_kill_switches",
+    "test:sdk/js/__tests__/client.test.ts::caches a success for 300000 ms by default",
+    "test:sdk/python/tests/test_client.py::TestGetFeatureFlag::test_cache_expires_after_ttl",
+]
+
+[[unit]]
 text = "Environments"
 by = ["exempt:label"]
 
@@ -900,6 +920,13 @@ by = [
 [[unit]]
 text = "For a string, number or json flag, every user then gets its off value."
 by = ["test:backend/tests/integration/api/test_flag_values_api.py::test_a_safety_rollback_serves_the_off_value"]
+
+[[unit]]
+text = "A rollback to 1–100% lowers only the global rollout percentage and pauses the schedule too: a user it takes away gets the off value, and a user the flag stays on for keeps the value they had, a split's included."
+by = [
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_a_partial_rollback_lowers_only_the_percentage_of_a_split",
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p12_an_automatic_partial_rollback_keeps_rule_users_and_pauses_only_the_active_schedule",
+]
 
 [[unit]]
 text = "Common Gotchas"

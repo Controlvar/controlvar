@@ -240,7 +240,7 @@ by = [
 ]
 
 [[unit]]
-text = "Every application that evaluates the flag can read both values, so don't put secrets in them."
+text = "Every application that evaluates the flag can read every value it serves, so don't put secrets in them."
 by = ["exempt:advice"]
 
 [[unit]]
@@ -506,6 +506,14 @@ by = [
 [[unit]]
 text = "on_value and off_value: what a string, number or json flag serves;"
 by = ["test:backend/tests/integration/api/test_flag_values_api.py::test_a_value_flag_is_created_and_its_values_changed"]
+
+[[unit]]
+text = "split: the values such a flag serves instead of its on value, each with a weight (see Multi-way flags);"
+by = [
+    "test:backend/tests/unit/schemas/test_flag_split_write.py::test_a_create_accepts_a_split_of_three_to_ten_values",
+    "test:backend/tests/integration/api/test_flag_split_write_api.py::test_every_write_path_stores_what_it_accepts_as_sent",
+    "test:backend/tests/integration/api/test_flag_split_write_api.py::test_a_split_set_through_the_api_is_served_by_the_hash",
+]
 
 [[unit]]
 text = "default_value: deprecated, off_value replaces it."
@@ -1092,8 +1100,10 @@ by = [
 ]
 
 [[unit]]
-text = "Through the API, a split or a targeting rule's own value can give the users it is on for other values of its type instead."
+text = "Through the API or on the flag's page, a split or a targeting rule's own value can give the users it is on for other values of its type instead: see Multi-way flags."
 by = [
+    "test:frontend/src/tests/pages/feature-flag-split.test.tsx::without a split: \"Add a split\" starts three empty values at 34/33/33, focus on the first",
+    "test:frontend/src/tests/pages/feature-flag-split.test.tsx::a %s flag sends the value typed as its type",
     "test:backend/tests/integration/api/test_flag_split_write_api.py::test_a_split_set_through_the_api_is_served_by_the_hash",
     "test:backend/tests/integration/api/test_flag_split_write_api.py::test_a_rule_set_through_the_api_serves_its_own_value",
     "test:backend/tests/integration/api/test_flag_split_write_api.py::test_every_write_path_stores_what_it_accepts_as_sent",
@@ -1173,7 +1183,7 @@ by = [
 ]
 
 [[unit]]
-text = "Every application that evaluates the flag can read both of its values, so do not put secrets in them."
+text = "Every application that evaluates the flag can read every value it serves, so do not put secrets in them."
 by = ["exempt:advice"]
 
 [[unit]]
@@ -1225,6 +1235,13 @@ text = "evaluation fails on the server (reason: \"error\")."
 by = [
     "test:backend/tests/unit/core/test_pattern_ruleset_abort.py::test_flag_nested_not_is_disabled",
     "test:backend/tests/integration/api/test_segment_targeting_api.py::test_unavailable_segment_fails_closed",
+]
+
+[[unit]]
+text = "A safety rollback to 1–100% lowers only the global rollout percentage: a user it takes away gets the off value, and a user the flag stays on for keeps the value they had, a split's included."
+by = [
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_a_partial_rollback_lowers_only_the_percentage_of_a_split",
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p4_a_partial_rollback_lowers_only_the_global_rollout",
 ]
 
 [[unit]]
@@ -1416,6 +1433,10 @@ by = ["exempt:baseline"]
 [[unit]]
 text = "Gradual Rollouts — set up a staged rollout schedule with automatic progression"
 by = ["exempt:baseline"]
+
+[[unit]]
+text = "Multi-way Flags — serve one of several values, by weight or by targeting rule"
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Safety Monitoring — automatic rollback if error rates spike: off by default, and a superuser turns it on in Admin → Safety"
