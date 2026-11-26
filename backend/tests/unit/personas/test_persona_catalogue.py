@@ -31,9 +31,9 @@ import catalogue  # the path is set first
 
 pytestmark = pytest.mark.unit
 
-#: The number of cards and of matrix rows. A card or a row removed, or added
-#: without this changing, fails here: the count cannot shrink silently.
-PERSONA_CARDS = 1
+#: The number of matrix rows. A row removed, or added without this changing,
+#: fails here: the count cannot shrink silently. The number of cards is held
+#: to tests/personas/pinned.yaml instead (each card is one day, one test).
 MATRIX_ROWS = 10
 
 
@@ -67,14 +67,20 @@ def _matrix_problems(data: dict[str, Any]) -> list[str]:
 # ----------------------------------------------------------- the real files
 
 
-def test_the_real_cards_load_and_the_count_is_pinned():
+def test_the_real_cards_load_and_each_is_one_pinned_day():
+    """Each card is one day and each day one test, so the cards number
+    what pinned.yaml pins (which check_run.py holds the run to): a card
+    removed, or added without its day, fails here or in the run."""
     personas = catalogue.load_personas(PERSONAS_ROOT / "personas", REPO_ROOT)
-    assert [p.id for p in personas] == ["U-DEV"]
-    assert len(personas) == PERSONA_CARDS
+    ids = [p.id for p in personas]
+    assert "U-DEV" in ids
+    pinned = yaml.safe_load((PERSONAS_ROOT / "pinned.yaml").read_text("utf-8"))
+    assert len(ids) == pinned["tests"], (ids, pinned)
 
 
 def test_the_u_dev_day_is_eight_consecutive_steps_that_write_or_read_on_purpose():
-    (persona,) = catalogue.load_personas(PERSONAS_ROOT / "personas", REPO_ROOT)
+    personas = catalogue.load_personas(PERSONAS_ROOT / "personas", REPO_ROOT)
+    (persona,) = [p for p in personas if p.id == "U-DEV"]
     assert [s.n for s in persona.day] == list(range(1, 9))
     assert {s.layer for s in persona.day} == {"A"}
     # Only step 5 (the results page) reads without writing.
