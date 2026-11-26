@@ -72,8 +72,8 @@ JSON = {"Content-Type": "application/json"}
 MARK = "zq2180mark"
 #: An ASCII placeholder, replaced in the raw JSON text by the escape sent.
 X = "QQ2180QQ"
-#: The two characters, as JSON escapes: NUL and an unpaired surrogate.
-CHARACTERS = {"nul": "\\u0000", "surrogate": "\\ud800"}
+#: The characters, as JSON escapes: NUL, and an unpaired high and low surrogate.
+CHARACTERS = {"nul": "\\u0000", "surrogate": "\\ud800", "low-surrogate": "\\udc00"}
 #: A valid surrogate pair: U+1F600, an emoji.
 EMOJI_ESCAPE = "\\ud83d\\ude00"
 EMOJI = "\U0001f600"
@@ -270,14 +270,14 @@ SETTING_PLACES = {
         ("variants", 0, "url"),
         ("split_url_config", "variants", 0, "url"),
         URL_REFUSED,
-        ("surrogate",),
+        ("surrogate", "low-surrogate"),
     ),
     "the-editor-url-query": (
         "visual_config",
         ("editor_url",),
         ("visual_config", "editor_url"),
         EDITOR_REFUSED,
-        ("surrogate",),
+        ("surrogate", "low-surrogate"),
     ),
 }
 SETTING_CASES = [

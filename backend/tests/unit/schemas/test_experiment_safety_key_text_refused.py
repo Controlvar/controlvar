@@ -32,7 +32,9 @@ from backend.app.schemas.visual import EDITOR_URL_REFUSED, VISUAL_CONFIG_ERROR
 pytestmark = [pytest.mark.unit, pytest.mark.regression]
 
 MARK = "zq2180mark"
-CHARACTERS = {"nul": "\x00", "surrogate": "\ud800"}
+#: NUL, and an unpaired high and low surrogate.
+CHARACTERS = {"nul": "\x00", "surrogate": "\ud800", "low-surrogate": "\udc00"}
+SURROGATES = ("surrogate", "low-surrogate")
 EMOJI = "\U0001f600"
 
 VARIANTS = [
@@ -368,9 +370,10 @@ def _url_body(case: str, text: str) -> Tuple[Type[BaseModel], Dict[str, Any]]:
     return model, body
 
 
+@pytest.mark.parametrize("character", SURROGATES)
 @pytest.mark.parametrize("case", URL_CASES)
-def test_a_url_refuses_an_unpaired_surrogate_with_its_own_message(case):
-    model, body = _url_body(case, MARK + CHARACTERS["surrogate"])
+def test_a_url_refuses_an_unpaired_surrogate_with_its_own_message(case, character):
+    model, body = _url_body(case, MARK + CHARACTERS[character])
     *_, loc, error_type, message = URL_CASES[case]
 
     with pytest.raises(ValidationError) as caught:
@@ -388,6 +391,41 @@ def test_a_url_with_an_emoji_or_without_the_character_is_accepted(case):
     for text in ("", EMOJI):
         model, body = _url_body(case, text)
         model.model_validate(body)
+
+
+#: A split URL's path and host refused an unpaired surrogate already, with the
+#: path's or the host's own message; the surrogate check now answers first.
+SPLIT_URL_PATH_OR_HOST = {
+    "path": "https://shop.example.com/a{}",
+    "host": "https://sh{}op.example.com/a",
+}
+
+
+@pytest.mark.parametrize("character", SURROGATES)
+@pytest.mark.parametrize("place", SPLIT_URL_PATH_OR_HOST)
+def test_a_surrogate_in_a_split_url_path_or_host_gets_the_forbidden_message(
+    place, character
+):
+    url = _filled(SPLIT_URL_PATH_OR_HOST[place], MARK + CHARACTERS[character])
+    body = {
+        **CREATE,
+        "split_url_config": {
+            "variants": [{**SPLIT_VARIANTS[0], "url": url}, SPLIT_VARIANTS[1]]
+        },
+    }
+
+    with pytest.raises(ValidationError) as caught:
+        ExperimentCreate.model_validate(body)
+
+    errors = caught.value.errors(include_url=False, include_input=False)
+    assert [(e["type"], e["loc"], e["msg"]) for e in errors] == [
+        (
+            SPLIT_URL_CONFIG_ERROR,
+            ("split_url_config", "variants", 0, "url"),
+            URL_HAS_FORBIDDEN_CHARACTER.format(name="Control"),
+        )
+    ]
+    assert MARK not in str(errors)
 
 
 def test_a_null_is_answered_as_before():
