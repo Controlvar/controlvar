@@ -60,8 +60,10 @@ FULL_MODEL_COUNT = 146
 
 #: ``(model, field)`` pairs that a ``mode="before"`` field validator covers.
 #: #2011 added 2: FlagEnvironmentUpdate's is_active and rollout_percentage.
-CORE_BEFORE_COUNT = 48
-FULL_BEFORE_COUNT = 49
+#: #2163 added 5: targeting_rules and tags on FeatureFlagCreate and
+#: FeatureFlagUpdate, and FlagEnvironmentUpdate's targeting_rules.
+CORE_BEFORE_COUNT = 53
+FULL_BEFORE_COUNT = 54
 
 PROBES = ({}, [], False, None)
 

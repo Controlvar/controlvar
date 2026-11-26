@@ -31,6 +31,10 @@ from backend.app.core.targeting_adapter import (
 )
 from backend.app.models.feature_flag import flag_status_name
 from backend.app.schemas.feature_flag import TARGETING_RULES_DESCRIPTION
+from backend.app.schemas.storable_text import (
+    contains_unstorable_text,
+    unstorable_text_message,
+)
 
 
 class FlagEnvironmentRead(BaseModel):
@@ -152,6 +156,15 @@ class FlagEnvironmentUpdate(BaseModel):
             raise PydanticCustomError(
                 "null_not_allowed", f"{info.field_name} cannot be null"
             )
+        return value
+
+    @field_validator("targeting_rules", mode="before")
+    @classmethod
+    def refuse_unstorable_text(cls, value: Any, info: ValidationInfo) -> Any:
+        """Refuse NUL and unpaired surrogates in the rules, as a flag update
+        does (#2163)."""
+        if contains_unstorable_text(value):
+            raise ValueError(unstorable_text_message(info.field_name))
         return value
 
     @field_validator("targeting_rules")
