@@ -24,7 +24,7 @@ from backend.app.core.targeting_adapter import (
     overflow_refusal,
     validate_segment_rules,
 )
-from backend.app.schemas.storable_text import StorableTextModel
+from backend.app.schemas.storable_text import StorableTextModel, storable_text_fields
 
 #: At most this many user ids in one add or remove request (#440).
 MAX_MEMBER_IDS_PER_REQUEST = 10_000
@@ -186,6 +186,18 @@ class SegmentUpdate(BaseModel):
         if value is None:
             return None
         return _checked_segment_rules(value)
+
+
+#: The fields of a segment that are stored as text.
+SEGMENT_TEXT_FIELDS = ("name", "description", "rules")
+
+#: The bodies of a segment's create and update: NUL or an unpaired surrogate
+#: in ``name``, ``description`` or ``rules``, which the database cannot store,
+#: answers 422 at the field before the rules are read (#2175). The preview
+#: takes ``SegmentCreate`` itself: it stores nothing, and answers such a body
+#: as before.
+SegmentCreateBody = Annotated[SegmentCreate, storable_text_fields(*SEGMENT_TEXT_FIELDS)]
+SegmentUpdateBody = Annotated[SegmentUpdate, storable_text_fields(*SEGMENT_TEXT_FIELDS)]
 
 
 class SegmentResponse(BaseModel):

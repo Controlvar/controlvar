@@ -1106,6 +1106,32 @@ by = [
 ]
 
 [[unit]]
+text = "POST /api/v1/segments, PUT /api/v1/segments/{segment_id} | #2175 | A name, description or rules holding NUL (U+0000) or an unpaired surrogate anywhere (in the rules, in a key or a value, nested or not) answers 422 at [\"body\", \"name\"], [\"body\", \"description\"] or [\"body\", \"rules\"], one error for each such field, with the msg Value error, name must not contain NUL or unpaired surrogate characters (or description, rules); nothing is saved and no audit entry is made. Where another check refused such a body first, as for a surrogate in a name, in a create's description or in a pattern, or for the character in a condition's attribute or operator, a logical operator, a semantic version or an unknown key, it answered that check's 422 and now answers this one; otherwise an update's name or description answered 404, and the rest 500, because the database cannot store such text. The message does not repeat the value sent. Authentication still answers 401 first; the 422 now comes before the 403 for a role that may not create or change segments and the 404 for an unknown segment, as every other body 422 on these operations does. A valid surrogate pair, such as an emoji, is saved as before, and every other body answers as before. POST /api/v1/segments/{segment_id}/preview takes the same body but saves nothing, and answers such a body as before. The OpenAPI document does not change."
+by = [
+    "test:backend/tests/integration/api/test_segment_text_refused.py::test_a_create_refuses_the_character_in_the_name_or_description",
+    "test:backend/tests/integration/api/test_segment_text_refused.py::test_a_create_refuses_the_character_in_the_rules",
+    "test:backend/tests/integration/api/test_segment_text_refused.py::test_an_update_refuses_the_character_in_the_name_or_description",
+    "test:backend/tests/integration/api/test_segment_text_refused.py::test_an_update_refuses_the_character_in_the_rules",
+    "test:backend/tests/integration/api/test_segment_text_refused.py::test_each_field_holding_the_character_is_refused_at_its_place",
+    "test:backend/tests/unit/schemas/test_segment_text_refused.py::test_the_name_and_description_are_refused_wherever_the_character_is",
+    "test:backend/tests/unit/schemas/test_segment_text_refused.py::test_the_rules_are_refused_wherever_the_character_is",
+    "test:backend/tests/unit/schemas/test_segment_text_refused.py::test_each_field_is_refused_at_its_place_and_nothing_else_is_read",
+    "test:backend/tests/integration/api/test_segment_text_refused.py::test_rules_another_check_refused_now_get_this_answer",
+    "test:backend/tests/integration/api/test_segment_text_refused.py::test_authentication_still_answers_401_first",
+    "test:backend/tests/integration/api/test_segment_text_refused.py::test_on_a_create_the_422_comes_before_the_403",
+    "test:backend/tests/integration/api/test_segment_text_refused.py::test_on_an_update_the_422_comes_before_the_403",
+    "test:backend/tests/integration/api/test_segment_text_refused.py::test_on_an_update_the_422_comes_before_the_404",
+    "test:backend/tests/integration/api/test_segment_text_refused.py::test_an_emoji_is_still_saved_as_sent",
+    "test:backend/tests/integration/api/test_segment_text_refused.py::test_a_segment_as_read_still_puts_back",
+    "test:backend/tests/unit/schemas/test_segment_text_refused.py::test_bodies_without_the_character_are_accepted_as_before",
+    "test:backend/tests/unit/schemas/test_segment_text_refused.py::test_other_values_are_left_to_the_model",
+    "test:backend/tests/integration/api/test_segment_text_refused.py::test_the_preview_still_answers_such_a_body_as_before",
+    "test:backend/tests/unit/schemas/test_segment_text_refused.py::test_the_preview_body_still_accepts_the_character",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
 text = "POST /api/v1/auth/sso/configs, PUT /api/v1/auth/sso/configs/{config_id} (full profile) | #1100 | Creating a SAML configuration, or an update that sets sso_url or provider_type, whose sso_url is not https answers 400 with SAML single sign-on URL must use https; check this SSO configuration's sso_url, where it answered 201 or 200; nothing is saved. An update that sends neither sso_url nor provider_type is not checked, so a configuration stored earlier can still be changed. The test environment is exempt, as it is for Okta. The OpenAPI document does not change."
 by = [
     "test:modules/backend/tests/integration/api/test_sso_api.py::TestASamlSsoUrlMustBeHttps::test_create_with_an_http_sso_url_is_refused",
