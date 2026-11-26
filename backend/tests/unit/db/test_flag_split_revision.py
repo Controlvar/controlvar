@@ -1,8 +1,8 @@
 """``t2012_flag_split``, read without a database (#2012).
 
 * Its id fits ``alembic_version.version_num`` (32 characters), its
-  ``down_revision`` is the literal ``t2011_flag_environments``, and the heads
-  are exactly this revision and, in a full tree, the modules head.
+  ``down_revision`` is the literal ``t2011_flag_environments``, and its only
+  child is ``t1934_metric_window`` (#1934).
 * The migration adds the models' column to both tables: ``jsonb``, nullable,
   no default.
 * The bound: ``_LOCK_TIMEOUT`` is ``1s``, written once and never a zero form,
@@ -74,11 +74,18 @@ def test_it_extends_t2011_flag_environments_and_fits_the_version_table():
     assert len(revision.revision) <= 32
 
 
-def test_the_heads_are_this_revision_and_in_a_full_tree_the_modules_head():
-    expected = {REVISION}
-    if (REPO_ROOT / "modules").is_dir():
-        expected.add("modules_0005_redshift")
-    assert set(_script().get_heads()) == expected
+def test_this_revision_is_extended_by_t1934_metric_window_and_nothing_else():
+    """``t1934_metric_window`` (#1934) is its only child, and the heads test
+    is the core head's now (``test_metric_window_revision.py``)."""
+    script = _script()
+    children = [
+        r.revision
+        for r in script.walk_revisions()
+        if r.down_revision == REVISION
+        or (isinstance(r.down_revision, tuple) and REVISION in r.down_revision)
+    ]
+    assert children == ["t1934_metric_window"]
+    assert REVISION not in script.get_heads()
 
 
 class _Recorder:

@@ -54,8 +54,10 @@ PREVIOUS_CORE_HEAD = "1ab99332f0ba"
 #: ``t449_identity_aliases`` (#449), whose downgrade drops
 #: ``identity_aliases``, and ``t2011_flag_environments`` (#2011), whose downgrade
 #: drops ``flag_environment_settings`` and ``api_keys.environment``:
-#: ``t2012_flag_split`` (#2012), whose downgrade drops two columns and no table.
-CORE_HEAD = "t2012_flag_split"
+#: ``t2012_flag_split`` (#2012), whose downgrade drops two columns and no table,
+#: and ``t1934_metric_window`` (#1934), whose downgrade drops one column and no
+#: table.
+CORE_HEAD = "t1934_metric_window"
 #: Tables that a later core revision's downgrade drops: a downgrade from the
 #: head to this test's target unapplies those revisions too.  ``d29a479daafe``
 #: (#445) drops ``holdout_population``; ``37dcb2969766`` (#440) drops

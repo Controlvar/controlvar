@@ -758,7 +758,7 @@ by = [
 ]
 
 [[unit]]
-text = "Past t2012_flag_split it first runs that revision's downgrade, which drops feature_flags.split and flag_environment_settings.split."
+text = "Past t2012_flag_split it also runs that revision's downgrade, which drops feature_flags.split and flag_environment_settings.split."
 by = [
     "test:backend/tests/unit/db/test_alembic_commands.py::test_past_1ab99332f0ba_its_rerun_downgrade_also_undoes_the_later_revisions",
     "test:backend/tests/integration/database/test_flag_split_migration.py::test_with_nothing_in_use_the_downgrade_drops_both_columns_and_nothing_else",
@@ -767,6 +767,13 @@ by = [
 [[unit]]
 text = "So it also stops while any flag has a split or a rule value: that downgrade refuses, names those flags, and changes nothing (see t2012_flag_split)."
 by = ["test:backend/tests/integration/database/test_flag_split_migration.py::test_the_downgrade_refuses_while_a_flag_is_in_use_and_changes_nothing"]
+
+[[unit]]
+text = "Past t1934_metric_window it first runs that revision's downgrade, which drops metrics.conversion_window_hours: every metric's conversion window (see t1934_metric_window)."
+by = [
+    "test:backend/tests/unit/db/test_alembic_commands.py::test_past_1ab99332f0ba_its_rerun_downgrade_also_undoes_the_later_revisions",
+    "test:backend/tests/integration/database/test_metric_window_migration.py::test_the_downgrade_drops_the_column_and_every_window_and_nothing_else",
+]
 
 [[unit]]
 text = "d29a479daafe records who each global holdout covers"
@@ -931,10 +938,19 @@ by = [
 
 [[unit]]
 text = "From a release that carries t2012_flag_split, it also runs that revision's downgrade, which drops feature_flags.split and flag_environment_settings.split and refuses while any flag has a split or a rule value (see t2012_flag_split)."
+count = 8
 by = [
     "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
     "test:backend/tests/integration/database/test_flag_split_migration.py::test_with_nothing_in_use_the_downgrade_drops_both_columns_and_nothing_else",
     "test:backend/tests/integration/database/test_flag_split_migration.py::test_the_downgrade_refuses_while_a_flag_is_in_use_and_changes_nothing",
+]
+
+[[unit]]
+text = "From a release that carries t1934_metric_window, it first runs that revision's downgrade, which drops metrics.conversion_window_hours, every metric's conversion window (see t1934_metric_window)."
+count = 9
+by = [
+    "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
+    "test:backend/tests/integration/database/test_metric_window_migration.py::test_the_downgrade_drops_the_column_and_every_window_and_nothing_else",
 ]
 
 [[unit]]
@@ -1054,15 +1070,6 @@ by = [
 ]
 
 [[unit]]
-text = "From a release that carries t2012_flag_split, it first runs that revision's downgrade, which drops feature_flags.split and flag_environment_settings.split and refuses while any flag has a split or a rule value (see t2012_flag_split)."
-count = 7
-by = [
-    "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
-    "test:backend/tests/integration/database/test_flag_split_migration.py::test_with_nothing_in_use_the_downgrade_drops_both_columns_and_nothing_else",
-    "test:backend/tests/integration/database/test_flag_split_migration.py::test_the_downgrade_refuses_while_a_flag_is_in_use_and_changes_nothing",
-]
-
-[[unit]]
 text = "85dd4796bb8b stores an event sent again with its event_id once"
 by = [
     "test:backend/tests/integration/database/test_event_dedup_keys_migration.py::test_m1_a_database_at_the_previous_release_gains_the_table",
@@ -1173,7 +1180,7 @@ by = [
 
 [[unit]]
 text = "On Helm, run the same command in an API pod with kubectl exec."
-count = 7
+count = 8
 by = ["test:backend/tests/unit/infrastructure/test_upgrade_on_start.py::test_an_api_pod_runs_the_commands_the_compose_api_container_runs"]
 
 [[unit]]
@@ -1498,12 +1505,13 @@ by = [
 ]
 
 [[unit]]
-text = "While it runs, an SDK request can wait up to 3 seconds at most: the upgrade waits at most 3 seconds in all for its locks, and SDK requests queue behind the api_keys lock, which t2011_flag_environments takes (at most 1.5 seconds to take) and the upgrade holds until it commits, through the wait of t2012_flag_split (at most 1 second); a request that reads feature_flags during that wait queues behind it too, for at most 1 second."
+text = "While it runs, an SDK request can wait up to 3.5 seconds at most: the upgrade waits at most 3.5 seconds in all for its locks, and SDK requests queue behind the api_keys lock, which t2011_flag_environments takes (at most 1.5 seconds to take) and the upgrade holds until it commits, through the waits of t2012_flag_split (at most 1 second) and t1934_metric_window (at most 0.5 seconds); a request that reads feature_flags during those waits queues behind them too, for at most 1.5 seconds."
 by = [
-    "test:backend/tests/unit/db/test_upgrade_lock_budget.py::test_0_49_0_starts_at_0_48_0s_released_heads_and_declares_three_seconds",
+    "test:backend/tests/unit/db/test_upgrade_lock_budget.py::test_0_49_0_starts_at_0_48_0s_released_heads_and_declares_three_and_a_half_seconds",
     "test:backend/tests/integration/database/test_flag_split_migration.py::test_a_session_reading_feature_flags_ends_the_upgrade_with_the_refusal",
     "test:backend/tests/integration/database/test_flag_environments_migration.py::test_a_request_holding_api_keys_ends_the_upgrade_with_the_refusal",
     "test:backend/tests/integration/database/test_flag_environments_migration.py::test_while_the_upgrade_waits_for_feature_flags_key_lookups_still_run",
+    "test:backend/tests/integration/database/test_metric_window_migration.py::test_an_sdk_request_waits_with_the_run_and_is_answered_once_it_ends",
 ]
 
 [[unit]]
@@ -1590,7 +1598,7 @@ by = [
 
 [[unit]]
 text = "Downgrading the database first, with this release still running, is the only order under Docker Compose and Helm (An Older Image Against a Newer Database)."
-count = 2
+count = 3
 by = [
     "test:backend/tests/integration/database/test_newer_database_rollback.py::test_an_older_release_refuses_a_database_a_newer_release_migrated",
     "test:backend/tests/integration/database/test_newer_database_rollback.py::test_after_the_newer_release_downgrades_the_database_the_older_one_starts",
@@ -1605,6 +1613,10 @@ text = "t2012_flag_split is undone first, so every flag read and flag change ans
 by = ["test:backend/tests/integration/database/test_flag_split_migration.py::test_this_release_answers_500_to_flag_evaluations_and_reads_on_the_downgraded_schema"]
 
 [[unit]]
+text = "t1934_metric_window is undone before it, so the experiment list, reading, creating, changing, pausing or cloning an experiment, and computing its results answer 500 too."
+by = ["test:backend/tests/integration/database/test_metric_window_migration.py::test_this_release_answers_500_where_it_reads_a_metric_on_the_downgraded_schema"]
+
+[[unit]]
 text = "Archiving or deleting a segment and listing a segment's experiments answer 500, as do the signed-in API key list, create and delete."
 by = [
     "test:backend/tests/integration/database/test_flag_split_migration.py::test_this_release_answers_500_to_flag_evaluations_and_reads_on_the_downgraded_schema",
@@ -1613,7 +1625,7 @@ by = [
 
 [[unit]]
 text = "Start the previous release straight after the downgrade."
-count = 2
+count = 3
 by = ["exempt:instruction"]
 
 [[unit]]
@@ -1660,7 +1672,7 @@ by = [
 text = "From 0.48.0, this upgrade waits at most 1 s for the lock it needs on feature_flags, behind any session that has read that table and not ended its transaction; t2011_flag_environments, in the same run, has the lock on api_keys by then, so new SDK requests wait with it."
 by = [
     "test:backend/tests/unit/db/test_flag_split_revision.py::test_the_bound_is_one_second_and_the_declared_one",
-    "test:backend/tests/unit/db/test_upgrade_lock_budget.py::test_0_49_0_starts_at_0_48_0s_released_heads_and_declares_three_seconds",
+    "test:backend/tests/unit/db/test_upgrade_lock_budget.py::test_0_49_0_starts_at_0_48_0s_released_heads_and_declares_three_and_a_half_seconds",
     "test:backend/tests/integration/database/test_flag_split_migration.py::test_the_upgrade_runs_exactly_its_statements",
     "test:backend/tests/integration/database/test_flag_split_migration.py::test_a_session_reading_feature_flags_ends_the_upgrade_with_the_refusal",
     "test:backend/tests/integration/database/test_flag_split_migration.py::test_a_deadlock_ends_the_upgrade_with_the_refusal_and_applies_nothing",
@@ -1734,7 +1746,7 @@ by = [
 ]
 
 [[unit]]
-text = "This revision's own down_revision is t2011_flag_environments; this undoes this revision alone:"
+text = "This revision's own down_revision is t2011_flag_environments; from a release that carries no later revision, this undoes this revision alone:"
 by = [
     "test:backend/tests/unit/db/test_flag_split_revision.py::test_it_extends_t2011_flag_environments_and_fits_the_version_table",
     "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
@@ -1768,6 +1780,109 @@ by = [
     "test:backend/tests/integration/database/test_flag_split_migration.py::test_this_release_answers_500_to_flag_evaluations_and_reads_on_the_downgraded_schema",
     "test:backend/tests/integration/database/test_flag_environments_migration.py::test_this_release_answers_500_to_a_production_key_on_the_downgraded_schema",
 ]
+
+[[unit]]
+text = "From a release that carries t1934_metric_window, the experiment list, reading, creating, changing, pausing or cloning an experiment, and computing its results answer 500 too."
+by = ["test:backend/tests/integration/database/test_metric_window_migration.py::test_this_release_answers_500_where_it_reads_a_metric_on_the_downgraded_schema"]
+
+[[unit]]
+text = "t1934_metric_window adds a conversion window to each metric"
+by = ["test:backend/tests/integration/database/test_metric_window_migration.py::test_an_earlier_database_gains_the_column_and_the_check_and_no_data"]
+
+[[unit]]
+text = "This revision adds the column conversion_window_hours (integer) to metrics, with the check check_metric_conversion_window: empty, or a whole number of hours from 1 to 8760 (365 days)."
+by = [
+    "test:backend/tests/integration/database/test_metric_window_migration.py::test_an_earlier_database_gains_the_column_and_the_check_and_no_data",
+    "test:backend/tests/integration/database/test_metric_window_migration.py::test_an_upgraded_database_and_a_bootstrapped_one_have_the_same_metrics_table",
+    "test:backend/tests/integration/database/test_metric_window_migration.py::test_the_check_stores_null_and_1_to_8760_and_refuses_the_rest",
+    "test:backend/tests/unit/db/test_metric_window_revision.py::test_the_migration_adds_the_models_column_and_check",
+]
+
+[[unit]]
+text = "Every metric's window is empty after the upgrade."
+by = [
+    "test:backend/tests/integration/database/test_metric_window_migration.py::test_an_earlier_database_gains_the_column_and_the_check_and_no_data",
+]
+
+[[unit]]
+text = "Nothing reads or sets a window yet."
+by = ["test:backend/tests/unit/services/test_metric_window_has_no_reader.py::test_only_the_model_and_the_revision_name_the_column"]
+
+[[unit]]
+text = "The previous release, 0.48.0, runs against this schema unchanged: a metric it creates has no window, and a window stored beside it stays."
+by = ["test:backend/tests/integration/database/test_metric_window_migration.py::test_the_previous_release_writes_and_reads_metrics_on_this_schema"]
+
+[[unit]]
+text = "From 0.48.0, this upgrade waits at most 0.5 s for the lock it needs on metrics, behind any session that has read that table and not ended its transaction, a results request among them; t2011_flag_environments and t2012_flag_split, in the same run, have their locks on api_keys and feature_flags by then, so new SDK requests wait with it."
+by = [
+    "test:backend/tests/unit/db/test_metric_window_revision.py::test_the_bound_is_half_a_second_and_the_declared_one",
+    "test:backend/tests/unit/db/test_upgrade_lock_budget.py::test_0_49_0_starts_at_0_48_0s_released_heads_and_declares_three_and_a_half_seconds",
+    "test:backend/tests/integration/database/test_metric_window_migration.py::test_the_upgrade_runs_exactly_its_statements",
+    "test:backend/tests/integration/database/test_metric_window_migration.py::test_a_session_reading_metrics_ends_the_upgrade_with_the_refusal",
+    "test:backend/tests/integration/database/test_metric_window_migration.py::test_an_sdk_request_waits_with_the_run_and_is_answered_once_it_ends",
+]
+
+[[unit]]
+text = "If the lock cannot be taken in time, or a deadlock is detected, the upgrade stops with nothing applied, no other revision of the same run included, and is simply run again."
+by = [
+    "test:backend/tests/integration/database/test_metric_window_migration.py::test_a_session_reading_metrics_ends_the_upgrade_with_the_refusal",
+    "test:backend/tests/integration/database/test_metric_window_migration.py::test_a_deadlock_ends_the_upgrade_with_the_refusal_and_applies_nothing",
+    "test:backend/tests/unit/db/test_metric_window_revision.py::test_a_lock_timeout_or_a_deadlock_refuses_with_that_directions_text",
+]
+
+[[unit]]
+text = "Neither direction can be emitted as SQL (--sql)."
+by = [
+    "test:backend/tests/integration/database/test_metric_window_migration.py::test_offline_mode_is_refused_in_both_directions_and_emits_nothing",
+    "test:backend/tests/unit/db/test_metric_window_revision.py::test_offline_mode_is_refused",
+]
+
+[[unit]]
+text = "The downgrade drops every window."
+by = ["test:backend/tests/integration/database/test_metric_window_migration.py::test_the_downgrade_drops_the_column_and_every_window_and_nothing_else"]
+
+[[unit]]
+text = "t1934_metric_window's downgrade drops metrics.conversion_window_hours, and the check with it: every metric's conversion window."
+by = [
+    "test:backend/tests/integration/database/test_metric_window_migration.py::test_the_downgrade_drops_the_column_and_every_window_and_nothing_else",
+    "test:backend/tests/integration/database/test_metric_window_migration.py::test_the_downgrade_runs_exactly_its_statements",
+    "test:backend/tests/unit/db/test_metric_window_revision.py::test_the_downgrade_drops_the_column_by_name_inside_one_bound",
+]
+
+[[unit]]
+text = "It does not refuse, and nothing restores the windows: an upgrade afterwards adds the column empty."
+by = [
+    "test:backend/tests/integration/database/test_metric_window_migration.py::test_the_downgrade_drops_the_column_and_every_window_and_nothing_else",
+    "test:backend/tests/integration/database/test_metric_window_migration.py::test_an_earlier_database_gains_the_column_and_the_check_and_no_data",
+]
+
+[[unit]]
+text = "It waits at most 0.5 s for metrics; a lock that cannot be taken within its bound, or a deadlock, stops it with nothing changed, and it is run again."
+by = [
+    "test:backend/tests/unit/db/test_metric_window_revision.py::test_the_bound_is_half_a_second_and_the_declared_one",
+    "test:backend/tests/integration/database/test_metric_window_migration.py::test_the_downgrade_runs_exactly_its_statements",
+    "test:backend/tests/integration/database/test_metric_window_migration.py::test_a_session_reading_metrics_ends_the_downgrade_with_its_refusal",
+    "test:backend/tests/unit/db/test_metric_window_revision.py::test_a_lock_timeout_or_a_deadlock_refuses_with_that_directions_text",
+]
+
+[[unit]]
+text = "This revision's own down_revision is t2012_flag_split; this undoes this revision alone:"
+by = [
+    "test:backend/tests/unit/db/test_metric_window_revision.py::test_it_extends_t2012_flag_split_and_fits_the_version_table",
+    "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
+]
+
+[[unit]]
+text = "A downgrade that also undoes t2012_flag_split is one run: while that revision refuses, nothing of either is changed, and the windows stay."
+by = ["test:backend/tests/integration/database/test_metric_window_migration.py::test_a_run_past_t2012_with_a_split_in_use_refuses_and_keeps_the_windows"]
+
+[[unit]]
+text = "Once the downgrade has committed, this release answers 500 to the experiment list, to reading, creating, changing, pausing or cloning an experiment, and to computing its results, until the API is rolled back."
+by = ["test:backend/tests/integration/database/test_metric_window_migration.py::test_this_release_answers_500_where_it_reads_a_metric_on_the_downgraded_schema"]
+
+[[unit]]
+text = "Assignment, event tracking, flag evaluation and the ruleset are still answered."
+by = ["test:backend/tests/integration/database/test_metric_window_migration.py::test_this_release_answers_500_where_it_reads_a_metric_on_the_downgraded_schema"]
 
 [[unit]]
 text = "Roll back to a specific revision:"
@@ -2747,3 +2862,12 @@ by = [
 [[unit]]
 text = "Downgrading below this revision after that release drops every activation time: every assignment and grant is inactive again, and stays inactive after upgrading; assign the roles and make the grants again."
 by = ["test:backend/tests/integration/database/test_modules_0004_transitions.py"]
+
+[[unit]]
+text = "GET /api/v1/results/{experiment_id} and GET /api/v1/experiments/{experiment_id}/results still serve an answer they cached before the downgrade until it expires (5 minutes for a running experiment, 24 hours otherwise), and with CACHE_ENABLED on (it is off by default) so does the experiment's daily-results, for an hour."
+by = [
+    "test:backend/tests/integration/database/test_metric_window_migration.py::test_this_release_answers_500_where_it_reads_a_metric_on_the_downgraded_schema",
+    "test:backend/tests/unit/api/test_results_stored_settings.py::test_results_are_kept_300_seconds_while_running_and_86400_otherwise",
+    "test:backend/tests/unit/api/test_experiment_cache_scope.py::test_an_entry_is_kept_for_an_hour",
+    "test:backend/tests/unit/api/test_experiment_cache_scope.py::test_the_cache_is_off_by_default",
+]

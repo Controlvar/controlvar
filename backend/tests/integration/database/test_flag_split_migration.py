@@ -49,7 +49,8 @@ Then:
 12. one downgrade from this revision to 0.48.0's head, met by an SDK request
     that has read ``api_keys`` and then reads ``feature_flags``, ends in success
     or in a refusal with nothing changed, and never hangs;
-13. ``alembic heads`` names exactly this revision and the modules head.
+13. ``alembic heads`` names exactly the core head (``t1934_metric_window``
+    since #1934, which extends this revision) and the modules head.
 """
 
 from __future__ import annotations
@@ -94,6 +95,9 @@ from backend.scripts.generate_ruleset_vectors import (
     VECTORS_PATH,
 )
 from backend.tests.integration.database import tree_profiles
+from backend.tests.integration.database.metric_window_column import (
+    without_the_metric_window,
+)
 from backend.tests.integration.database.split_read_path import without_the_read_path
 from backend.tests.integration.database.split_write_path import without_the_write_path
 from backend.tests.integration.database.test_flag_environments_migration import (
@@ -130,8 +134,9 @@ pytestmark = [pytest.mark.integration]
 REVISION = "t2012_flag_split"
 PREVIOUS_CORE_HEAD = "t2011_flag_environments"
 RELEASED_CORE_HEAD = "t449_identity_aliases"
-#: The core head of this tree.
-CORE_HEAD = "t2012_flag_split"
+#: The core head of this tree: ``t1934_metric_window`` (#1934), the revision
+#: after this one, whose downgrade drops ``metrics.conversion_window_hours``.
+CORE_HEAD = "t1934_metric_window"
 MODULES_HEAD = "modules_0005_redshift"
 
 PREVIOUS_ROWS = {
@@ -755,6 +760,9 @@ def _previous_release(profile: str, tmp_path) -> Path:
     app = tree / "backend" / "app"
     (revision_file,) = (app / "db" / "migrations" / "versions").glob(f"{REVISION}_*.py")
     revision_file.unlink()
+    # And the revision after this one, ``t1934_metric_window``, with its
+    # column: the previous release has neither.
+    without_the_metric_window(tree)
     for parts, additions in _ADDED.items():
         module = app.joinpath(*parts)
         source = module.read_text(encoding="utf-8")
