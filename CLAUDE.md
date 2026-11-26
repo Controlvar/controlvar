@@ -233,7 +233,7 @@ source venv/bin/activate && pytest -m "unit" -v
 #### Demo applications
 - `./demo/setup-local.sh` seeds demo data, starts the API (8000), dashboard (3100), the **ShopLab** storefront (`demo/shoplab`, 3200), **StreamPulse** (`demo/streampulse`, 3300) and their simulators. Pieces by hand: `python backend/scripts/seed_shoplab.py` / `seed_streampulse.py` (idempotent; `--reset`, `--no-history`; write `demo/<app>/.api_key` and `.env.local`), `cd demo/<app> && npm run dev`, `python demo/<app>/simulator/traffic.py --rate 3`, and for StreamPulse `python demo/streampulse/simulator/rollout_story.py --auto` (needs the backend running with `SAFETY_CHECK_INTERVAL_MINUTES=1 ROLLOUT_CHECK_INTERVAL_MINUTES=1`).
 - Both demo apps consume the React SDK from source (`sdk/react/src`) via a webpack/tsconfig alias; tests there mock the SDK.
-- A pull request touching `demo/**`, or a file the simulators' pytest session loads from outside it (the root `conftest.py` and `pyproject.toml`, the plugins that conftest names, `backend/requirements.txt`; the workflow's `paths:` is the list), runs `.github/workflows/demo-apps.yml`: both demo jest suites and the simulators' pytest suites, each through `scripts/rc_evidence.py --suite <demo-shoplab|demo-streampulse|demo-simulators>`, the command rc-evidence runs at a release tag. A change under `sdk/react/` alone does not run it: the jest suites mock the SDK, so they cannot test it. The Demo Apps check is not required (it is path-filtered), so a red run does not stop a Dependabot auto-merge. It adds no suite to core-build, only seven workflow-shape cases in its unit session (about 0.1 s).
+- A pull request touching `demo/**`, or a file the simulators' pytest session loads from outside it (the root `conftest.py` and `pyproject.toml`, the plugins that conftest names, `backend/requirements.txt`; the workflow's `paths:` is the list), runs `.github/workflows/demo-apps.yml`: both demo jest suites and the simulators' pytest suites, each through `scripts/rc_evidence.py --suite <demo-shoplab|demo-streampulse|demo-simulators>`, the command rc-evidence runs at a release tag. A change under `sdk/react/` alone does not run it: the jest suites mock the SDK, so they cannot test it. The Demo Apps check is not required (it is path-filtered), so a red run does not stop a Dependabot bump from merging. It adds no suite to core-build, only seven workflow-shape cases in its unit session (about 0.1 s).
 
 #### Feature-flag targeting and assignment eligibility
 - Flag `targeting_rules` are stored in the **dashboard shape** (`{"logical_operator","groups":[{"logical_operator","conditions":[{"attribute","operator","value"}]}]}`, operators like `equals`, `semver_gte`, `in`). `backend/app/core/targeting_adapter.py` normalises that (and the native `TargetingRules` shape) to the Enhanced Rules Engine; the legacy list shape (`[{"type": "context", ...}]`) still takes the old path. `expand_context()` aliases attributes (`country` ↔ `user.country`, nested dicts flatten to dotted keys). Use these helpers anywhere rules are evaluated; do not add a fourth format.
@@ -1205,13 +1205,14 @@ times. Each time the response was to reduce the *rate* -- major ignores,
 staggered schedules, lower `open-pull-requests-limit` (#280 did all three).
 The queue came back within a day, every time.
 
-The cause was never volume. **Nothing merged them.** There was no auto-merge
-workflow and `allow_auto_merge` was `false` on the repository, so every bump
-was merged by a human who happened to look. With 19 ecosystems producing
-updates weekly or monthly, the queue grows monotonically between clean-ups by
-construction. Closing them by hand resets the counter and changes nothing.
+The cause was never volume. **Nothing merges them without a person.** The
+auto-merge workflow is disabled (`disabled_manually`, since 2026-10-15) and
+`allow_auto_merge` is `false` on the repository, so every bump is merged by a
+human who happens to look. With 19 ecosystems producing updates weekly or
+monthly, the queue grows monotonically between clean-ups by construction.
+Closing them by hand resets the counter and changes nothing.
 
-`.github/workflows/dependabot-automerge.yml` closes the loop:
+Enabled, `.github/workflows/dependabot-automerge.yml` would close the loop:
 
 - **patch and minor, any ecosystem** -- merges itself once the gate is green
 - **github-actions, including majors** -- also merges itself, which is why
@@ -1222,7 +1223,9 @@ construction. Closing them by hand resets the counter and changes nothing.
   `dependabot.yml` ignores them anyway
 
 `gh pr merge --auto` bypasses nothing. Branch protection still requires all 20
-checks; a failing bump stays open and red, which is the signal you want.
+checks; a failing bump stays open and red, which is the signal you want. Until
+the workflow is enabled again, none of this happens: a green bump waits for a
+human merge.
 
 So before reaching for the limits again: **if the queue is growing, ask what
 is supposed to drain it.** A rate limit on an undrained queue only changes how
