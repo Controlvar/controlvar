@@ -506,6 +506,15 @@ def test_v54_a_goal_event_name_is_lower_case_and_never_an_exposure_type(event_na
     assert visual.EVENT_NAME_REFUSED in [e["msg"] for e in errors], errors
 
 
+@pytest.mark.regression
+@pytest.mark.parametrize("event_name", ["signup\n", "a" * 100 + "\n"])
+def test_a_goal_event_name_that_ends_in_a_line_break_is_refused(event_name):
+    """``$`` matches before one final newline, so ``match`` accepted these
+    (#1836); the name is stored and sent as an event type."""
+    errors = _config_errors(_config(goals=[_goal(event_name)]))
+    assert visual.EVENT_NAME_REFUSED in [e["msg"] for e in errors], errors
+
+
 @pytest.mark.parametrize("event_type", event_matching.EXPOSURE_EVENT_TYPES)
 def test_v54_a_goal_is_never_one_of_the_analysis_exposure_types(event_type):
     errors = _config_errors(_config(goals=[_goal(event_type)]))

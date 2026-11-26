@@ -12,6 +12,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 # Semantic version 2.0.0, from semver.org. A module constant, so the regex
 # call-site test (backend/tests/unit/core/test_regex_call_sites.py) accepts it.
+# Not tightened to ``\Z`` or ``fullmatch``: that would move how stored rules
+# are answered (#1836). A saved version followed by a newline is refused by
+# ``_unreadable_value`` in ``backend/app/core/targeting_adapter.py`` instead.
 _SEMVER_PATTERN = r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$"
 
 
