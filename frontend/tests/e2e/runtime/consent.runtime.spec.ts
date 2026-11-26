@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { BrowserContext, Page } from "@playwright/test";
 import { expect, test } from "./runtime.fixture";
 import { EDITOR, html, newTicket, routeSite, SITE, snippet, storageKeys, type Site } from "./editor";
-import { answering, calls, experiment, previewAnswer, shown, sitePage, VISUAL_PATH } from "./visual";
+import { answering, BATCH_PATH, calls, experiment, previewAnswer, shown, sitePage, VISUAL_PATH } from "./visual";
 
 /**
  * consent() and revokeConsent() on a real page (#1545). A tag with
@@ -28,6 +28,8 @@ const WRITTEN = KEYS.filter((key) => key.written).map((key) => `${AREA[key.stora
 const BODY = `<h1 id="t">Original</h1><a id="next" href="/a/b/other">Next</a>`;
 const HEADLINE = [{ op: "set_text", selector: "#t", text: "Changed" }];
 const TOKEN = "p".repeat(40) + "abc";
+/** A page_view goal on every page of the site. */
+const PAGE_GOAL = { event_name: "page_any", kind: "page_view", page: { match: "prefix", url: `${SITE}/` } };
 
 type Visual = { consent(): unknown; revokeConsent(): unknown; track(event: string, options?: unknown): unknown };
 
@@ -64,13 +66,14 @@ test.describe("consent()", () => {
     visualPackage,
   }) => {
     let refuse = false;
-    const ok = answering({ experiments: [experiment("headline", HEADLINE)], preview: previewAnswer("headline", HEADLINE) });
+    const ok = answering({ experiments: [experiment("headline", HEADLINE, { goals: [PAGE_GOAL] })], preview: previewAnswer("headline", HEADLINE) });
     const site = await routeSite(page, visualPackage, {
       pages: {
         "/a/b/page": sitePage(BODY, { "data-require-consent": true }),
         "/a/b/editor": sitePage(BODY, { "data-require-consent": true, "data-editor-origin": EDITOR }),
       },
-      answer: (call) => (refuse && call.path === VISUAL_PATH ? { status: 500 } : ok(call)),
+      // The goal's event is not accepted, so it stays in the outbox.
+      answer: (call) => (refuse && call.path === VISUAL_PATH ? { status: 500 } : call.path === BATCH_PATH ? { status: 503 } : ok(call)),
     });
     const seen = new Set<string>();
 
@@ -81,10 +84,13 @@ test.describe("consent()", () => {
     expect(await controlvarKeys(page, context), "storage before consent").toEqual([]);
     await visual(page, "consent");
     await expect(page.locator("#t")).toHaveText("Changed");
+    await expect.poll(() => calls(site, BATCH_PATH).length, { message: "the goal's event" }).toBe(1);
     const ordinary = await controlvarKeys(page, context);
     expect(ordinary, "after consent").toEqual([
       "cookie:controlvar_uid",
       "local:controlvar_assigned",
+      "local:controlvar_goals",
+      "local:controlvar_outbox",
       "local:controlvar_pages",
       "local:controlvar_seen",
       "local:controlvar_visit",

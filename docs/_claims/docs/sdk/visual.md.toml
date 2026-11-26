@@ -351,6 +351,14 @@ text = "controlvar_assigned | localStorage | The keys of the experiments this vi
 by = ["mechanism:visual-stored-keys"]
 
 [[unit]]
+text = "controlvar_goals | localStorage | The goals of the experiments this visitor was assigned to (each goal's event name, kind, selector and page rule), so a goal on another page counts. | 30 days per experiment"
+by = ["mechanism:visual-stored-keys"]
+
+[[unit]]
+text = "controlvar_outbox | localStorage | Goal events the API has not yet accepted, each with the time it was made, so a later page sends them again. | until the API accepts or refuses it; at most 50 events, each at most 24 hours"
+by = ["mechanism:visual-stored-keys"]
+
+[[unit]]
 text = "controlvar_pages | localStorage | The page rules of the running visual experiments on this site (match and path), so a page none of them covers makes no call. | 60 seconds"
 by = ["mechanism:visual-stored-keys"]
 

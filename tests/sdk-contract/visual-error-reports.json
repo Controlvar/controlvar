@@ -28,15 +28,17 @@
     },
     {
       "error_type": "goal_not_found",
-      "sent": false,
-      "metadata_keys": null,
-      "index": null
+      "sent": true,
+      "metadata_keys": ["index"],
+      "index": "The click goal's position in the experiment's goals, from 0.",
+      "means": "On a click on the goal's page, the goal's selector matched no element, so no click counts for it there. Sent once per goal per page view."
     },
     {
       "error_type": "goal_ambiguous",
-      "sent": false,
-      "metadata_keys": null,
-      "index": null
+      "sent": true,
+      "metadata_keys": ["index"],
+      "index": "The click goal's position in the experiment's goals, from 0.",
+      "means": "On a click on the goal's page, the goal's selector matched more than one element, so no click counts for it there. Sent once per goal per page view."
     }
   ]
 }

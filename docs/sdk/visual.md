@@ -91,6 +91,8 @@ In a preview tab and on an editor link it sends no detail and stores no visit.
 | `controlvar_visit` | localStorage | The visit's start and last page view, and its first page's campaign values and landing path when the tag collects them, cleaned. | replaced when a visit starts after 30 minutes without a page view; revokeConsent() deletes it |
 | `controlvar_seen` | localStorage | When this browser was first seen (milliseconds since 1970), to tell a new visitor from a returning one. | until deleted |
 | `controlvar_assigned` | localStorage | The keys of the experiments this visitor was assigned to, each with the time it was last seen, so track() can name them. | 30 days per experiment |
+| `controlvar_goals` | localStorage | The goals of the experiments this visitor was assigned to (each goal's event name, kind, selector and page rule), so a goal on another page counts. | 30 days per experiment |
+| `controlvar_outbox` | localStorage | Goal events the API has not yet accepted, each with the time it was made, so a later page sends them again. | until the API accepts or refuses it; at most 50 events, each at most 24 hours |
 | `controlvar_pages` | localStorage | The page rules of the running visual experiments on this site (match and path), so a page none of them covers makes no call. | 60 seconds |
 | `controlvar_backoff` | sessionStorage | The time until which the script sends nothing, set after a refused or failed call. | 5 minutes, in this tab |
 | `controlvar_preview` | sessionStorage | A preview link's token, so the preview lasts for the tab. | this tab |

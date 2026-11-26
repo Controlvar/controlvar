@@ -12,9 +12,9 @@ export const KEYS = {
   seen: "controlvar_seen",
   /** localStorage: the experiments this visitor was assigned to, and when. */
   assigned: "controlvar_assigned",
-  /** localStorage: the goals counted for this visitor. */
+  /** localStorage: the goals of the experiments this visitor was assigned to (goals.ts). */
   goals: "controlvar_goals",
-  /** localStorage: goal events not yet delivered. */
+  /** localStorage: goal events not yet delivered (outbox.ts). */
   outbox: "controlvar_outbox",
   /** localStorage: the page rules of this site, for 60 seconds. */
   pages: "controlvar_pages",
@@ -35,6 +35,8 @@ export const WRITTEN = [
   KEYS.visit,
   KEYS.seen,
   KEYS.assigned,
+  KEYS.goals,
+  KEYS.outbox,
   KEYS.pages,
   KEYS.backoff,
   KEYS.preview,

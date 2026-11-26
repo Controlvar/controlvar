@@ -24,7 +24,18 @@
  * The call for the page also carries the website details data-collect turns
  * on (details.ts, visit.ts), merged into its `context` after data-attributes.
  * They are read on each page view the script follows, and never in a
- * preview tab; no other call carries them.
+ * preview tab; besides that call, only goal events carry them.
+ *
+ * Goals (goals.ts): the answer names each assigned experiment's goals, which
+ * the script keeps for 30 days. Each page load, and each path change it
+ * follows, is one page view with its own random id. A page_view goal whose
+ * page this is records one event per page view; a click goal records one
+ * when a click a person makes (never one a script makes) lands on the one
+ * element its selector matches, or inside it, at most once per page view.
+ * One click listener on the document, in the capture phase, added once,
+ * sees every click. A goal whose selector matches no element or several on
+ * a click is reported once per page view. Events go to the outbox
+ * (outbox.ts), which sends them; nothing of this runs in a preview tab.
  *
  * Nothing is read from the visitor's cookie or the browser, stored or sent
  * unless `allowed()`: consent given (or not needed) and not revoked. An answer
@@ -35,10 +46,12 @@ import { answerBound, type Bound } from "./bound";
 import type { Captures } from "./captures";
 import type { Config } from "./config";
 import { detailsFor, pageDetails, readPageSignals } from "./details";
+import { answerGoals, clickVerdict, goalPageMatches, keepGoals, readGoals, type Goal, type Named } from "./goals";
 import { hidePage, type Hider } from "./hide";
 import { KEYS } from "./keys";
+import { createOutbox, type GoalEvent } from "./outbox";
 import { createOwnUi, type OwnUi } from "./own-ui";
-import { keepRules, readAnswerRules, ruleMatches, rulesSkip } from "./pages";
+import { keepRules, readAnswerRules, ruleMatches, rulesSkip, type KeptRules } from "./pages";
 import {
   endPreview,
   EXIT_PREVIEW,
@@ -56,7 +69,7 @@ import { FORMAT_VERSION } from "./rules";
 import { backoffActive, startBackoff, type Send } from "./send";
 import { normalizeHost } from "./url";
 import { validateChanges } from "./validate";
-import { visitorId } from "./visitor";
+import { newId, visitorId } from "./visitor";
 import { touchVisit } from "./visit";
 
 export const VISUAL_PATH = "/api/v1/tracking/visual";
@@ -122,10 +135,25 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/** One page view of an ordinary page: its id, its page, and the goals it counted and reported. */
+interface PageView {
+  id: string;
+  host: string;
+  path: string;
+  /** The website details of the page view, which its goal events carry. */
+  details: Record<string, string>;
+  counted: Set<string>;
+  reported: Set<string>;
+}
+
 export function createRuntime(env: RuntimeEnv): Runtime {
   const { window: win, captures, config, send } = env;
   const reporter = createReporter(send);
+  const outbox = createOutbox({ local: env.local, now: env.now, send, path: BATCH_PATH, allowed: env.allowed });
   const written = new WeakSet<Element>();
+  /** The current page view; null before the first, and in a preview tab. */
+  let view: PageView | null = null;
+  let listening = false;
   let started = false;
   /** The changes applied for the current path. */
   let current: Applier | null = null;
@@ -199,18 +227,108 @@ export function createRuntime(env: RuntimeEnv): Runtime {
     const experiments = Array.isArray(body.experiments) ? body.experiments.slice(0, MAX_EXPERIMENTS) : [];
     const applier = createApplier({ window: win, captures, reporter, written, owns });
     const assigned: string[] = [];
+    const named: Named[] = [];
     for (const experiment of experiments) {
-      if (!isRecord(experiment) || experiment.assigned !== true) continue;
+      if (!isRecord(experiment)) continue;
       const key = experiment.experiment_key;
       if (typeof key !== "string" || key.length === 0) continue;
+      if (experiment.assigned !== true) {
+        named.push({ key, goals: null });
+        continue;
+      }
       assigned.push(key);
+      named.push({ key, goals: answerGoals(experiment.goals) });
       if (experiment.changes === null || experiment.changes === undefined) continue;
       const verdict = validateChanges(experiment.changes);
       if (!verdict.ok) reporter.notApplied(key, null, verdict.reason);
       else applier.add(key, verdict.changes);
     }
     remember(assigned);
+    try {
+      keepAnswerGoals(named, rules);
+    } catch {
+      // The goals stay as they were.
+    }
     apply(applier, hider, which);
+  }
+
+  /** Keeps the answer's goals for the page it answered, then counts this page view's page_view goals. */
+  function keepAnswerGoals(named: Named[], rules: KeptRules | null): void {
+    if (view === null) return;
+    const page = view;
+    const covering = rules !== null && rules.host === page.host ? rules.rules.filter((rule) => ruleMatches(page.path, rule)) : [];
+    keepGoals(env.local(), env.now(), named, covering, page.path, env.allowed);
+    countPageViews();
+  }
+
+  /** The kept goals, each with its experiment's key and its position there, that apply to the current page view. */
+  function goalsHere(kind: Goal["kind"]): { key: string; index: number; goal: Goal }[] {
+    const page = view;
+    if (page === null || preview !== null || !env.allowed()) return [];
+    const here: { key: string; index: number; goal: Goal }[] = [];
+    readGoals(env.local(), env.now()).forEach((entry, key) => {
+      entry.goals.forEach((goal, index) => {
+        if (goal.kind === kind && goalPageMatches(goal.page, page.host, page.path)) here.push({ key, index, goal });
+      });
+    });
+    return here;
+  }
+
+  /** A goal's event for this page view; null when the page view has counted it already. */
+  function goalEvent(page: PageView, key: string, goal: Goal): GoalEvent | null {
+    const name = `${key}\n${goal.event_name}`;
+    if (page.counted.has(name)) return null;
+    page.counted.add(name);
+    const event: GoalEvent = {
+      event_type: goal.event_name,
+      user_id: visitorId(win, config, captures),
+      experiment_key: key,
+      event_id: `${page.id}:${goal.event_name}`,
+    };
+    if (Object.keys(page.details).length > 0) event.metadata = { ...page.details };
+    return event;
+  }
+
+  /** Records this page view's page_view goals, each once. */
+  function countPageViews(): void {
+    const page = view;
+    if (page === null) return;
+    const events: GoalEvent[] = [];
+    for (const { key, goal } of goalsHere("page_view")) {
+      const event = goalEvent(page, key, goal);
+      if (event !== null) events.push(event);
+    }
+    outbox.add(events);
+  }
+
+  /** The one click listener: a click a person makes counts for each click goal of this page view whose element it lands on. */
+  function onClick(event: Event): void {
+    try {
+      if (event.isTrusted !== true) return;
+      const page = view;
+      if (page === null) return;
+      const events: GoalEvent[] = [];
+      for (const { key, index, goal } of goalsHere("click")) {
+        if (goal.kind !== "click" || page.counted.has(`${key}\n${goal.event_name}`)) continue;
+        const verdict = clickVerdict(win.document, goal.selector, event.target);
+        if (verdict === "counted") {
+          const made = goalEvent(page, key, goal);
+          if (made !== null) events.push(made);
+        } else if (verdict !== "elsewhere" && !page.reported.has(`${key}\n${goal.event_name}`)) {
+          page.reported.add(`${key}\n${goal.event_name}`);
+          reporter.goalMissed(key, index, verdict === "not_found" ? "goal_not_found" : "goal_ambiguous");
+        }
+      }
+      outbox.add(events);
+    } catch {
+      // The page's click goes on as it would without the script.
+    }
+  }
+
+  function listen(): void {
+    if (listening) return;
+    listening = true;
+    win.document.addEventListener("click", onClick, true);
   }
 
   /**
@@ -301,6 +419,12 @@ export function createRuntime(env: RuntimeEnv): Runtime {
       } catch {
         details = {};
       }
+      try {
+        view = { id: newId(captures), host: location.host, path, details, counted: new Set(), reported: new Set() };
+        countPageViews();
+      } catch {
+        // This page view counts no goal.
+      }
     }
     if (skip || location.host.length > MAX_HOST_LENGTH || path.length > MAX_PATH_LENGTH) return;
     const hider = hide ? hidePage(win.document, captures, config.timeoutMs) : NO_HIDE;
@@ -382,10 +506,21 @@ export function createRuntime(env: RuntimeEnv): Runtime {
       } catch {
         // A page whose history cannot be wrapped still gets this page's changes.
       }
+      try {
+        listen();
+      } catch {
+        // No click goal counts on this page.
+      }
       // The page is hidden only while nothing of it can have been painted (its
       // <body> does not exist yet); a later start, such as a consent() after the
       // page has rendered, applies the changes in view.
       evaluate(win.document.body === null);
+      // Goal events kept from an earlier page; a preview tab sends none.
+      try {
+        if (preview === null) outbox.flush();
+      } catch {
+        // They are sent with the next event, or from the next page.
+      }
     },
     track(event, options) {
       if (typeof event !== "string" || event.length < 1 || event.length > MAX_EVENT_LENGTH) {
