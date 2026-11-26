@@ -1164,11 +1164,15 @@ creating, changing, pausing or cloning an experiment, and computing its results 
 This revision adds the column `conversion_window_hours` (`integer`) to
 `metrics`, with the check `check_metric_conversion_window`: empty, or a whole
 number of hours from 1 to 8760 (365 days). Every metric's window is empty
-after the upgrade. Results count a metric's events only within its window;
-nothing sets a window yet.
+after the upgrade. Results count a metric's events only within its window,
+which create and a draft's `PUT` set
+([A metric's conversion window](../api/endpoints.md#a-metrics-conversion-window-beta)).
 
 The previous release, 0.48.0, runs against this schema unchanged: a metric it
-creates has no window, and a window stored beside it stays.
+creates has no window. During the rolling upgrade, and after an API-only
+rollback, a draft saved in an older dashboard, or a PUT through an older API
+replica, clears the window: a `PUT` replaces the metrics, and the older
+release does not send or store the field.
 
 From 0.48.0, this upgrade waits at most 0.5 s for the lock it needs on
 `metrics`, behind any session that has read that table and not ended its

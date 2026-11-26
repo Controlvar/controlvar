@@ -103,6 +103,12 @@ export interface MetricCarried {
    */
   expected_effect: number | null;
   event_value_path: string | null;
+  /**
+   * The metric's conversion window in hours (beta, #1934), as stored. No
+   * editor shows it yet; carried so a save does not clear it, since a PUT
+   * that leaves it out removes the window.
+   */
+  conversion_window_hours: number | null;
 }
 
 export interface ExperimentFormState {
@@ -733,6 +739,7 @@ function metricFromStored(metric: ExperimentMetric, holdsPlannedEffect: boolean)
       minimum_sample_size: metric.minimum_sample_size ?? null,
       expected_effect: holdsPlannedEffect ? null : (metric.expected_effect ?? null),
       event_value_path: metric.event_value_path ?? null,
+      conversion_window_hours: metric.conversion_window_hours ?? null,
     },
   };
 }
@@ -796,6 +803,8 @@ export function buildDesignPayload(state: ExperimentFormState): ExperimentDesign
       expected_effect: takesPlan ? (state.designPlannedEffect ?? null) : (carried?.expected_effect ?? null),
       event_value_path: carried?.event_value_path ?? null,
       lower_is_better: m.lower_is_better === true,
+      // Every save carries it: a PUT that leaves it out clears the stored window.
+      conversion_window_hours: carried?.conversion_window_hours ?? null,
     };
     if (carried?.aggregation_method != null) metric.aggregation_method = carried.aggregation_method;
     if (carried?.minimum_sample_size != null) metric.minimum_sample_size = carried.minimum_sample_size;

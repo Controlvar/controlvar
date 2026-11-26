@@ -242,12 +242,49 @@ text = "Units seen in more than one variant are left out and counted in the diag
 by = ["test:modules/backend/tests/unit/warehouse/test_grain_duckdb.py"]
 
 [[unit]]
-text = "/results counts converting users with no bound on the exposure time and no conversion window."
-by = ["test:modules/backend/tests/unit/warehouse/test_limits_roles_and_counting.py::test_results_counts_a_conversion_whatever_its_time"]
+text = "Without a conversion window of its own, a metric in /results counts converting users with no bound on the exposure time and no conversion window."
+by = [
+    "test:modules/backend/tests/unit/warehouse/test_limits_roles_and_counting.py::test_results_counts_a_conversion_whatever_its_time",
+    "test:backend/tests/integration/api/test_metric_window_results.py::test_two_metrics_on_one_event_keep_their_own_windows",
+]
 
 [[unit]]
-text = "So the two agree only on data with no event before a unit's exposure, no unit in two variants and no event outside the window; otherwise the warehouse numbers are the stricter ones."
-by = ["exempt:baseline"]
+text = "With one (conversion_window_hours, beta, the same name, unit and range), it counts each user's events from their assignment for that many hours, end excluded (Conversion window)."
+by = [
+    "test:backend/tests/integration/api/test_metric_window_results.py::test_the_window_counts_exactly_these_users",
+    "test:backend/tests/unit/services/test_metric_window_writes.py::test_the_bound_is_the_core_model_s",
+    "test:modules/backend/tests/integration/warehouse/test_window_parity.py::test_results_9_warehouse_8_and_6",
+]
+
+[[unit]]
+text = "Each setting is its own: setting a window on one does not set it on the other."
+by = ["test:modules/backend/tests/integration/warehouse/test_window_parity.py::test_results_9_warehouse_8_and_6"]
+
+[[unit]]
+text = "The two then agree when the hours are equal, the assignment source's first exposure of each unit is the assignment /results stores, no unit is in two variants, and the analysis window covers the whole run."
+by = [
+    "test:modules/backend/tests/integration/warehouse/test_window_parity.py::test_without_u07_both_count_8",
+    "test:modules/backend/tests/integration/warehouse/test_window_parity.py::test_each_stated_difference",
+]
+
+[[unit]]
+text = "They still differ in two ways: /results starts a window at the start of the second the user was assigned in, so an event earlier in that second counts there and not in the warehouse, and it counts an event only for the variant it was received in, which a warehouse table does not record."
+by = [
+    "test:modules/backend/tests/integration/warehouse/test_window_parity.py::test_each_stated_difference",
+    "test:modules/backend/tests/integration/warehouse/test_window_parity.py::test_the_tag_is_the_whole_difference_of_the_other_tags",
+]
+
+[[unit]]
+text = "With a window, users assigned within the window before the experiment stops never get a full window, and this cannot change after it ends."
+by = [
+    "test:backend/tests/integration/api/test_metric_window_open_users.py::test_paused_longer_than_the_window_then_completed",
+    "test:backend/tests/integration/api/test_metric_window_open_users.py::test_the_open_windows_of_each_status",
+    "test:backend/tests/integration/api/test_tracking_inactive_experiment_events.py::test_converting_users_per_variant_across_pause_resume_and_complete",
+]
+
+[[unit]]
+text = "The number is not the N-day conversion rate: a change that makes people convert later can show the opposite sign, even when no window does not."
+by = ["test:backend/tests/integration/api/test_metric_window_writes.py::test_a_change_that_makes_people_convert_later_can_show_the_opposite_sign"]
 
 [[unit]]
 text = "Setting up Snowflake"

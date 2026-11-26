@@ -386,6 +386,11 @@ this one refuses, that one's change is rolled back with it.
 
 ### Rolling back past metric windows
 
+Rolling the API back without the downgrade keeps every stored window, but a
+draft saved in an older dashboard, or a PUT through an older API replica,
+clears the window: a `PUT` replaces the metrics, and the older release does
+not send or store the field.
+
 Downgrading below `t1934_metric_window` drops `metrics.conversion_window_hours`,
 every metric's conversion window, and the check on it. It does not refuse, and
 nothing restores the windows: an upgrade afterwards adds the column empty.

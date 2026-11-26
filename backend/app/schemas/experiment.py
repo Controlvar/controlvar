@@ -16,6 +16,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    StrictInt,
     ValidationError,
     ValidationInfo,
     field_validator,
@@ -28,6 +29,7 @@ from backend.app.core.targeting_adapter import (
     TargetingRulesError,
     validate_experiment_targeting,
 )
+from backend.app.models.experiment import MAX_CONVERSION_WINDOW_HOURS
 from backend.app.schemas.balance_within import BalanceWithin
 from backend.app.schemas.bandit import OptimizationType
 from backend.app.schemas.bayesian import BayesianConfig
@@ -126,6 +128,20 @@ EVENT_VALUE_PATH_DESCRIPTION = (
     "metric adds up each event's top-level value; a count or conversion "
     "metric does not read value, and values inside an event's properties are "
     "never read.  Stored and returned as sent."
+)
+#: A metric's conversion window (#1934), on the request (``MetricBase``) and
+#: the response (``MetricResponse``).
+CONVERSION_WINDOW_DESCRIPTION = (
+    "Beta.  The metric's conversion window, in hours: a whole number from 1 "
+    f"to {MAX_CONVERSION_WINDOW_HOURS} (365 days).  With one, the metric "
+    "counts a user's events only within that many elapsed hours from their "
+    "assignment: from the start of the second they were assigned in, up to "
+    "and not including the assignment time plus the window, by each event's "
+    "timestamp (the time it was received when it was sent without one).  "
+    "null, or left out, means no window: every event the metric matches "
+    "counts.  Any metric type.  It cannot be changed once the experiment "
+    "leaves draft; a PUT that sends metrics replaces them, so a metric sent "
+    "without it no longer has one."
 )
 
 
@@ -296,6 +312,14 @@ class MetricBase(BaseModel):
         description=EVENT_VALUE_PATH_DESCRIPTION,
     )
     lower_is_better: bool = Field(False, description="Whether lower values are better")
+    # Strict: "24", 24.0 and true are refused, as the warehouse analysis's
+    # field of the same name refuses them, rather than read as 24 or 1.
+    conversion_window_hours: Optional[StrictInt] = Field(
+        None,
+        ge=1,
+        le=MAX_CONVERSION_WINDOW_HOURS,
+        description=CONVERSION_WINDOW_DESCRIPTION,
+    )
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -1113,6 +1137,9 @@ class MetricResponse(BaseModel):
         None, description=EVENT_VALUE_PATH_DESCRIPTION
     )
     lower_is_better: bool
+    conversion_window_hours: Optional[int] = Field(
+        None, description=CONVERSION_WINDOW_DESCRIPTION
+    )
     experiment_id: UUID4
     created_at: datetime
     updated_at: datetime

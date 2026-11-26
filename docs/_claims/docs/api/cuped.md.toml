@@ -42,8 +42,12 @@ text = "How It Works"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "For each conversion metric, the outcome Y of a user is 1 if they converted after assignment (counted exactly as GET /results/{id} counts them) and 0 otherwise."
-by = ["test:backend/tests/integration/api/test_cuped_results_api.py::test_s6_sizes_and_conversions_are_the_results_routes"]
+text = "For each conversion metric, the outcome Y of a user is 1 if they converted after assignment (counted exactly as GET /results/{id} counts them, so within the metric's conversion window when it has one) and 0 otherwise."
+by = [
+    "test:backend/tests/integration/api/test_cuped_results_api.py::test_s6_sizes_and_conversions_are_the_results_routes",
+    "test:backend/tests/integration/api/test_metric_window_results.py::test_every_view_counts_the_window",
+    "test:backend/tests/integration/api/test_metric_window_writes.py::test_cuped_history_takes_no_window",
+]
 
 [[unit]]
 text = "The covariate X is 1 if the same user sent the metric's event in the covariate_lookback_days before their assignment, and 0 if they did not."
@@ -102,8 +106,11 @@ by = [
 ]
 
 [[unit]]
-text = "it happened in [assigned_at − covariate_lookback_days, assigned_at): an event at the moment of assignment is not history;"
-by = ["test:backend/tests/integration/services/test_cuped_covariate_window.py::test_w1_boundary_table"]
+text = "it happened in [assigned_at − covariate_lookback_days, assigned_at): an event at the moment of assignment is not history, and the metric's conversion window does not apply to history;"
+by = [
+    "test:backend/tests/integration/services/test_cuped_covariate_window.py::test_w1_boundary_table",
+    "test:backend/tests/integration/api/test_metric_window_writes.py::test_cuped_history_takes_no_window",
+]
 
 [[unit]]
 text = "it can carry any experiment key, any flag key, or none."

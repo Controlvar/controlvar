@@ -1518,15 +1518,26 @@ by = [
 ]
 
 [[unit]]
-text = "GET /api/v1/results/{experiment_id}, GET /api/v1/experiments/{experiment_id}/results, GET /api/v1/results/{experiment_id}/segments/{segment_id} (beta), GET /api/v1/results/{experiment_id}/bayesian, GET /api/v1/results/{experiment_id}/cuped (beta), GET /api/v1/results/{experiment_id}/balanced-groups (beta), GET /api/v1/bandit/{experiment_id}, POST /api/v1/bandit/{experiment_id}/update, PUT /api/v1/bandit/{experiment_id}/weights | #1934 (engine 1.14.0) | Additive. Each metric of /results, of its alias and of a saved segment's results carries conversion_window_hours, and each of its variants open_window_users. Both are null for a metric with no conversion window, which is every metric: no request can set one yet. A metric with a window counts only the events within that many hours of each user's assignment, in every result that reads it, and open_window_users is how many of the variant's assigned users had less than the full window. Without a window every answer is the one before, less the two keys and with engine_version 1.14.0, so the Bayesian, CUPED, balanced-groups and bandit operations change only in their engine_version, and /results serves no answer cached before the upgrade. The OpenAPI document changes in MetricResult and VariantResult, which gain the two properties, and in the four engine_version defaults, in both snapshots."
+text = "GET /api/v1/results/{experiment_id}, GET /api/v1/experiments/{experiment_id}/results, GET /api/v1/results/{experiment_id}/segments/{segment_id} (beta), GET /api/v1/results/{experiment_id}/bayesian, GET /api/v1/results/{experiment_id}/cuped (beta), GET /api/v1/results/{experiment_id}/balanced-groups (beta), GET /api/v1/bandit/{experiment_id}, POST /api/v1/bandit/{experiment_id}/update, PUT /api/v1/bandit/{experiment_id}/weights | #1934 (engine 1.14.0) | Additive. Each metric of /results, of its alias and of a saved segment's results carries conversion_window_hours, and each of its variants open_window_users. Both are null for a metric with no conversion window. A metric with a window counts only the events within that many hours of each user's assignment, in every result that reads it, and open_window_users is how many of the variant's assigned users had less than the full window. Without a window every answer is the one before, less the two keys and with engine_version 1.14.0, so the Bayesian, CUPED, balanced-groups and bandit operations change only in their engine_version, and /results serves no answer cached before the upgrade. The OpenAPI document changes in MetricResult and VariantResult, which gain the two properties, and in the four engine_version defaults, in both snapshots."
 by = [
     "test:backend/tests/integration/api/test_metric_window_results.py::test_a_window_is_the_only_thing_that_moves_a_number",
     "test:backend/tests/integration/api/test_metric_window_results.py::test_every_view_counts_the_window",
     "test:backend/tests/integration/api/test_metric_window_open_users.py::test_the_open_windows_of_each_status",
     "test:backend/tests/integration/api/test_metric_window_open_users.py::test_an_answer_cached_by_the_engine_before_is_not_served",
     "test:backend/tests/integration/api/test_unfiltered_results_pinned.py::test_the_window_keys_are_all_that_moved_from_1_13_0",
-    "test:backend/tests/unit/services/test_metric_window_has_no_writer.py::test_no_metric_request_schema_takes_a_window",
     "test:backend/tests/unit/services/test_engine_versions_frozen.py",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "POST /api/v1/experiments/, GET /api/v1/experiments/, GET/PUT /api/v1/experiments/{experiment_id}, POST /api/v1/experiments/{experiment_id}/clone | #1934 | Additive. Each metric gains conversion_window_hours (beta): set on create or on a draft's PUT, a whole number of hours from 1 to 8760, it makes the metric count each user's events only within that many hours of their assignment (Conversion window). Every response carries it, null for a metric with no window, and a clone copies it. Anything else answers 422 at [\"body\", \"metrics\", i, \"conversion_window_hours\"] with Pydantic's own message: 0, -1 and 8761 with greater_than_equal or less_than_equal, and 1.5, true and a string such as \"24\" with int_type. Changing it after draft answers 400, as any change to metrics does. A PUT that sends metrics replaces them, so a metric sent without it no longer has one. A metric created without it has no window and is counted as before. The OpenAPI document changes in MetricBase and MetricResponse, which gain the property, in both snapshots."
+by = [
+    "test:backend/tests/integration/api/test_metric_window_writes.py::test_create_put_get_list_clone_and_audit_carry_the_window",
+    "test:backend/tests/integration/api/test_metric_window_writes.py::test_create_and_put_refuse_anything_but_1_to_8760_hours",
+    "test:backend/tests/integration/api/test_metric_window_writes.py::test_a_draft_put_without_the_window_stores_none",
+    "test:backend/tests/integration/api/test_metric_window_writes.py::test_no_role_changes_the_window_once_the_experiment_left_draft",
+    "test:backend/tests/unit/services/test_metric_window_writes.py::test_create_and_put_refuse_anything_but_a_whole_number_of_hours",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
 ]

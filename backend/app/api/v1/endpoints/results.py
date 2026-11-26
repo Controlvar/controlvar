@@ -194,6 +194,46 @@ def _results_cache_key(
     )
 
 
+def _async_cache_client() -> Any:
+    """The results cache's Redis as an async client, for an ``async`` handler:
+    the same settings, and the same one attempt and 1 s timeouts as
+    ``_cache_client_options``, so a Redis that is down costs at most about a
+    second on the event loop and takes no worker thread."""
+    from redis.asyncio.retry import Retry as AsyncRetry
+    from redis.backoff import NoBackoff
+
+    from backend.app.core.redis_client import create_async_redis_client
+
+    return create_async_redis_client(
+        socket_connect_timeout=1, socket_timeout=1, retry=AsyncRetry(NoBackoff(), 0)
+    )
+
+
+async def clear_cached_results(experiment_id: UUID) -> None:
+    """Delete every answer of ``GET /results/{experiment_id}`` the results
+    cache holds (the ``results:{experiment_id}:*`` keys ``invalidate-cache``
+    clears): the key does not name the experiment's metrics, so a change to
+    them, such as a draft's conversion window (#1934), calls this. Best-effort,
+    as ``invalidate-cache`` is: what a Redis that cannot be reached at that
+    moment holds stays until it expires, so the failure is logged as a
+    warning, as the experiment cache's own invalidation logs one."""
+    try:
+        client = _async_cache_client()
+        try:
+            keys = [
+                key
+                async for key in client.scan_iter(match=f"results:{experiment_id}:*")
+            ]
+            if keys:
+                await client.delete(*keys)
+        finally:
+            await client.aclose()
+    except Exception as cache_error:
+        logger.warning(
+            "Results cache clear failed for %s: %s", experiment_id, cache_error
+        )
+
+
 # ---------------------------------------------------------------------------
 # Helper: compute dimensional breakdown (Issue #28)
 # ---------------------------------------------------------------------------

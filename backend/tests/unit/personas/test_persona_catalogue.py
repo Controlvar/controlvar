@@ -118,6 +118,25 @@ def test_a_read_only_day_tries_each_refused_change_and_decides_numbers_by_a_ledg
         assert kinds - {"ui_matches_api"}, n
 
 
+def test_the_u_sdk_day_reads_every_answer_back_and_checks_both_bucketings():
+    """What the SDK page shows is decided by the API and by each documented
+    bucketing, never by the page: dropping either kind from step 1 fails."""
+    personas = catalogue.load_personas(PERSONAS_ROOT / "personas", REPO_ROOT)
+    (persona,) = [p for p in personas if p.id == "U-SDK"]
+    assert persona.role == "SDK"
+    assert [s.n for s in persona.day] == [1, 2, 3]
+    assert {s.layer for s in persona.day} == {"A"}
+    assert [s.n for s in persona.day if not s.writes] == [2]
+    assert [o.kind for o in persona.day[0].oracles] == [
+        "api_state",
+        "hash_vector",
+        "api_state",
+        "hash_vector",
+    ]
+    assert [o.kind for o in persona.day[1].oracles] == ["count_delta"]
+    assert [o.kind for o in persona.day[2].oracles] == ["count_delta"]
+
+
 def test_the_real_matrix_loads_and_the_row_count_is_pinned():
     matrix = catalogue.load_matrix(PERSONAS_ROOT / "role-matrix.yaml", REPO_ROOT)
     assert len(matrix.rows) == MATRIX_ROWS
