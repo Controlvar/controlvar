@@ -35,11 +35,14 @@ FAILING_TOO = (
     "the experiment list, reading, creating, changing, pausing or cloning an "
     "experiment, and computing its results answer `500` too"
 )
-#: What the results route still serves.
+#: What the two results routes, and with ``CACHE_ENABLED`` the experiment's
+#: daily results, still serve.
 CACHED = (
-    "`GET /api/v1/results/{experiment_id}` still serves an answer it cached "
-    "before the downgrade until it expires: 5 minutes for a running "
-    "experiment, 24 hours otherwise."
+    "`GET /api/v1/results/{experiment_id}` and "
+    "`GET /api/v1/experiments/{experiment_id}/results` still serve an answer "
+    "they cached before the downgrade until it expires (5 minutes for a running "
+    "experiment, 24 hours otherwise), and with `CACHE_ENABLED` on (it is off by "
+    "default) so does the experiment's `daily-results`, for an hour."
 )
 #: And what is still answered.
 STILL = "ssignment, event tracking, flag evaluation and the ruleset are still answered"

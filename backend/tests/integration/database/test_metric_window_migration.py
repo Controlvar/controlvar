@@ -858,8 +858,9 @@ def _started_experiment(tree, schema: str, tmp_path, headers: dict) -> dict:
 
 
 @pytest.mark.regression
+@pytest.mark.parametrize("experiment_cache", ["off", "on"])
 def test_this_release_answers_500_where_it_reads_a_metric_on_the_downgraded_schema(
-    test_db, scratch_schema, tmp_path
+    test_db, scratch_schema, tmp_path, monkeypatch, experiment_cache
 ):
     """Why the database-first rollback's paragraph names what fails: until
     every task of this release is replaced, every statement that loads a
@@ -868,9 +869,15 @@ def test_this_release_answers_500_where_it_reads_a_metric_on_the_downgraded_sche
 
     Computing the results is what fails (``use_cache=false``). An answer the
     results cache took before the downgrade is served from it until it
-    expires: with the cache reachable (CI's core build runs a Redis), the
-    request without ``use_cache`` answers 200 and the answer from before;
-    without one, it is computed, and answers 500."""
+    expires, by ``/results/{id}`` and by ``/experiments/{id}/results``: with
+    the cache reachable (CI's core build runs a Redis), each answers 200 and
+    the answer computed before; without one, it is computed, and answers 500.
+    With ``CACHE_ENABLED`` on (off by default) and the cache reachable, the
+    experiment routes' own cache answers what it holds too, which here is the
+    experiment's daily results (``CACHED_ROUTES``)."""
+    if experiment_cache == "on":
+        # Inherited by the API's subprocess.
+        monkeypatch.setenv("CACHE_ENABLED", "true")
     tree = _at_this_revision(test_db, CORE, scratch_schema, tmp_path)
     user = _user(test_db, scratch_schema)
     signed_in = {"Authorization": f"Bearer {_token(user)}"}
@@ -891,7 +898,19 @@ def test_this_release_answers_500_where_it_reads_a_metric_on_the_downgraded_sche
         "one experiment": ["GET", experiment, signed_in, None],
         "its results": ["GET", f"{results}?use_cache=false", signed_in, None],
         "its results, cached": ["GET", results, signed_in, None],
+        "its results under the experiment": [
+            "GET",
+            f"{experiment}/results",
+            signed_in,
+            None,
+        ],
         "its daily results": ["GET", f"{results}/daily", signed_in, None],
+        "its daily results under the experiment": [
+            "GET",
+            f"{experiment}/daily-results",
+            signed_in,
+            None,
+        ],
         "assign": ["POST", "/api/v1/tracking/assign", sdk, assign],
         "track": ["POST", "/api/v1/tracking/track", sdk, track],
         "evaluate": _evaluate("windowed-flag", "u1", key),
@@ -921,16 +940,31 @@ def test_this_release_answers_500_where_it_reads_a_metric_on_the_downgraded_sche
     after = answers({**requests, **once})
     measured = {name: answer[0] for name, answer in after.items()}
     cached = _results_cache_is_reachable()
-    print(f"on the downgraded schema (results cache reachable: {cached}): {measured}")
+    print(
+        f"on the downgraded schema (results cache reachable: {cached}, "
+        f"CACHE_ENABLED {experiment_cache}): {measured}"
+    )
     sdk_routes = ("assign", "track", "evaluate", "ruleset")
+    served_cached = ["its results, cached", "its results under the experiment"]
+    if experiment_cache == "on":
+        served_cached += CACHED_ROUTES
     assert measured == {
         **dict.fromkeys([*requests, *once], 500),
         **dict.fromkeys(sdk_routes, 200),
-        "its results, cached": 200 if cached else 500,
+        **dict.fromkeys(served_cached, 200 if cached else 500),
     }
     if cached:
-        # The answer from before the downgrade, as it was cached.
-        assert after["its results, cached"][1] == before["its results, cached"][1]
+        # The answers computed before the downgrade, as they were cached: the
+        # results the request with use_cache=false computed, and the rest
+        # as each was first answered.
+        for name in served_cached:
+            assert after[name][1] == before[name][1], name
+        assert after["its results, cached"][1] == before["its results"][1]
+
+
+#: What the experiment routes' cache (``CACHE_ENABLED``) still answers on the
+#: downgraded schema, once it holds the answer from before.
+CACHED_ROUTES = ["its daily results under the experiment"]
 
 
 def _results_cache_is_reachable() -> bool:

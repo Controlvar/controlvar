@@ -2239,5 +2239,10 @@ text = "Until the API is rolled back, a release that serves POST /api/v1/auth/mf
 by = ["test:backend/tests/unit/api/test_two_factor_routes.py::test_a_failed_two_step_lookup_is_a_500_never_a_token"]
 
 [[unit]]
-text = "GET /api/v1/results/{experiment_id} still serves an answer it cached before the downgrade until it expires: 5 minutes for a running experiment, 24 hours otherwise."
-by = ["test:backend/tests/integration/database/test_metric_window_migration.py::test_this_release_answers_500_where_it_reads_a_metric_on_the_downgraded_schema"]
+text = "GET /api/v1/results/{experiment_id} and GET /api/v1/experiments/{experiment_id}/results still serve an answer they cached before the downgrade until it expires (5 minutes for a running experiment, 24 hours otherwise), and with CACHE_ENABLED on (it is off by default) so does the experiment's daily-results, for an hour."
+by = [
+    "test:backend/tests/integration/database/test_metric_window_migration.py::test_this_release_answers_500_where_it_reads_a_metric_on_the_downgraded_schema",
+    "test:backend/tests/unit/api/test_results_stored_settings.py::test_results_are_kept_300_seconds_while_running_and_86400_otherwise",
+    "test:backend/tests/unit/api/test_experiment_cache_scope.py::test_an_entry_is_kept_for_an_hour",
+    "test:backend/tests/unit/api/test_experiment_cache_scope.py::test_the_cache_is_off_by_default",
+]

@@ -385,9 +385,11 @@ Once the downgrade has committed, the release still serving answers `500` to
 the experiment list, to reading, creating, changing, pausing or cloning an
 experiment, and to computing its results, until the API is rolled back. Assignment,
 event tracking, flag evaluation and the ruleset are still answered.
-`GET /api/v1/results/{experiment_id}` still serves an answer it cached before
-the downgrade until it expires: 5 minutes for a running experiment, 24 hours
-otherwise.
+`GET /api/v1/results/{experiment_id}` and
+`GET /api/v1/experiments/{experiment_id}/results` still serve an answer they
+cached before the downgrade until it expires (5 minutes for a running
+experiment, 24 hours otherwise), and with `CACHE_ENABLED` on (it is off by
+default) so does the experiment's `daily-results`, for an hour.
 
 The downgrade waits at most 0.5 s for `metrics`, behind any session that has
 read it and not ended its transaction, a results request among them. If the
