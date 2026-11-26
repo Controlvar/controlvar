@@ -157,11 +157,12 @@ by = [
 ]
 
 [[unit]]
-text = "Each event carries the goal's event name, the visitor's id, the experiment's key, an event_id made of the page view's random id and the event name, and the page view's website details (as data-collect sets them), and nothing else: never the page's URL or query, its text or data-attributes."
+text = "Each event carries the goal's event name, the visitor's id, the experiment's key, an event_id made of the page view's random id and the event name, and the page view's website details (as data-collect sets them), and nothing else: never the page's URL or query, its text or data-attributes, except that the three campaign (utm_) values among the website details come from the query of the visit's first page."
 by = [
     "test:sdk/visual/__tests__/goals.test.ts::an event carries the goal's name, the visitor, the experiment, the page view's id and its website details, and nothing else",
     "test:sdk/visual/__tests__/goals.test.ts::with data-collect none an event carries no details",
     "test:backend/tests/integration/api/test_visual_goal_events.py::test_each_goal_counts_only_for_its_own_metric_in_the_visitors_own_arm",
+    "test:sdk/visual/__tests__/visit.test.ts::lasts while pages are viewed less than 30 minutes apart, and keeps its first page campaign and landing page",
 ]
 
 [[unit]]

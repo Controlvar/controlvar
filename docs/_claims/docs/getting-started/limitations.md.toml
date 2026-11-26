@@ -618,6 +618,7 @@ by = [
     "test:frontend/tests/e2e/runtime/real-api-goals.runtime.spec.ts::an event whose answer was lost is sent again from the next page, and stored once",
     "test:sdk/visual/__tests__/outbox.test.ts::%s keeps the call's events, and the next flush sends them again exactly once",
     "test:sdk/visual/__tests__/outbox.test.ts::drops an event 24 hours after it was made",
+    "test:sdk/visual/__tests__/goals.test.ts::an event the API did not accept is sent again, with the same event_id, by the next page",
 ]
 
 [[unit]]
