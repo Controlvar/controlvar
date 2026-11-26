@@ -10,10 +10,12 @@ import { answering, calls, experiment, PREVIEW_PATH, previewAnswer, sitePage, VI
  * opens five pages in turn, each left once its load event has fired and its
  * call has reached the API, which answers none of them before the page goes.
  *
- * A refusal follows the same rule. When the API's answer is a 401, 403 or 503
- * that comes only after the page has gone, the tab keeps no pause and each
- * page asks; the same answer while the page is open pauses the tab, and the
- * next page makes no call.
+ * A refusal (a 401, 403 or 503) while the page is open pauses the tab, and the
+ * next page makes no call. A refusal held until the page has gone never
+ * reaches it: Chromium cuts the call off at pagehide, so the script sees only
+ * the rejection of a call cut off by leaving. That a refusal which does reach
+ * the page after pagehide still pauses the tab is checked only by the unit
+ * tests in sdk/visual/__tests__/pause.test.ts.
  */
 
 const TOKEN = "p".repeat(40) + "abc";
@@ -106,29 +108,6 @@ test.describe("a page left before its call is answered", () => {
 
 test.describe("a refused answer", () => {
   for (const status of [401, 403, 503]) {
-    test(`a tab whose pages are each left before their ${status} answer comes asks on each of five pages and keeps no pause`, async ({
-      page,
-      visualPackage,
-    }) => {
-      let release: () => void = () => undefined;
-      const hold = new Promise<void>((resolve) => (release = resolve));
-      const site = await routeSite(page, visualPackage, {
-        pages: PAGES,
-        answer: answering({ experiments: [experiment("headline", HEADLINE)], status, hold }),
-      });
-      try {
-        const seen = await fivePages(page, () => calls(site, VISUAL_PATH).length, `${SITE}/p/1`);
-        const paused = (await storageKeys(page)).includes("session:controlvar_backoff");
-        expect({ calls: seen, paused }, "calls the API has had after each page, and the pause after the fifth").toEqual({
-          calls: [1, 2, 3, 4, 5],
-          paused: false,
-        });
-      } finally {
-        release();
-        await page.unrouteAll({ behavior: "ignoreErrors" });
-      }
-    });
-
     test(`a ${status} answer while the page is open pauses the tab for 5 minutes: the next page makes no call`, async ({
       page,
       visualPackage,
