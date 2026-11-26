@@ -1,6 +1,7 @@
-"""What the visual editor session reads of a draft's design (#1545): its
-audience, split, metrics and goals, and the segments and exclusion groups it
-may choose from, on Postgres through the real routes.
+"""What the visual editor session reads and saves of a draft's design
+(#1545): its audience, split, metrics, goals and exclusion group, and the
+segments and exclusion groups it may choose from, on Postgres through the
+real routes.
 
 Users of each role sign in with local tokens. TestClient sends no ``Origin``:
 every request here sets the one it means, and every "wrong Origin" refusal is
@@ -25,7 +26,34 @@ fails it (the failing line is the assertion's message or comparison):
           the exclusion-groups read lists active groups only, as
           ``{id, name}``, and needs experiment create.
 * V82     each read: no Origin and each dashboard origin answer 200, each
-          wrong origin 403.
+          wrong origin 403; the save: no Origin and each wrong origin 403.
+
+The save, ``PATCH .../sessions/current/experiment``:
+
+* BD3     the split names each variant once (a missing, extra or repeated
+          id is refused); everything else about a variant, the page changes
+          above all, is kept, and a preview link still opens. Built from
+          the request alone: ``variant B changes lost``.
+* BD6     a part not sent, the balance and the analysis settings included,
+          stays as stored; a goals save keeps the pages
+          (``pages lost``); a save of the split keeps every metric field
+          (``lower_is_better False != True`` for a four-field metric model).
+* V68     a save sent with an older version is refused with its own text and
+          writes nothing; Start takes the version the save made, not the one
+          before; a save without one is refused.
+* V65     a dated draft is refused; ``start_date`` is refused (422).
+* V60     ``balance_within`` is refused (422).
+* V45c    an audience naming an archived segment is refused with the
+          experiment update's own detail.
+* Group   join, move and leave, each with the exclusion group routes' entry
+          and the session's reason; an unknown or archived group is refused
+          and nothing is saved; changing it needs experiment create.
+* V30     one "Experiment changed" entry per save, naming the parts that
+          changed, by the session's user with the session's reason; a save
+          with only the version writes nothing.
+* V26     ADMIN and DEVELOPER sessions save; a user who may no longer change
+          the draft is refused.
+* V93     the save and the reads store no IP address.
 """
 
 from __future__ import annotations
@@ -33,6 +61,7 @@ from __future__ import annotations
 import json
 import secrets
 import uuid
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 import pytest
@@ -42,12 +71,22 @@ from sqlalchemy.orm import sessionmaker
 
 from backend.app.api import deps
 from backend.app.core.config import settings
+from backend.app.core.security import hash_api_key
 from backend.app.db import request_sessions
 from backend.app.main import app
+from backend.app.models.audit_log import AuditLog
+from backend.app.models.compliance_audit_event import ComplianceAuditEvent
+from backend.app.models.experiment import Experiment
 from backend.app.models.global_holdout import GlobalHoldout
 from backend.app.models.user import UserRole
-from backend.app.services import visual_editor, visual_origins
-from backend.tests.integration.api.route_helpers import auth, make_user
+from backend.app.models.visual_token import VisualToken
+from backend.app.services import visual, visual_editor, visual_origins
+from backend.tests.integration.api.route_helpers import (
+    api_key,
+    auth,
+    client_address_count,
+    make_user,
+)
 
 pytestmark = [pytest.mark.integration, pytest.mark.requires_db]
 
@@ -749,3 +788,760 @@ def test_the_reads_refuse_a_session_that_cannot_be_used(client, developer, exper
         made_up = _get(client, path, "cves_" + _value(), DASHBOARD)
         assert made_up.status_code == 401
         assert made_up.json()["reason"] == "not_recognised"
+
+
+# --- the save -----------------------------------------------------------------------
+
+DESIGN = f"{CURRENT}/experiment"
+
+
+def _patch(client, token: str, body: Dict[str, Any], origin: Optional[str] = DASHBOARD):
+    return client.patch(DESIGN, json=body, headers=_bearer(token, origin))
+
+
+def _shown(client, token: str) -> Dict[str, Any]:
+    """GET current's ``experiment``."""
+    response = _get(client, CURRENT, token)
+    assert response.status_code == 200, response.text
+    return response.json()["experiment"]
+
+
+def _split(shown: Dict[str, Any], **shares: int) -> List[Dict[str, Any]]:
+    """``variants`` for a save: each variant of *shown*, by name, its share."""
+    return [
+        {"id": v["id"], "traffic_allocation": shares[v["name"]]}
+        for v in shown["variants"]
+    ]
+
+
+def _session_id(db_session, token: str) -> uuid.UUID:
+    session = _session(db_session)
+    try:
+        return (
+            session.query(VisualToken.id)
+            .filter(VisualToken.token_hash == hash_api_key(token))
+            .scalar()
+        )
+    finally:
+        session.close()
+
+
+def _entries_of(db_session, entity_id: str, action: str) -> List[AuditLog]:
+    session = _session(db_session)
+    try:
+        return (
+            session.query(AuditLog)
+            .filter(
+                AuditLog.entity_id == uuid.UUID(entity_id),
+                AuditLog.action_type == action,
+            )
+            .order_by(AuditLog.timestamp)
+            .all()
+        )
+    finally:
+        session.close()
+
+
+def _changed_fields(entry: AuditLog) -> List[str]:
+    return (json.loads(entry.new_value) if entry.new_value else {}).get(
+        "changed_fields", []
+    )
+
+
+@pytest.mark.regression
+def test_a_save_of_the_split_keeps_everything_else_about_each_variant(
+    client, developer
+):
+    a_changes = {"version": 1, "changes": [{"op": "hide", "selector": ".banner"}]}
+    experiment = _draft(
+        client,
+        developer,
+        variants=[
+            {
+                "name": "Control",
+                "is_control": True,
+                "traffic_allocation": 50,
+                "configuration": {"button": "grey"},
+            },
+            {
+                "name": "A",
+                "description": "Banner hidden",
+                "is_control": False,
+                "traffic_allocation": 25,
+                "configuration": {"button": "blue"},
+                "visual_changes": a_changes,
+            },
+            {
+                "name": "B",
+                "is_control": False,
+                "traffic_allocation": 25,
+                "visual_changes": CHANGES,
+            },
+        ],
+        balance_within={"attribute": "tier", "values": ["high_value", "new"]},
+        confidence_level=0.9,
+        correction_method="bonferroni",
+    )
+    before = _detail(client, developer, experiment)
+    link = client.post(
+        f"{EXPERIMENTS}/{experiment}/visual/preview-links",
+        json={
+            "variant_id": next(v["id"] for v in before["variants"] if v["name"] == "B")
+        },
+        headers=auth(developer),
+    )
+    assert link.status_code == 201, link.text
+    preview = link.json()["url"].partition("#controlvar-preview=")[2]
+    key = api_key(client, developer)
+    token = _token(client, developer, experiment)
+    shown = _shown(client, token)
+
+    saved = _patch(
+        client,
+        token,
+        {
+            "design_etag": shown["design_etag"],
+            "variants": _split(shown, Control=10, A=30, B=60),
+        },
+    )
+
+    assert saved.status_code == 200, saved.text
+    assert saved.headers["Cache-Control"] == "no-store"
+    after = _detail(client, developer, experiment)
+    stored = {v["name"]: v for v in after["variants"]}
+    was = {v["name"]: v for v in before["variants"]}
+    assert {n: v["traffic_allocation"] for n, v in stored.items()} == {
+        "Control": 10,
+        "A": 30,
+        "B": 60,
+    }
+    for name in ("Control", "A", "B"):
+        for field in ("description", "is_control", "configuration", "visual_changes"):
+            assert stored[name][field] == was[name][field], (
+                f"variant {name} {field.replace('visual_changes', 'changes')} lost"
+            )
+    for field in (
+        "balance_within",
+        "confidence_level",
+        "correction_method",
+        "targeting_rules",
+        "metrics",
+        "visual_config",
+        "mutual_exclusion_group_id",
+    ):
+        if field == "metrics":
+            strip = ("id", "created_at", "updated_at")
+            got = [{k: v for k, v in m.items() if k not in strip} for m in after[field]]
+            want = [
+                {k: v for k, v in m.items() if k not in strip} for m in before[field]
+            ]
+            assert got == want, "metrics changed"
+        else:
+            assert after[field] == before[field], f"{field} changed"
+    assert after["design_etag"] != before["design_etag"]
+    assert saved.json() == _get(client, CURRENT, token).json()
+    assert saved.json()["experiment"]["design_etag"] == after["design_etag"]
+    read = client.post(
+        "/api/v1/tracking/visual/preview",
+        json={"token": preview, "host": "shop.example.com", "path": "/"},
+        headers=key,
+    )
+    assert read.status_code == 200, read.text
+    assert read.json()["changes"] == CHANGES
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("wrong", ["missing", "another experiment's", "repeated"])
+def test_a_split_that_does_not_name_each_variant_once_is_refused(
+    client, developer, experiment, wrong
+):
+    token = _token(client, developer, experiment)
+    shown = _shown(client, token)
+    split = _split(shown, Control=50, B=50)
+    if wrong == "missing":
+        split = [{**split[0], "traffic_allocation": 100}]
+    elif wrong == "another experiment's":
+        other = _shown(client, _token(client, developer, _draft(client, developer)))
+        theirs = next(v["id"] for v in other["variants"] if v["name"] == "B")
+        split = [split[0], {"id": theirs, "traffic_allocation": 50}]
+    else:
+        split = [split[0], split[0]]
+    before = _detail(client, developer, experiment)
+
+    refused = _patch(
+        client, token, {"design_etag": shown["design_etag"], "variants": split}
+    )
+
+    assert refused.status_code == 422, f"{wrong}: {refused.status_code} != 422"
+    assert refused.json()["detail"] == visual_editor.SPLIT_NOT_EACH_VARIANT
+    assert _detail(client, developer, experiment) == before
+
+
+def test_a_split_that_does_not_add_up_is_refused_as_an_update_refuses_it(
+    client, developer, experiment
+):
+    token = _token(client, developer, experiment)
+    shown = _shown(client, token)
+    before = _detail(client, developer, experiment)
+
+    refused = _patch(
+        client,
+        token,
+        {
+            "design_etag": shown["design_etag"],
+            "variants": _split(shown, Control=50, B=40),
+        },
+    )
+
+    assert refused.status_code == 422, refused.text
+    (error,) = refused.json()["detail"]
+    assert error["loc"] == ["body"]
+    assert "Traffic allocations must sum to 100% (currently 90%)" in error["msg"]
+    too_much = _patch(
+        client,
+        token,
+        {
+            "design_etag": shown["design_etag"],
+            "variants": _split(shown, Control=-1, B=101),
+        },
+    )
+    assert too_much.status_code == 422, too_much.text
+    assert _detail(client, developer, experiment) == before
+
+
+@pytest.mark.regression
+def test_a_save_keeps_every_metric_field_it_did_not_send(client, developer, experiment):
+    token = _token(client, developer, experiment)
+    shown = _shown(client, token)
+    strip = ("id", "experiment_id", "created_at", "updated_at")
+
+    def metrics() -> List[Dict[str, Any]]:
+        detail = _detail(client, developer, experiment)
+        return [
+            {k: v for k, v in m.items() if k not in strip} for m in detail["metrics"]
+        ]
+
+    assert metrics() == METRICS
+    split = _patch(
+        client,
+        token,
+        {
+            "design_etag": shown["design_etag"],
+            "variants": _split(shown, Control=20, B=80),
+        },
+    )
+    assert split.status_code == 200, split.text
+    for index, (got, want) in enumerate(zip(metrics(), METRICS)):
+        for field in ("lower_is_better", *want):
+            assert got[field] == want[field], (
+                f"metrics[{index}].{field}: {got[field]!r} != {want[field]!r}"
+            )
+
+    sent = [
+        {
+            **METRICS[0],
+            "description": "Bought",
+            "aggregation_method": "average",
+            "minimum_sample_size": 900,
+            "expected_effect": 0.2,
+            "event_value_path": "total",
+            "lower_is_better": True,
+        },
+        {**METRICS[1], "lower_is_better": True, "is_primary": False},
+    ]
+    saved = _patch(
+        client,
+        token,
+        {"design_etag": split.json()["experiment"]["design_etag"], "metrics": sent},
+    )
+    assert saved.status_code == 200, saved.text
+    for index, (got, want) in enumerate(zip(metrics(), sent)):
+        for field in ("lower_is_better", *want):
+            assert got[field] == want[field], (
+                f"lower_is_better {got[field]} != {want[field]}"
+                if field == "lower_is_better"
+                else f"metrics[{index}].{field}: {got[field]!r} != {want[field]!r}"
+            )
+
+
+TWO_PAGES = {
+    **CONFIG,
+    "pages": [PAGE, {"match": "exact", "url": f"{SHOP}/checkout"}],
+}
+
+
+@pytest.mark.regression
+def test_a_goals_save_keeps_the_pages_and_the_editor_page(client, developer):
+    experiment = _draft(client, developer, visual_config=TWO_PAGES)
+    token = _token(client, developer, experiment)
+    shown = _shown(client, token)
+    goals = [{"event_name": "page_thanks", "kind": "page_view", "page": PAGE}]
+
+    saved = _patch(client, token, {"design_etag": shown["design_etag"], "goals": goals})
+
+    assert saved.status_code == 200, saved.text
+    config = _detail(client, developer, experiment)["visual_config"]
+    assert config["pages"] == TWO_PAGES["pages"], (
+        f"pages lost: {config['pages']} != {TWO_PAGES['pages']}"
+    )
+    assert config["editor_url"] == TWO_PAGES["editor_url"], "editor page lost"
+    assert config["goals"] == goals
+    assert saved.json()["experiment"]["goals"] == goals
+
+    before = _detail(client, developer, experiment)
+    no_metric = [{"event_name": "click_nothing", "kind": "page_view", "page": PAGE}]
+    refused = _patch(
+        client,
+        token,
+        {"design_etag": saved.json()["experiment"]["design_etag"], "goals": no_metric},
+    )
+    assert refused.status_code == 422, refused.text
+    assert refused.json()["detail"][0]["msg"].endswith(
+        "A goal's event_name must be the event_name of one of the experiment's metrics."
+    ), refused.json()
+    assert _detail(client, developer, experiment) == before
+
+
+@pytest.mark.regression
+def test_a_save_made_from_an_older_version_is_refused(client, developer, experiment):
+    token = _token(client, developer, experiment)
+    e1 = _detail(client, developer, experiment)["design_etag"]
+    assert _shown(client, token)["design_etag"] == e1
+
+    first = _patch(client, token, {"design_etag": e1, "targeting_rules": COUNTRY_RULES})
+    assert first.status_code == 200, first.text
+    e2 = first.json()["experiment"]["design_etag"]
+    assert e2 != e1 and _detail(client, developer, experiment)["design_etag"] == e2
+
+    stale = _patch(client, token, {"design_etag": e1, "targeting_rules": None})
+    assert stale.status_code == 409, f"stale PATCH: {stale.status_code} != 409"
+    assert stale.json()["detail"] == (
+        "This experiment's design changed in Controlvar after the editor loaded "
+        "it, so this step was not saved. Reload the editor to see the change."
+    )
+    assert stale.json()["detail"] == visual_editor.DESIGN_CHANGED
+    assert _detail(client, developer, experiment)["targeting_rules"] == COUNTRY_RULES
+    no_version = _patch(client, token, {"targeting_rules": None})
+    assert no_version.status_code == 422, f"no etag: {no_version.status_code} != 422"
+    assert _detail(client, developer, experiment)["targeting_rules"] == COUNTRY_RULES
+
+    start = f"{EXPERIMENTS}/{experiment}/start"
+    old = client.post(start, json={"design_etag": e1}, headers=auth(developer))
+    assert old.status_code == 409, f"start e1: {old.status_code} != 409"
+    assert old.json()["detail"] == visual.DESIGN_ETAG_STALE
+    new = client.post(start, json={"design_etag": e2}, headers=auth(developer))
+    assert new.status_code == 200, f"start e2: {new.status_code} != 200 {new.text}"
+
+
+def _date_the_draft(db_session, experiment_id: str) -> None:
+    session = _session(db_session)
+    try:
+        session.execute(
+            update(Experiment)
+            .where(Experiment.id == uuid.UUID(experiment_id))
+            .values(start_date=datetime.now(timezone.utc) + timedelta(days=1))
+        )
+        session.commit()
+    finally:
+        session.close()
+
+
+@pytest.mark.regression
+def test_a_save_on_a_dated_draft_or_carrying_a_start_date_is_refused(
+    client, db_session, developer, experiment
+):
+    token = _token(client, developer, experiment)
+    etag = _shown(client, token)["design_etag"]
+    before = _detail(client, developer, experiment)
+
+    carrying = _patch(
+        client, token, {"design_etag": etag, "start_date": "2031-01-01T00:00:00Z"}
+    )
+
+    assert carrying.status_code == 422, f"start_date: {carrying.status_code} != 422"
+    assert carrying.json()["detail"][0]["loc"] == ["body", "start_date"]
+    assert _detail(client, developer, experiment) == before
+    _date_the_draft(db_session, experiment)
+    dated = _patch(
+        client, token, {"design_etag": etag, "targeting_rules": COUNTRY_RULES}
+    )
+    assert dated.status_code == 400, f"PATCH after schedule: {dated.status_code} != 400"
+    assert dated.json()["detail"] == (
+        "A visual draft with a start date cannot be opened in the editor: it starts "
+        "on its own with the design it has then. Remove the start date to edit it."
+    )
+    assert _detail(client, developer, experiment)["targeting_rules"] is None
+
+
+@pytest.mark.regression
+def test_the_save_does_not_take_the_balance(client, developer, experiment):
+    token = _token(client, developer, experiment)
+    etag = _shown(client, token)["design_etag"]
+    before = _detail(client, developer, experiment)
+
+    refused = _patch(
+        client,
+        token,
+        {
+            "design_etag": etag,
+            "balance_within": {"attribute": "tier", "values": ["high_value", "new"]},
+        },
+    )
+
+    assert refused.status_code == 422, f"balance_within: {refused.status_code} != 422"
+    assert refused.json()["detail"][0]["loc"] == ["body", "balance_within"]
+    assert _detail(client, developer, experiment) == before
+
+
+@pytest.mark.regression
+def test_an_audience_naming_an_archived_segment_is_refused(
+    client, developer, experiment
+):
+    segment = _segment(client, developer, rules=COUNTRY_RULES)
+    gone = client.delete(f"{SEGMENTS_API}/{segment['id']}", headers=auth(developer))
+    assert gone.status_code in (200, 204), gone.text
+    token = _token(client, developer, experiment)
+    before = _detail(client, developer, experiment)
+
+    refused = _patch(
+        client,
+        token,
+        {
+            "design_etag": _shown(client, token)["design_etag"],
+            "targeting_rules": _in_segment(segment["id"]),
+        },
+    )
+
+    assert refused.status_code == 422, (
+        f"archived segment saved: {refused.status_code} != 422"
+    )
+    (error,) = refused.json()["detail"]
+    assert error["loc"] == ["body", "targeting_rules"]
+    dashboard = client.put(
+        f"{EXPERIMENTS}/{experiment}",
+        json={"targeting_rules": _in_segment(segment["id"])},
+        headers=auth(developer),
+    )
+    assert dashboard.status_code == 422
+    assert refused.json()["detail"] == dashboard.json()["detail"]
+    assert _detail(client, developer, experiment) == before
+
+
+def _group_entries(db_session, group_id: str) -> List[Dict[str, Any]]:
+    return [
+        {
+            "before": json.loads(e.old_value) if e.old_value else None,
+            "after": json.loads(e.new_value) if e.new_value else None,
+            "reason": e.reason,
+            "user_id": e.user_id,
+        }
+        for e in _entries_of(db_session, group_id, "mutual_exclusion_group_update")
+    ]
+
+
+@pytest.mark.regression
+def test_a_save_moves_the_draft_between_exclusion_groups(
+    client, db_session, developer, experiment
+):
+    first, second = _group(client, developer), _group(client, developer)
+    colleague = _user(db_session, UserRole.DEVELOPER)
+    token = _token(client, colleague, experiment)
+    reason = f"visual editor session {_session_id(db_session, token).hex[:8]}"
+    entry = {"experiment_id": experiment}
+    etags = [_shown(client, token)["design_etag"]]
+
+    for wanted in (first, second, None):
+        group_id = None if wanted is None else wanted["id"]
+        saved = _patch(
+            client,
+            token,
+            {"design_etag": etags[-1], "mutual_exclusion_group_id": group_id},
+        )
+        assert saved.status_code == 200, saved.text
+        shown = saved.json()["experiment"]
+        expected = (
+            None if wanted is None else {"id": wanted["id"], "name": wanted["name"]}
+        )
+        assert shown["mutual_exclusion_group"] == expected
+        assert (
+            _detail(client, developer, experiment)["mutual_exclusion_group_id"]
+            == group_id
+        )
+        # Leaving the group brings back the first design, and its etag.
+        assert shown["design_etag"] != etags[-1], "design_etag unchanged by the group"
+        etags.append(shown["design_etag"])
+    assert etags[-1] == etags[0]
+    assert len(set(etags)) == 3
+
+    assert _group_entries(db_session, first["id"]) == [
+        {"before": None, "after": entry, "reason": reason, "user_id": colleague.id},
+        {"before": entry, "after": None, "reason": reason, "user_id": colleague.id},
+    ]
+    assert _group_entries(db_session, second["id"]) == [
+        {"before": None, "after": entry, "reason": reason, "user_id": colleague.id},
+        {"before": entry, "after": None, "reason": reason, "user_id": colleague.id},
+    ]
+    # The group is saved by the group service alone: no experiment change.
+    assert _entries_of(db_session, experiment, "experiment_update") == []
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("which", ["unknown", "archived"])
+def test_an_unknown_or_archived_group_is_refused_and_nothing_is_saved(
+    client, db_session, developer, experiment, which
+):
+    if which == "unknown":
+        group_id = str(uuid.uuid4())
+    else:
+        group_id = _group(client, developer)["id"]
+        admin = _user(db_session, UserRole.ADMIN)
+        gone = client.delete(f"{GROUPS_API}/{group_id}", headers=auth(admin))
+        assert gone.status_code in (200, 204), gone.text
+    token = _token(client, developer, experiment)
+    before = _detail(client, developer, experiment)
+
+    refused = _patch(
+        client,
+        token,
+        {
+            "design_etag": _shown(client, token)["design_etag"],
+            "targeting_rules": COUNTRY_RULES,
+            "mutual_exclusion_group_id": group_id,
+        },
+    )
+
+    assert refused.status_code == 422, f"{which}: {refused.status_code} != 422"
+    assert refused.json()["detail"] == visual_editor.GROUP_NOT_AVAILABLE
+    assert _detail(client, developer, experiment) == before, "design part saved"
+    assert _entries_of(db_session, experiment, "experiment_update") == []
+
+
+@pytest.mark.modules
+@pytest.mark.regression
+def test_a_group_change_needs_experiment_create(
+    client, db_session, developer, experiment
+):
+    group = _group(client, developer)
+    token = _changing_only(db_session, client, developer, experiment)
+    shown = _shown(client, token)
+    before = _detail(client, developer, experiment)
+
+    refused = _patch(
+        client,
+        token,
+        {
+            "design_etag": shown["design_etag"],
+            "targeting_rules": COUNTRY_RULES,
+            "mutual_exclusion_group_id": group["id"],
+        },
+    )
+
+    assert refused.status_code == 403, f"update-only role: {refused.status_code} != 403"
+    assert refused.json()["detail"] == (
+        "Not enough permissions to manage mutual exclusion groups"
+    )
+    assert _detail(client, developer, experiment) == before
+    assert _group_entries(db_session, group["id"]) == []
+    # Without a group change the same user saves; with one, a developer does.
+    split = _patch(
+        client,
+        token,
+        {
+            "design_etag": shown["design_etag"],
+            "variants": _split(shown, Control=30, B=70),
+        },
+    )
+    assert split.status_code == 200, split.text
+    developer_token = _token(client, developer, experiment)
+    joined = _patch(
+        client,
+        developer_token,
+        {
+            "design_etag": _shown(client, developer_token)["design_etag"],
+            "mutual_exclusion_group_id": group["id"],
+        },
+    )
+    assert joined.status_code == 200, joined.text
+
+
+@pytest.mark.regression
+def test_each_save_is_one_experiment_change_naming_what_changed(
+    client, db_session, developer, experiment
+):
+    colleague = _user(db_session, UserRole.DEVELOPER)
+    token = _token(client, colleague, experiment)
+    reason = f"visual editor session {_session_id(db_session, token).hex[:8]}"
+    shown = _shown(client, token)
+    goals = [
+        {"event_name": "click_buy", "kind": "click", "selector": "#go", "page": PAGE}
+    ]
+    saves = [
+        ("split", {"variants": _split(shown, Control=30, B=70)}, ["variants"]),
+        (
+            "metrics",
+            {"metrics": [{**METRICS[0], "minimum_sample_size": 700}, METRICS[1]]},
+            ["metrics"],
+        ),
+        (
+            "identical re-send",
+            {"metrics": [{**METRICS[0], "minimum_sample_size": 700}, METRICS[1]]},
+            [],
+        ),
+        ("goals", {"goals": goals}, ["visual_config"]),
+        ("audience", {"targeting_rules": COUNTRY_RULES}, ["targeting_rules"]),
+        (
+            "two parts",
+            {"targeting_rules": None, "goals": []},
+            ["targeting_rules", "visual_config"],
+        ),
+    ]
+    etag = shown["design_etag"]
+    for label, body, fields in saves:
+        before = len(_entries_of(db_session, experiment, "experiment_update"))
+        saved = _patch(client, token, {"design_etag": etag, **body})
+        assert saved.status_code == 200, f"{label}: {saved.text}"
+        etag = saved.json()["experiment"]["design_etag"]
+        found = _entries_of(db_session, experiment, "experiment_update")[before:]
+        assert len(found) == 1, f"{label}: {len(found)} entries"
+        (entry,) = found
+        assert _changed_fields(entry) == fields, (
+            f"{label}: {_changed_fields(entry)} != {fields}"
+        )
+        assert entry.reason == reason, f"{entry.reason!r} != {reason!r}"
+        assert entry.user_id == colleague.id, f"{label}: actor {entry.user_id}"
+
+
+@pytest.mark.regression
+def test_a_save_with_only_its_version_saves_nothing(
+    client, db_session, developer, experiment
+):
+    token = _token(client, developer, experiment)
+    shown = _shown(client, token)
+    before = _detail(client, developer, experiment)
+    entries = len(_entries_of(db_session, experiment, "experiment_update"))
+
+    saved = _patch(client, token, {"design_etag": shown["design_etag"]})
+
+    assert saved.status_code == 200, saved.text
+    assert saved.json() == _get(client, CURRENT, token).json()
+    assert _detail(client, developer, experiment) == before
+    assert len(_entries_of(db_session, experiment, "experiment_update")) == entries
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("role", ["ADMIN", "DEVELOPER"])
+def test_admins_and_developers_save_through_the_session(
+    client, db_session, developer, experiment, role
+):
+    user = _user(db_session, UserRole[role])
+    token = _token(client, user, experiment)
+    shown = _shown(client, token)
+
+    saved = _patch(
+        client,
+        token,
+        {
+            "design_etag": shown["design_etag"],
+            "variants": _split(shown, Control=45, B=55),
+        },
+    )
+
+    assert saved.status_code == 200, f"{role}: {saved.status_code} != 200"
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("change", ["demoted", "deactivated"])
+def test_a_save_by_a_user_who_may_no_longer_change_the_draft_is_refused(
+    client, db_session, developer, experiment, change
+):
+    token = _token(client, developer, experiment)
+    shown = _shown(client, token)
+    session = _session(db_session)
+    try:
+        if change == "demoted":
+            statement = "UPDATE users SET role = 'VIEWER' WHERE id = :id"
+        else:
+            statement = "UPDATE users SET is_active = false WHERE id = :id"
+        session.execute(text(statement), {"id": developer.id})
+        session.commit()
+    finally:
+        session.close()
+    owner = _user(db_session, UserRole.ADMIN)
+    before = _detail(client, owner, experiment)
+
+    refused = _patch(
+        client,
+        token,
+        {"design_etag": shown["design_etag"], "targeting_rules": COUNTRY_RULES},
+    )
+
+    assert refused.status_code == 403, f"{change}: {refused.status_code} != 403"
+    assert refused.json()["detail"] == visual_editor.CANNOT_CHANGE
+    assert _detail(client, owner, experiment) == before
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("wrong", ["none", *WRONG_ORIGINS])
+def test_the_save_takes_the_dashboards_origin(client, developer, experiment, wrong):
+    origin = WRONG_ORIGINS.get(wrong)
+    token = _token(client, developer, experiment)
+    shown = _shown(client, token)
+    body = {"design_etag": shown["design_etag"], "targeting_rules": COUNTRY_RULES}
+    before = _detail(client, developer, experiment)
+
+    refused = _patch(client, token, body, origin)
+
+    label = "no Origin" if origin is None else origin
+    assert refused.status_code == 403, f"PATCH {label}: {refused.status_code} != 403"
+    assert refused.json()["detail"] == visual_origins.NOT_FROM_DASHBOARD
+    assert _detail(client, developer, experiment) == before
+    # The pair: from each dashboard origin, the same save answers.
+    for dashboard in (DASHBOARD, DASHBOARD2):
+        saved = _patch(client, token, body, dashboard)
+        assert saved.status_code == 200, f"PATCH from {dashboard}: {saved.text}"
+        body = {**body, "design_etag": saved.json()["experiment"]["design_etag"]}
+
+
+@pytest.mark.regression
+def test_no_ip_address_is_stored_by_the_save_or_the_reads(
+    client, db_session, developer, experiment
+):
+    """TestClient's client address is ``testclient``. The save (a design part
+    and a group change) and both reads run once; no text or JSON column gains
+    the address, and no compliance event made since has an actor address."""
+    address = "testclient"
+    group = _group(client, developer)
+    token = _token(client, developer, experiment)
+    before = client_address_count(db_session, address)
+    started = datetime.now(timezone.utc)
+
+    shown = _shown(client, token)
+    saved = _patch(
+        client,
+        token,
+        {
+            "design_etag": shown["design_etag"],
+            "targeting_rules": COUNTRY_RULES,
+            "mutual_exclusion_group_id": group["id"],
+        },
+    )
+    assert saved.status_code == 200, saved.text
+    assert _get(client, EDITOR_SEGMENTS, token).status_code == 200
+    assert _get(client, EDITOR_GROUPS, token).status_code == 200
+
+    session = _session(db_session)
+    try:
+        events = (
+            session.query(ComplianceAuditEvent)
+            .filter(
+                ComplianceAuditEvent.timestamp >= started,
+                ComplianceAuditEvent.resource_id == experiment,
+            )
+            .all()
+        )
+    finally:
+        session.close()
+    assert events, "the save made no compliance event: the scan sees nothing"
+    addresses = [event.actor_ip for event in events if event.actor_ip is not None]
+    assert addresses == [], f"{addresses[0]!r} in compliance_audit_events.actor_ip"
+    assert client_address_count(db_session, address) == before

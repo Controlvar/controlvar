@@ -8,15 +8,22 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic_core import PydanticCustomError
 
-from backend.app.schemas.experiment import MetricResponse
+from backend.app.schemas.experiment import MetricBase, MetricResponse, VariantBase
 from backend.app.schemas.segment import SEGMENT_KIND_DESCRIPTION, SegmentKind
 from backend.app.schemas.storable_text import StorableTextModel
+from backend.app.schemas.visual import VisualGoal
+
+#: A variant's share of the traffic, with the bounds an experiment update
+#: puts on it (``VariantBase.traffic_allocation``'s own).
+TrafficShare = Annotated[
+    (int, *VariantBase.model_fields["traffic_allocation"].metadata)
+]
 
 #: The value the page sends with an editor link's ticket: exactly 43
 #: base64url characters, no padding.
@@ -223,5 +230,71 @@ class EditorSegment(BaseModel):
             "Whether the segment can be used in an audience: true for an "
             "id_list segment, and for a rules segment whose stored rules are "
             "in the targeting rule format."
+        ),
+    )
+
+
+class EditorSplitShare(StorableTextModel):
+    """One variant's share of the traffic, by the variant's id."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: UUID = Field(..., description="One of the draft's variants, by its id.")
+    traffic_allocation: TrafficShare = Field(
+        ..., description="The variant's share of the traffic, in percent."
+    )
+
+
+class EditorDesignChange(StorableTextModel):
+    """What the visual editor saves of a draft's design besides its page
+    changes. Each part left out is not changed."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    design_etag: str = Field(
+        ...,
+        min_length=1,
+        max_length=128,
+        description=(
+            "The design_etag of the version the editor shows, from the "
+            "session's last answer. A different one answers 409 and nothing "
+            "is saved."
+        ),
+    )
+    targeting_rules: Optional[Dict[str, Any]] = Field(
+        None,
+        description=(
+            "Who can join, as PUT /api/v1/experiments/{id} takes it; null "
+            "removes the audience."
+        ),
+    )
+    variants: List[EditorSplitShare] = Field(
+        None,
+        description=(
+            "The split: each of the draft's variants exactly once, by id, "
+            "with its share. Everything else about a variant is kept as "
+            "stored. The variants are saved again, so each gets a new id."
+        ),
+    )
+    metrics: List[MetricBase] = Field(
+        None,
+        description=(
+            "The draft's metrics, replacing the stored ones, as "
+            "PUT /api/v1/experiments/{id} takes them."
+        ),
+    )
+    goals: List[VisualGoal] = Field(
+        None,
+        description=(
+            "The draft's goals, replacing the stored ones; its pages and "
+            "editor page are kept."
+        ),
+    )
+    mutual_exclusion_group_id: Optional[UUID] = Field(
+        None,
+        description=(
+            "The active exclusion group to put the draft in, or null to take "
+            "it out of its group. Changing it needs permission to create "
+            "experiments."
         ),
     )

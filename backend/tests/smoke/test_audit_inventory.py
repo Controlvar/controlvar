@@ -312,6 +312,11 @@ INVENTORY = {
     ("PUT", f"{V1}/visual-editor/sessions/current/variants/{{variant_id}}/changes"): (
         EXP_UPDATE
     ),
+    # The editor's design save is PUT's own write and entry; its exclusion
+    # group change is the group routes' own write and entry.
+    ("PATCH", f"{V1}/visual-editor/sessions/current/experiment"): Audited(
+        A.EXPERIMENT_UPDATE, A.MUTUAL_EXCLUSION_GROUP_UPDATE
+    ),
 }
 
 #: GET routes a reader could expect to be recorded, and why they are not.
@@ -362,7 +367,7 @@ def test_the_inventory_is_exact():
         f"unclassified: {sorted(found - set(INVENTORY))}; "
         f"gone: {sorted(set(INVENTORY) - found)}"
     )
-    assert len(INVENTORY) == 124
+    assert len(INVENTORY) == 125
 
 
 #: Where a flag's settings per environment are changed (#2011).

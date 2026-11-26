@@ -2388,6 +2388,7 @@ SESSION_ROUTES = {
     ("PUT", "/api/v1/visual-editor/sessions/current/variants/{variant_id}/changes"),
     ("GET", "/api/v1/visual-editor/sessions/current/segments"),
     ("GET", "/api/v1/visual-editor/sessions/current/exclusion-groups"),
+    ("PATCH", "/api/v1/visual-editor/sessions/current/experiment"),
 }
 EDITOR_ROUTES = SESSION_ROUTES | {
     ("POST", "/api/v1/visual-editor/tickets/claim"),
@@ -2482,6 +2483,14 @@ def test_no_other_route_takes_a_session_token(client, developer, experiment):
     for path in (f"{CURRENT}/segments", f"{CURRENT}/exclusion-groups"):
         assert client.get(path, headers=_bearer(made_up)).status_code == 401
         assert client.get(path, headers=_bearer(live)).status_code == 200
+    etag = _current(client, live).json()["experiment"]["design_etag"]
+    for token, want in ((made_up, 401), (live, 200)):
+        saved = client.patch(
+            f"{CURRENT}/experiment",
+            json={"design_etag": etag},
+            headers=_bearer(token, DASHBOARD),
+        )
+        assert saved.status_code == want, saved.text
     assert _sign_out(client, made_up).status_code == 401
     assert _sign_out(client, live).status_code == 204
 

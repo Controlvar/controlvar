@@ -1487,6 +1487,12 @@
         "summary": "The exclusion groups the visual editor may choose from (beta)"
       }
     },
+    "/api/v1/visual-editor/sessions/current/experiment": {
+      "patch": {
+        "operationId": "save_experiment_design_api_v1_visual_editor_sessions_current_experiment_patch",
+        "summary": "Save a draft's audience, split, metrics and goals from the visual editor (beta)"
+      }
+    },
     "/api/v1/visual-editor/sessions/current/segments": {
       "get": {
         "operationId": "list_editor_segments_api_v1_visual_editor_sessions_current_segments_get",

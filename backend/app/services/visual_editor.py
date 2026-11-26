@@ -112,6 +112,20 @@ EXPERIMENT_NOT_FOUND = "Experiment not found"
 EXPERIMENT_GONE = "This experiment no longer exists."
 #: A variant id that is not one of the session's experiment's (404).
 VARIANT_NOT_FOUND = "This experiment has no variant with that id."
+#: A save made from a version of the design that has changed since (409).
+DESIGN_CHANGED = (
+    "This experiment's design changed in Controlvar after the editor loaded "
+    "it, so this step was not saved. Reload the editor to see the change."
+)
+#: A split that does not name each of the experiment's variants once (422).
+SPLIT_NOT_EACH_VARIANT = (
+    "A split names each of the experiment's variants exactly once, by its "
+    "id. Reload the editor to see the experiment's variants."
+)
+#: An exclusion group that does not exist or is archived (422).
+GROUP_NOT_AVAILABLE = (
+    "That exclusion group does not exist or has been archived. Choose an active group."
+)
 
 #: The reason codes an editor session's 401 carries besides the stored
 #: ``revoked_reason`` values: no session has that token, or it has ended.
@@ -389,6 +403,19 @@ def session_state(
             "capabilities": dict(CAPABILITIES),
         },
     }
+
+
+def shares_by_variant(stored: List[Any], sent: List[Any]) -> Dict[Any, int]:
+    """Each stored variant's id to the share *sent* gives it, or the 422
+    :data:`SPLIT_NOT_EACH_VARIANT` unless *sent* names each of *stored*
+    exactly once, and nothing else."""
+    ids = [share.id for share in sent]
+    if len(ids) != len(set(ids)) or set(ids) != {variant.id for variant in stored}:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=SPLIT_NOT_EACH_VARIANT,
+        )
+    return {share.id: share.traffic_allocation for share in sent}
 
 
 def exclusion_group_of(db: Session, group_id: Any) -> Optional[Dict[str, Any]]:

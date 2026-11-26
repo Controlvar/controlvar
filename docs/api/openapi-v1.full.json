@@ -5433,6 +5433,88 @@
         "title": "EditorCapabilities",
         "type": "object"
       },
+      "EditorDesignChange": {
+        "additionalProperties": false,
+        "description": "What the visual editor saves of a draft's design besides its page\nchanges. Each part left out is not changed.",
+        "properties": {
+          "design_etag": {
+            "description": "The design_etag of the version the editor shows, from the session's last answer. A different one answers 409 and nothing is saved.",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Design Etag",
+            "type": "string"
+          },
+          "goals": {
+            "description": "The draft's goals, replacing the stored ones; its pages and editor page are kept.",
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "click": "#/components/schemas/ClickGoal",
+                  "page_view": "#/components/schemas/PageViewGoal"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/ClickGoal"
+                },
+                {
+                  "$ref": "#/components/schemas/PageViewGoal"
+                }
+              ]
+            },
+            "title": "Goals",
+            "type": "array"
+          },
+          "metrics": {
+            "description": "The draft's metrics, replacing the stored ones, as PUT /api/v1/experiments/{id} takes them.",
+            "items": {
+              "$ref": "#/components/schemas/MetricBase"
+            },
+            "title": "Metrics",
+            "type": "array"
+          },
+          "mutual_exclusion_group_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The active exclusion group to put the draft in, or null to take it out of its group. Changing it needs permission to create experiments.",
+            "title": "Mutual Exclusion Group Id"
+          },
+          "targeting_rules": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Who can join, as PUT /api/v1/experiments/{id} takes it; null removes the audience.",
+            "title": "Targeting Rules"
+          },
+          "variants": {
+            "description": "The split: each of the draft's variants exactly once, by id, with its share. Everything else about a variant is kept as stored. The variants are saved again, so each gets a new id.",
+            "items": {
+              "$ref": "#/components/schemas/EditorSplitShare"
+            },
+            "title": "Variants",
+            "type": "array"
+          }
+        },
+        "required": [
+          "design_etag"
+        ],
+        "title": "EditorDesignChange",
+        "type": "object"
+      },
       "EditorExclusionGroup": {
         "description": "A mutual exclusion group, by id and name.",
         "properties": {
@@ -5732,6 +5814,31 @@
           "experiment"
         ],
         "title": "EditorSessionState",
+        "type": "object"
+      },
+      "EditorSplitShare": {
+        "additionalProperties": false,
+        "description": "One variant's share of the traffic, by the variant's id.",
+        "properties": {
+          "id": {
+            "description": "One of the draft's variants, by its id.",
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "traffic_allocation": {
+            "description": "The variant's share of the traffic, in percent.",
+            "maximum": 100,
+            "minimum": 0,
+            "title": "Traffic Allocation",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "traffic_allocation"
+        ],
+        "title": "EditorSplitShare",
         "type": "object"
       },
       "EditorVariant": {
@@ -39188,6 +39295,64 @@
           }
         },
         "summary": "The exclusion groups the visual editor may choose from (beta)",
+        "tags": [
+          "Visual Editor"
+        ],
+        "x-stability": "beta"
+      }
+    },
+    "/api/v1/visual-editor/sessions/current/experiment": {
+      "patch": {
+        "description": "Save the parts of the draft's design the request sends: who can join\n(`targeting_rules`), the split (`variants`), the metrics, the goals and\nthe exclusion group. A part left out is not changed, and neither is\nanything else: each variant's name, description, configuration and page\nchanges, the visual settings' pages and editor page, the split's balance\nand the analysis settings.\n\nChecked before anything is written, in this order, after the session's\nown checks: 422 when the request is not in the documented form (any\nother key, `start_date` and `balance_within` included) or the split\ndoes not name each of the draft's variants exactly once; 409 when\n`design_etag` is not the design's current version; when the exclusion\ngroup changes, 403 unless the user may create experiments, then 422\nunless the group exists and is active; then 422 for anything an\nexperiment update refuses, with its `detail`.\n\nThe design is saved as the experiment update's own write: one\n\"Experiment changed\" entry by the session's user with the reason\n`visual editor session <first 8 characters of the session's id>`, and\nthe cached experiment is dropped. A changed exclusion group is then\nsaved as the exclusion group routes save it, with their entry and the\nsame reason. A request with only `design_etag` saves nothing. The answer\nis the session's, with the new `design_etag` (and, when the split was\nsaved, the variants' new ids). Sent with `Cache-Control: no-store`.",
+        "operationId": "save_experiment_design_api_v1_visual_editor_sessions_current_experiment_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditorDesignChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EditorSessionState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "The experiment is no longer a draft, or has a start date"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EditorSessionRefusal"
+                }
+              }
+            },
+            "description": "The session cannot be used; reason says why"
+          },
+          "403": {
+            "description": "The request does not come from the dashboard, the user may no longer change the experiment, or the exclusion group changes and the user may not create experiments"
+          },
+          "404": {
+            "description": "The experiment no longer exists"
+          },
+          "409": {
+            "description": "The design changed after the editor loaded it; nothing was saved"
+          },
+          "422": {
+            "description": "The request is not in the documented form, the split does not name each variant once, the exclusion group does not exist or is archived, or the change is refused as an experiment update refuses it"
+          }
+        },
+        "summary": "Save a draft's audience, split, metrics and goals from the visual editor (beta)",
         "tags": [
           "Visual Editor"
         ],
