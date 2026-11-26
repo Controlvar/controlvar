@@ -1013,7 +1013,7 @@ segment it would balance within cannot be used. See
 - **Description**: Get all feature flags evaluated for a user
 - **Headers**: X-API-Key: {api_key}
 - **Path Parameters**:
-  - user_id: string
+  - user_id: string, 1 to 255 characters
 - **Query Parameters**:
   - context: object (optional), URL-encoded JSON; at most 8,192 bytes and 10 levels deep
     ([Targeting Context Limits](#targeting-context-limits))

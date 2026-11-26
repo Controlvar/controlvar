@@ -1656,3 +1656,17 @@ by = [
     "test:backend/tests/unit/services/test_flag_split_serving.py::test_every_answer_has_exactly_the_keys_it_had",
     "test:backend/tests/unit/services/test_sdk_ruleset.py::test_an_active_flag_with_a_split_or_a_rule_value_is_exactly_remote",
 ]
+
+[[unit]]
+text = "GET/POST /api/v1/feature-flags/evaluate/{flag_key}, GET /api/v1/feature-flags/user/{user_id} | #2176 | A user_id longer than 255 characters answers 422 at [\"query\", \"user_id\"], [\"body\", \"user_id\"] or [\"path\", \"user_id\"] with the msg String should have at most 255 characters, whatever the key's environment, and nothing is evaluated or recorded. With a production key it answered 500, because the evaluation could not be recorded, except from /user when no flag was on, which answered 200 {}; with a staging or development key it answered 200. Characters are counted, not bytes: 255 é are answered as before. A user_id holding NUL (U+0000) answers 422 on both evaluate routes with the msg Value error, user_id must not contain NUL or unpaired surrogate characters, which does not repeat the value; it answered 500 with a production key and 200 with a staging or development key. Authentication still answers 401 first, and the 422 comes before the 404 for an unknown flag. An id of 1 to 255 characters is answered and recorded as before. The OpenAPI document changes only in the three parameters' maxLength of 255."
+by = [
+    "test:backend/tests/integration/api/test_evaluate_user_id_refused.py::test_an_id_over_255_characters_answers_422_and_nothing_is_recorded",
+    "test:backend/tests/integration/api/test_evaluate_user_id_refused.py::test_user_flags_with_no_active_flag_answers_422",
+    "test:backend/tests/integration/api/test_evaluate_user_id_refused.py::test_characters_are_counted_not_bytes",
+    "test:backend/tests/integration/api/test_evaluate_user_id_refused.py::test_a_nul_in_the_id_answers_422_without_the_value",
+    "test:backend/tests/integration/api/test_evaluate_user_id_refused.py::test_the_key_is_still_checked_first",
+    "test:backend/tests/integration/api/test_evaluate_user_id_refused.py::test_the_422_comes_before_an_unknown_flag_key",
+    "test:backend/tests/integration/api/test_evaluate_user_id_refused.py::test_an_id_of_255_characters_is_answered_and_recorded",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]

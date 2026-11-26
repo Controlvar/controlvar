@@ -7633,6 +7633,7 @@
           },
           "user_id": {
             "description": "ID of the user to evaluate the flag for",
+            "maxLength": 255,
             "minLength": 1,
             "title": "User Id",
             "type": "string"
@@ -23052,6 +23053,7 @@
             "required": true,
             "schema": {
               "description": "ID of the user to evaluate the flag for",
+              "maxLength": 255,
               "title": "User Id",
               "type": "string"
             }
@@ -23263,6 +23265,7 @@
             "required": true,
             "schema": {
               "description": "ID of the user to get flags for",
+              "maxLength": 255,
               "title": "User Id",
               "type": "string"
             }
