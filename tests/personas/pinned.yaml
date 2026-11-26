@@ -2,4 +2,4 @@
 # Playwright project (frontend/tests/e2e/personas). check_run.py fails a run
 # that lists any other number, and refuses 0, so a day cannot disappear
 # without this file changing in the same pull request.
-tests: 1
+tests: 2
