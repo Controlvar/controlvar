@@ -203,8 +203,8 @@ test.afterEach(async () => {
 });
 
 test("U-QA: the role matrix, in the dashboard and through the API, for all five accounts", async ({ browser }) => {
-  // Five sign-ins and ten rows of five pages each: about 20 seconds on a local stack.
-  test.setTimeout(5 * 60_000);
+  // Five sign-ins and ten rows of five pages each: 15 to 20 seconds on a local stack.
+  test.setTimeout(3 * 60_000);
   const rows = loadMatrix();
   const stamp = Date.now();
   const sessions = {} as Record<MatrixRole, AccountSession>;
@@ -393,10 +393,13 @@ test("U-QA: the role matrix, in the dashboard and through the API, for all five 
         const key = page.getByTestId("flag-key").filter({ hasText: flag.key });
         const state = await open(page, `/feature-flags/${flag.id}`, key);
         if (state !== "data") return state;
-        // The page decides: Save for a role that may change the flag, its role note otherwise.
+        // The page decides: the switch and Save for a role that may change
+        // the flag, its role note otherwise. The two must agree.
         const save = page.getByTestId("save-flag");
         if (!(await shows(save.or(page.getByTestId("flag-role-note")).first()))) return NOT_RENDERED;
-        return offered(page, save);
+        const saving = await offered(page, save);
+        const switching = await offered(page, page.getByTestId("flag-toggle"));
+        return saving === switching ? saving : `the switch is ${switching} but Save is ${saving}`;
       },
       call: async (role, { api }) => {
         const flag = changed as Flag;
