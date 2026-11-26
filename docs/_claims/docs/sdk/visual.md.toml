@@ -157,7 +157,7 @@ by = [
 ]
 
 [[unit]]
-text = "Each event carries the goal's event name, the visitor's id, the experiment's key, an event_id made of the page view's random id and the event name, and the page view's website details (as data-collect sets them), and nothing else: never the page's address, its text or data-attributes."
+text = "Each event carries the goal's event name, the visitor's id, the experiment's key, an event_id made of the page view's random id and the event name, and the page view's website details (as data-collect sets them), and nothing else: never the page's URL or query, its text or data-attributes."
 by = [
     "test:sdk/visual/__tests__/goals.test.ts::an event carries the goal's name, the visitor, the experiment, the page view's id and its website details, and nothing else",
     "test:sdk/visual/__tests__/goals.test.ts::with data-collect none an event carries no details",
@@ -424,7 +424,7 @@ text = "controlvar_assigned | localStorage | The keys of the experiments this vi
 by = ["mechanism:visual-stored-keys"]
 
 [[unit]]
-text = "controlvar_goals | localStorage | The goals of the experiments this visitor was assigned to (each goal's event name, kind, selector and page rule), so a goal on another page counts. | 30 days per experiment"
+text = "controlvar_goals | localStorage | The goals of the experiments this visitor was assigned to (each goal's event name, kind, selector and page rule), so a goal on another page counts, and the page rules (match and path) that covered the page where each was named, so an answer there that no longer names it removes them. | 30 days per experiment"
 by = ["mechanism:visual-stored-keys"]
 
 [[unit]]

@@ -42,7 +42,7 @@ The answer also names the goals of each experiment the visitor is assigned to, t
 A page-view goal records one event for each page view of the goal's page: each page load, and each path change the script follows; a change of only the query, or only the part after `#`, is not a page view.
 A click goal records one event per page view when a click a person makes, or Enter or Space on the element, lands on the one element its selector matches, or inside it; a click made by a script counts nothing, and so does a click anywhere else.
 A goal counts at most once per page view, and one click counts once for each experiment whose goal it is.
-Each event carries the goal's event name, the visitor's id, the experiment's key, an `event_id` made of the page view's random id and the event name, and the page view's website details (as `data-collect` sets them), and nothing else: never the page's address, its text or `data-attributes`.
+Each event carries the goal's event name, the visitor's id, the experiment's key, an `event_id` made of the page view's random id and the event name, and the page view's website details (as `data-collect` sets them), and nothing else: never the page's URL or query, its text or `data-attributes`.
 The script keeps each event in localStorage until your Controlvar API accepts it: at most 50 events, the oldest dropped first, each for at most 24 hours.
 An event is dropped if the server refuses it (any 4xx answer but 429); after a 429, a 5xx or a failed call it is sent again with the next goal event or from the next page, with the same `event_id`, and the API stores it once.
 Events are sent with `keepalive`, so a click that takes the visitor to another page is still sent as the page goes away.
@@ -101,7 +101,7 @@ In a preview tab and on an editor link it sends no detail and stores no visit.
 | `controlvar_visit` | localStorage | The visit's start and last page view, and its first page's campaign values and landing path when the tag collects them, cleaned. | replaced when a visit starts after 30 minutes without a page view; revokeConsent() deletes it |
 | `controlvar_seen` | localStorage | When this browser was first seen (milliseconds since 1970), to tell a new visitor from a returning one. | until deleted |
 | `controlvar_assigned` | localStorage | The keys of the experiments this visitor was assigned to, each with the time it was last seen, so track() can name them. | 30 days per experiment |
-| `controlvar_goals` | localStorage | The goals of the experiments this visitor was assigned to (each goal's event name, kind, selector and page rule), so a goal on another page counts. | 30 days per experiment |
+| `controlvar_goals` | localStorage | The goals of the experiments this visitor was assigned to (each goal's event name, kind, selector and page rule), so a goal on another page counts, and the page rules (match and path) that covered the page where each was named, so an answer there that no longer names it removes them. | 30 days per experiment |
 | `controlvar_outbox` | localStorage | Goal events the API has not yet accepted, each with the time it was made, so a later page sends them again. | until the API accepts or refuses it; at most 50 events, each at most 24 hours |
 | `controlvar_pages` | localStorage | The page rules of the running visual experiments on this site (match and path), so a page none of them covers makes no call. | 60 seconds |
 | `controlvar_backoff` | sessionStorage | The time until which the script sends nothing, set after a refused or failed call. | 5 minutes, in this tab |

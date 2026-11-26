@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 import { routeSite, SITE, type Site } from "./editor";
 import { expect, test } from "./runtime.fixture";
-import { answering, BATCH_PATH, calls, ERRORS_PATH, experiment, sitePage } from "./visual";
+import { answering, BATCH_PATH, calls, ERRORS_PATH, experiment, sitePage, VISUAL_PATH } from "./visual";
 
 /**
  * Goals in a real browser (#1545): which page views and clicks the packed
@@ -210,5 +210,65 @@ test.describe("the click listener", () => {
       ["first", "click_buy"],
       ["second", "click_buy_too"],
     ]);
+  });
+});
+
+test.describe("the goals kept between pages", () => {
+  test("count on a later page of the same origin only: a page on another port, subdomain or scheme records none", async ({
+    page,
+    visualPackage,
+  }) => {
+    const others: [string, string][] = [
+      ["another port", "http://localhost:4101"],
+      ["another subdomain", "http://www.localhost:4100"],
+      ["another scheme", "https://localhost:4100"],
+    ];
+    const site = await routeSite(page, visualPackage, {
+      pages: { "/shop": sitePage(BODY), "/thanks": sitePage("<p>Thanks</p>") },
+      answer: answering({
+        rules: [{ match: "exact", path: "/shop" }],
+        experiments: [
+          experiment("shop", [], {
+            goals: [
+              { event_name: "page_thanks", kind: "page_view", page: { match: "exact", url: `${SITE}/thanks` } },
+              { event_name: "page_thanks_www", kind: "page_view", page: { match: "exact", url: "http://www.localhost:4100/thanks" } },
+            ],
+          }),
+        ],
+      }),
+    });
+    // Each other origin serves the same page and script, with the API on its own origin; no experiment covers its page.
+    const elsewhere: string[] = [];
+    for (const [, origin] of others) {
+      await page.route(`${origin}/**`, async (route) => {
+        const { pathname } = new URL(route.request().url());
+        if (pathname === "/controlvar-visual.js") {
+          await route.fulfill({ contentType: "text/javascript", body: visualPackage.classicScript });
+        } else if (!pathname.startsWith("/api/")) {
+          await route.fulfill({ contentType: "text/html", body: sitePage("<p>Thanks</p>", { "data-api-url": origin }) });
+        } else {
+          elsewhere.push(`${origin}${pathname}`);
+          const pages = { host: new URL(origin).hostname, rules: [{ match: "exact", path: "/shop" }], max_age: 60 };
+          await route.fulfill({ contentType: "application/json", body: JSON.stringify(pathname === VISUAL_PATH ? { experiments: [], pages } : {}) });
+        }
+      });
+    }
+    await page.goto(`${SITE}/shop`, { waitUntil: "load" });
+    await expect
+      .poll(() => page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem("controlvar_goals") ?? "{}"))), { message: "the goals kept" })
+      .toEqual(["shop"]);
+    const counts: string[] = [];
+    for (const [name, origin] of others) {
+      await page.goto(`${origin}/thanks`, { waitUntil: "load" });
+      await expect.poll(() => elsewhere.includes(`${origin}${VISUAL_PATH}`), { message: `the page call on ${name}` }).toBe(true);
+      await settle(page);
+      counts.push(`${name}: ${elsewhere.filter((call) => call === `${origin}${BATCH_PATH}`).length}`);
+    }
+    await page.goto(`${SITE}/thanks`, { waitUntil: "load" });
+    await expect.poll(() => named(site, "page_thanks"), { message: "the goal on the same origin" }).toBeGreaterThan(0);
+    await settle(page);
+    counts.push(`the same origin: ${named(site, "page_thanks")}`);
+    expect(counts).toEqual(["another port: 0", "another subdomain: 0", "another scheme: 0", "the same origin: 1"]);
+    expect(elsewhere, "each other origin made its page call and nothing else").toEqual(others.map(([, origin]) => `${origin}${VISUAL_PATH}`));
   });
 });

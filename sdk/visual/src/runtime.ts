@@ -256,7 +256,8 @@ export function createRuntime(env: RuntimeEnv): Runtime {
   function keepAnswerGoals(named: Named[], rules: KeptRules | null): void {
     if (view === null) return;
     const page = view;
-    const covering = rules !== null && rules.host === page.host ? rules.rules.filter((rule) => ruleMatches(page.path, rule)) : [];
+    const covering =
+      rules !== null && rules.host === normalizeHost(page.host) ? rules.rules.filter((rule) => ruleMatches(page.path, rule)) : [];
     keepGoals(env.local(), env.now(), named, covering, page.path, env.allowed);
     countPageViews();
   }

@@ -34,7 +34,7 @@
       "name": "controlvar_goals",
       "storage": "localStorage",
       "written": true,
-      "holds": "The goals of the experiments this visitor was assigned to (each goal's event name, kind, selector and page rule), so a goal on another page counts.",
+      "holds": "The goals of the experiments this visitor was assigned to (each goal's event name, kind, selector and page rule), so a goal on another page counts, and the page rules (match and path) that covered the page where each was named, so an answer there that no longer names it removes them.",
       "kept": "30 days per experiment"
     },
     {

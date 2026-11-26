@@ -612,16 +612,20 @@ by = [
 ]
 
 [[unit]]
-text = "A click that takes the visitor to another site, always counted | The click's event is sent as the page goes away, with keepalive; if the browser does not deliver that request, the click is lost."
+text = "A click that takes the visitor to another site, always counted | The click's event is sent as the page goes away, with keepalive; if the browser does not deliver that request, the click counts only if the visitor returns within 24 hours, when the next page on the same origin sends it again."
 by = [
     "test:frontend/tests/e2e/runtime/real-api-goals.runtime.spec.ts::a click on a link to another site is recorded as the page goes away",
+    "test:frontend/tests/e2e/runtime/real-api-goals.runtime.spec.ts::an event whose answer was lost is sent again from the next page, and stored once",
+    "test:sdk/visual/__tests__/outbox.test.ts::%s keeps the call's events, and the next flush sends them again exactly once",
+    "test:sdk/visual/__tests__/outbox.test.ts::drops an event 24 hours after it was made",
 ]
 
 [[unit]]
-text = "A goal on a page of another domain | A goal's page must be on one of the experiment's hosts, and the script keeps goals in the browser storage of the site where the visitor was assigned, so a page on another domain records none."
+text = "A goal on a page of another domain or origin | A goal's page must be on one of the experiment's hosts, and the script keeps goals in the localStorage of the origin where the visitor was assigned, which the browser keeps apart for each scheme, host and port, so a page on another domain, subdomain, port or scheme records none of the goals kept there."
 by = [
     "test:backend/tests/unit/schemas/test_visual_changes.py::test_a_goal_page_is_on_one_of_the_sites",
     "test:sdk/visual/__tests__/goals.test.ts::uses only what it can check: an experiment older than 30 days, or with one goal out of its form, counts nothing",
+    "test:frontend/tests/e2e/runtime/goals.runtime.spec.ts::count on a later page of the same origin only: a page on another port, subdomain or scheme records none",
 ]
 
 [[unit]]

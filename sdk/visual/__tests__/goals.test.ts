@@ -370,6 +370,45 @@ describe('the goals kept between pages', () => {
     p.close();
   });
 
+  test.each([['https://shop.example'], ['https://shop.example:8443']])(
+    'on %s, an experiment that an answer for a page it covers no longer names loses its goals',
+    async (origin) => {
+      let stopped = false;
+      const p = page(
+        {
+          rules: [
+            { match: 'exact', path: '/shop' },
+            { match: 'exact', path: '/other' },
+          ],
+          experiments(path) {
+            if (path === '/shop') return [experiment('a', [clickGoal('click_a', '#buy', `${origin}/shop`)])];
+            if (path === '/other' && !stopped) return [experiment('b', [viewGoal('page_b', `${origin}/other`, 'exact')])];
+            return [];
+          },
+        },
+        { url: `${origin}/shop` },
+      );
+      // The answer names the host as page rules compare it: lower case, no port.
+      const stored = () => JSON.parse(p.window.localStorage.getItem('controlvar_goals') || '{}');
+      await settle();
+      p.window.history.pushState(null, '', '/other');
+      await settle();
+      const before = Object.keys(stored()).sort();
+      const pagesOfB = stored().b.pages;
+      stopped = true;
+      p.window.history.pushState(null, '', '/shop');
+      await settle();
+      p.window.history.pushState(null, '', '/other');
+      await settle();
+      expect({ before, pagesOfB, after: Object.keys(stored()).sort() }).toEqual({
+        before: ['a', 'b'],
+        pagesOfB: [{ match: 'exact', path: '/other' }],
+        after: ['a'],
+      });
+      p.close();
+    },
+  );
+
   test('an experiment the visitor is no longer assigned to, or that has no goals, keeps none', async () => {
     let round = 0;
     const p = page({
