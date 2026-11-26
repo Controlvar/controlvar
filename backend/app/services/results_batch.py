@@ -499,7 +499,14 @@ def results_many(
 def _compute_group(
     db: Session, ids: Sequence[UUID], results: Dict[str, Optional[Dict[str, Any]]]
 ) -> None:
-    """Add one group's results to ``results``."""
+    """Add one group's results to ``results``.
+
+    Only ``ValueError`` is caught (that experiment's results are None).  A
+    ``KeyError`` from ``EventRows.of`` is deliberately not: the keys asked for
+    and the rows read come from the same ``metric_definitions`` in one
+    session, so one is a defect, and it fails the whole export rather than one
+    experiment.
+    """
     reads = load_group(db, ids)
     for part in sub_groups(reads, ids):
         # The last part's rows and counts go before the next part's are read.
