@@ -34,11 +34,17 @@ if not wg.CONFIGURE_REPO.is_file() or not wg.WORKFLOWS.is_dir():
 NAME = r"anthropic|claude|qa_agent"
 #: A secret reference: ``secrets.X`` or ``secrets['X']``.
 SECRET_REF = re.compile(r"secrets\s*(?:\.|\[\s*['\"])\s*(\w+)", re.I)
-#: The agent command as a word: ``claude -p``, ``npx claude``,
-#: ``npm i -g @anthropic-ai/claude-code``. A quoted package name in an
-#: assertion is not a command.
+#: The agent command as a word: ``claude -p``, ``./node_modules/.bin/claude``,
+#: or ``claude`` behind any package runner or wrapper, with flags between
+#: (``npx -y claude``, ``bunx claude``, ``pnpm dlx claude``, ``yarn dlx claude``,
+#: ``npm exec -- claude``), and any use of the ``@anthropic-ai/`` packages. A
+#: quoted package name in an assertion is not a command.
+RUNNER = (
+    r"(?:npx|bunx|pnpx|pnpm\s+(?:dlx|exec)|yarn\s+(?:dlx|exec)|npm\s+(?:exec|x)"
+    r"|exec|sudo|xargs|command|env|nohup|time)"
+)
 AGENT_COMMAND = re.compile(
-    r"(?:^|[;&|(`]\s*|\b(?:npx|exec|sudo|xargs|command)\s+)claude(?:\s|$)"
+    r"(?:^|[;&|(`/]\s*|\b" + RUNNER + r"(?:\s+(?:-\S+|\w+=\S*))*\s+)claude(?:\s|$)"
     r"|@anthropic-ai/",
     re.I | re.M,
 )
@@ -96,6 +102,13 @@ def agent_findings(doc: Any) -> List[str]:
     return found
 
 
+def agent_message(file: Any, finding: str) -> str:
+    """``agent workflow in public repo: <file>:<job>``, then what was found."""
+    parts = finding.split(":", 1)[0].split("/")
+    job = parts[2] if len(parts) > 2 and parts[1] == "jobs" else "(action)"
+    return f"agent workflow in public repo: {file}:{job} ({finding})"
+
+
 def agent_required_checks(names: List[str]) -> List[str]:
     return [n for n in names if AGENT_CHECK.search(n)]
 
@@ -112,8 +125,8 @@ def test_no_workflow_or_action_runs_an_ai_job():
     problems = []
     for path in public_files():
         for finding in agent_findings(wg.load(path)):
-            problems.append(f"{path.relative_to(wg.REPO_ROOT)}{finding}")
-    assert not problems, "an AI job in a public workflow:\n" + "\n".join(problems)
+            problems.append(agent_message(path.relative_to(wg.REPO_ROOT), finding))
+    assert not problems, "\n".join(problems)
 
 
 def test_no_required_check_is_an_ai_result():
@@ -149,6 +162,25 @@ PLANTS = {
         "jobs": {"j": {"steps": [{"run": "npm i -g @anthropic-ai/claude-code"}]}}
     },
 }
+for _runner in (
+    "npx claude",
+    "npx -y claude",
+    "npx --yes claude -p hi",
+    "bunx claude",
+    "pnpx claude",
+    "pnpm dlx claude",
+    "pnpm dlx @anthropic-ai/claude-code",
+    "pnpm exec claude",
+    "yarn dlx claude",
+    "yarn dlx -q claude",
+    "npm exec -- claude",
+    "npm x claude",
+    "./node_modules/.bin/claude -p hi",
+    "env CI=1 claude",
+    "sudo claude",
+    "echo hi | xargs claude",
+):
+    PLANTS[f"runner: {_runner}"] = {"jobs": {"j": {"steps": [{"run": _runner}]}}}
 
 
 @pytest.mark.parametrize("plant", sorted(PLANTS))
@@ -175,3 +207,10 @@ def test_an_agent_check_name_is_refused():
     assert agent_required_checks(["lint", "qa-agent/explorer"]) == ["qa-agent/explorer"]
     assert agent_required_checks(["lint", "Claude review"]) == ["Claude review"]
     assert agent_required_checks(["lint", "DCO"]) == []
+
+
+def test_the_message_names_the_file_and_the_job():
+    found = agent_findings(PLANTS["secret in job env"])
+    assert agent_message("a.yml", found[0]).startswith(
+        "agent workflow in public repo: a.yml:j "
+    )
