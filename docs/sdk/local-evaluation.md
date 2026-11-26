@@ -160,7 +160,7 @@ Anything else is evaluated by the server, for the flag or for that one evaluatio
   it is active, every local `getAllFlags` / `get_all_flags` call goes to the server, because a bulk
   call is answered locally only when every active flag is;
 - a string, number or JSON flag with a split (several values, each with a weight) or a targeting
-  rule that has a value of its own. No request sets either yet. While such a flag is on, the
+  rule that has a value of its own. While such a flag is on, the
   ruleset marks it `"remote"` and carries neither its values nor its rules, and bulk calls go to
   the server, as above;
 - an attribute whose type does not match the rule (a string against a number, a boolean, a numeric

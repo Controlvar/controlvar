@@ -80,6 +80,14 @@ text = "A flag's key, name, description, value_type, on_value and off_value are 
 by = ["test:backend/tests/unit/core/test_flag_environments.py::test_identity_and_values_are_the_flag_rows"]
 
 [[unit]]
+text = "A string, number or json flag's split, and the values its targeting rules serve, are each environment's, as its rules are."
+by = [
+    "test:backend/tests/integration/api/test_flag_split_write_api.py::test_a_staging_split_set_through_the_api_is_served_by_staging_alone",
+    "test:backend/tests/integration/api/test_flag_split_write_api.py::test_a_staging_rule_value_set_through_the_api_is_served_by_staging_alone",
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_a_put_keeps_the_split_and_sets_it_in_its_environment_alone",
+]
+
+[[unit]]
 text = "An archived flag is off in every environment, whatever its settings there."
 by = [
     "test:backend/tests/integration/api/test_environment_evaluation.py::test_an_archived_flag_is_off_in_every_environment",
@@ -348,7 +356,7 @@ text = "Compare environments shows the flag's status, rollout and targeting rule
 by = ["test:frontend/src/tests/pages/feature-flag-environments.test.tsx::shows the flag in all three environments side by side, from the environments route"]
 
 [[unit]]
-text = "A flag's values, and archiving or deleting it, apply in every environment, so the dashboard offers them in Production only."
+text = "A flag's value type, on value and off value, and archiving or deleting it, apply in every environment, so the dashboard offers them in Production only."
 by = [
     "test:frontend/src/tests/pages/feature-flag-environments.test.tsx::a value flag's values are shown, not edited, outside Production",
     "test:frontend/src/tests/pages/feature-flag-environments.test.tsx::Staging shows Staging's settings, the production-only line, and no schedule, safety or manage controls",
@@ -377,8 +385,10 @@ by = [
 ]
 
 [[unit]]
-text = "It copies the status, the rollout percentage and the targeting rules, all together."
+text = "It copies the status, the rollout percentage, the targeting rules and the split, all together."
 by = [
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_promotion_copies_the_split_and_changes_no_other",
+    "test:backend/tests/integration/api/test_flag_split_write_api.py::test_every_write_path_stores_what_it_accepts_as_sent",
     "test:backend/tests/integration/api/test_flag_environments_api.py::test_promotion_copies_exactly_the_per_environment_fields",
     "test:backend/tests/integration/api/test_flag_environments_api.py::test_promotion_copies_all_three_fields_and_nothing_else",
 ]

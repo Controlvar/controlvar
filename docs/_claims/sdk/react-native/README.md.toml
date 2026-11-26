@@ -173,10 +173,12 @@ text = "Flag values"
 by = ["exempt:label"]
 
 [[unit]]
-text = "A string, number or json flag serves its on value to the users it is on for, and its off value to everyone else."
+text = "A string, number or json flag serves its on value to the users it is on for, and its off value to everyone else; a flag with a split, or a matched rule with a value of its own, serves those users that value instead."
 by = [
     "test:sdk/react-native/__tests__/client.test.ts::each getter reads its type from GET /api/v1/feature-flags/evaluate/{key}, attributes as context",
     "test:sdk/react-native/__tests__/client.test.ts::a flag that is off for the user answers its off value, not the default",
+    "test:backend/tests/integration/api/test_flag_split_write_api.py::test_a_split_set_through_the_api_is_served_by_the_hash",
+    "test:backend/tests/integration/api/test_flag_split_write_api.py::test_a_rule_set_through_the_api_serves_its_own_value",
 ]
 
 [[unit]]

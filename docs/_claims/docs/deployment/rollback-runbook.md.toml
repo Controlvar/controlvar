@@ -611,6 +611,25 @@ text = "Rolling back past flag splits"
 by = ["exempt:label"]
 
 [[unit]]
+text = "Rolling the API back alone, with the database left as it is: a 0.48.0 task ignores splits and rule values and serves each such flag's on value to every user the flag is on for."
+by = ["test:backend/tests/integration/database/test_flag_split_migration.py::test_the_previous_release_ignores_splits_and_rule_values_and_keeps_them"]
+
+[[unit]]
+text = "This holds during the rolling upgrade and after an API-only rollback to 0.48.0, until the API is upgraded again or the splits and rule values are cleared with 0.49.0 serving."
+by = [
+    "test:backend/tests/integration/database/test_flag_split_migration.py::test_the_previous_release_ignores_splits_and_rule_values_and_keeps_them",
+    "test:backend/tests/integration/api/test_flag_split_write_api.py::test_null_clears_the_split_and_leaving_it_out_keeps_it",
+]
+
+[[unit]]
+text = "A rollback to 0.49.0 or a later release changes no answer: each serves splits and rule values."
+by = ["test:backend/tests/integration/database/test_flag_split_write_rollback.py::test_the_release_before_the_write_path_serves_what_this_one_wrote"]
+
+[[unit]]
+text = "No flag needs to be turned off first."
+by = ["exempt:instruction"]
+
+[[unit]]
 text = "Downgrading below t2012_flag_split drops feature_flags.split and flag_environment_settings.split."
 by = [
     "test:backend/tests/integration/database/test_flag_split_migration.py::test_with_nothing_in_use_the_downgrade_drops_both_columns_and_nothing_else",

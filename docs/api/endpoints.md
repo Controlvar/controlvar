@@ -1075,12 +1075,13 @@ development a flag is off until someone configures it there.
 - **Settings**: `{"environment", "status", "is_active", "rollout_percentage", "targeting_rules", "configured", "updated_at"}`.
   `configured` is `false` for a flag nobody has configured in staging or development. An
   archived flag's `status` is `archived` in every environment
-- **PUT body**: `{"is_active", "rollout_percentage", "targeting_rules"}`, each optional; only the
-  fields sent change, and `targeting_rules: null` clears the rules. A change to `production` is
+- **PUT body**: `{"is_active", "rollout_percentage", "targeting_rules", "split"}`, each optional;
+  only the fields sent change, and `targeting_rules: null` clears the rules, `split: null` the
+  split. A change to `production` is
   the one `PUT /api/v1/feature-flags/{flag_id}` makes
-- **Promote body**: `{"from": environment}`. `is_active`, `rollout_percentage` and
-  `targeting_rules` are copied, all three together, and nothing else: not the flag's value type
-  and values, its rollout schedules or its safety configuration
+- **Promote body**: `{"from": environment}`. `is_active`, `rollout_percentage`,
+  `targeting_rules` and `split` are copied, all four together, and nothing else: not the flag's
+  value type, on value and off value, its rollout schedules or its safety configuration
 - **Errors**: 400 for `is_active: true` on an archived flag; 403 without permission to change
   flags; 404 for an unknown flag; 422 for a name that is not an environment, for a field the
   routes do not read, for rules a flag update refuses, or for `from` naming the target; 500 when

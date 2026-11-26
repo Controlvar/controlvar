@@ -1,8 +1,8 @@
 """Flags with a split, or with a rule's own value, over the real routes (#2012).
 
-No request sets either yet, so each flag is stored through the models; then the
-routes an SDK calls answer it, with real keys and ``deps.get_api_key`` not
-replaced:
+Each flag is stored through the models (setting them through the API is
+``test_flag_split_write_api.py``); then the routes an SDK calls answer it, with
+real keys and ``deps.get_api_key`` not replaced:
 
 * the bulk route answers true or false for every one of the contract vectors'
   such flags, the same ``enabled`` as ``/evaluate``;
@@ -398,9 +398,11 @@ def test_what_a_request_may_change_of_such_a_flag_is_kept_and_answered(
         assert body["value"] == _pick(user, flag.key)
     put({"targeting_rules": None})
     check("red", 25)
-    # Sending either is refused, and changes nothing.
-    put({"split": SPLIT}, 422)
-    put({"targeting_rules": {**RULE, "value": "pro-copy"}}, 422)
+    # Sending either sets it again (refused here before the write path took
+    # them), and the stored rules without a value are what is kept below.
+    put({"split": SPLIT})
+    put({"targeting_rules": {**RULE, "value": "pro-copy"}})
+    put({"targeting_rules": None})
     put({"is_active": False})
     for user in USERS[:5]:
         body = _evaluate(client, keys["production"], flag.key, user, PRO)

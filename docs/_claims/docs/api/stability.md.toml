@@ -1600,3 +1600,33 @@ by = [
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
 ]
+
+[[unit]]
+text = "POST /api/v1/feature-flags/, GET /api/v1/feature-flags/, GET/PUT /api/v1/feature-flags/{flag_id}, POST /api/v1/feature-flags/{flag_id}/activate, POST /api/v1/feature-flags/{flag_id}/deactivate | #2012 | The request and response schemas gain split: what share of the users a string, number or json flag is on for gets each of 3 to 10 values, by whole-number weights that add up to 100. null, every existing flag's, means none, and a boolean flag's is always null. A targeting rule of such a flag may carry a value of its own. Anything else answers 422: a split at [\"body\", \"split\"] or at its entry ([\"body\", \"split\", 2, \"weight\"]), a rule's value at [\"body\", \"targeting_rules\"]. A release older than 0.49.0 refuses both (422) and serves the on value."
+by = [
+    "test:backend/tests/unit/schemas/test_flag_split_write.py::test_a_create_accepts_a_split_of_three_to_ten_values",
+    "test:backend/tests/unit/schemas/test_flag_split_write.py::test_a_create_refuses_each_split_at_its_place_and_in_its_words",
+    "test:backend/tests/unit/schemas/test_flag_split_write.py::test_a_boolean_flags_response_has_no_split_whatever_is_stored",
+    "test:backend/tests/unit/schemas/test_flag_split_write.py::test_a_rule_value_is_refused_at_the_rules_with_its_place",
+    "test:backend/tests/integration/api/test_flag_split_write_api.py::test_the_responses_carry_the_split_in_every_environment",
+    "test:backend/tests/integration/database/test_flag_split_migration.py::test_the_previous_release_ignores_splits_and_rule_values_and_keeps_them",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+]
+
+[[unit]]
+text = "GET/PUT /api/v1/feature-flags/{flag_id}/environments/{environment} (beta), GET /api/v1/feature-flags/{flag_id}/environments (beta), GET /api/v1/environments/{environment}/feature-flag-settings (beta), POST /api/v1/feature-flags/{flag_id}/environments/{target}/promote (beta) | #2012 | An environment's settings gain split, which the PUT sets, checked as on a flag update, and promotion copies with the other three."
+by = [
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_a_put_keeps_the_split_and_sets_it_in_its_environment_alone",
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_promotion_copies_the_split_and_changes_no_other",
+    "test:backend/tests/integration/api/test_flag_split_write_api.py::test_every_write_path_refuses_the_same_split_with_the_same_answer",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "GET/POST /api/v1/feature-flags/evaluate/{flag_key}, GET /api/v1/sdk/ruleset | #2012 | For a flag with a split or a rule's own value, value is the matched rule's own value, otherwise the split's for the user; enabled, reason and the answer's keys are as before. The ruleset lists such an active flag as \"evaluation\": \"remote\". The response schemas do not change."
+by = [
+    "test:backend/tests/integration/api/test_flag_split_write_api.py::test_a_split_set_through_the_api_is_served_by_the_hash",
+    "test:backend/tests/integration/api/test_flag_split_write_api.py::test_a_rule_set_through_the_api_serves_its_own_value",
+    "test:backend/tests/unit/services/test_flag_split_serving.py::test_every_answer_has_exactly_the_keys_it_had",
+    "test:backend/tests/unit/services/test_sdk_ruleset.py::test_an_active_flag_with_a_split_or_a_rule_value_is_exactly_remote",
+]

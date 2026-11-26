@@ -57,16 +57,23 @@ text = "Several Experiences"
 by = ["exempt:label"]
 
 [[unit]]
-text = "A flag serves two values: on or off, or a string, a number or a JSON value with an off value."
+text = "A flag serves on or off, or a string, a number or a JSON value with an off value."
 by = [
-    "test:backend/tests/unit/api/test_documented_limits.py::test_a_flag_request_with_variants_is_refused",
     "test:backend/tests/unit/api/test_documented_limits.py::test_a_boolean_flag_serves_false_when_off_and_a_value_flag_its_off_value",
     "test:backend/tests/integration/api/test_flag_values_api.py::test_evaluation_serves_on_exactly_when_enabled_and_off_otherwise",
 ]
 
 [[unit]]
-text = "To split users among three or more experiences, or to measure which one does better, run a multivariate experiment instead."
-by = ["exempt:advice"]
+text = "A string, number or JSON flag can also give the users it is on for one of 3 to 10 values by weight (a split), or a matched targeting rule's own value."
+by = [
+    "test:backend/tests/unit/api/test_documented_limits.py::test_a_split_has_three_to_ten_values_and_variants_stay_refused",
+    "test:backend/tests/integration/api/test_flag_split_write_api.py::test_a_split_set_through_the_api_is_served_by_the_hash",
+    "test:backend/tests/integration/api/test_flag_split_write_api.py::test_a_rule_set_through_the_api_serves_its_own_value",
+]
+
+[[unit]]
+text = "A split measures nothing: to measure which value does better, run a multivariate experiment instead."
+by = ["test:backend/tests/integration/api/test_flag_split_api.py::test_an_evaluation_is_one_evaluation_and_no_part_of_an_experiment"]
 
 [[unit]]
 text = "Each of its variants carries a configuration, which POST /api/v1/tracking/assign returns."

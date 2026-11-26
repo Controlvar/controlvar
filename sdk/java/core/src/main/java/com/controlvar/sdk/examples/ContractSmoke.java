@@ -33,7 +33,8 @@ import java.util.concurrent.TimeUnit;
  * {@code CONTROLVAR_API_KEY} (required), {@code CONTRACT_EXPERIMENT_KEY} (default
  * {@code sdk_contract_ab}), {@code CONTRACT_FLAG_KEY} (default {@code sdk_contract_flag}),
  * {@code CONTRACT_TARGETED_FLAG_KEY} (default {@code sdk_contract_targeted}),
- * {@code CONTRACT_USER_ID} (default {@code smoke-<uuid>}).
+ * {@code CONTRACT_USER_ID} (default {@code smoke-<uuid>}), {@code CONTRACT_MULTIWAY_USERS}
+ * (comma-separated users of the multi-way flag, step 6b; the live runner sets it).
  *
  * <p>Run from the repo root with {@code bash sdk/java/examples/contract_smoke.sh}.
  */
@@ -196,12 +197,29 @@ public final class ContractSmoke {
             //    seed's three value flags, each on at 100% while the SDK rows run, with defaults
             //    that are no flag value, so a getter that falls back shows. The report is what
             //    they returned; the runner requires the seed's on values.
+            // 6b. Multi-way flags (#2012): the same client reads the seed's split flag with the
+            //     string getter for each user the runner gives in CONTRACT_MULTIWAY_USERS (one per
+            //     value of the split), and the flag whose rule serves a value of its own for this
+            //     user with plan=pro. The runner requires each user's value of the split, and the
+            //     rule's own value.
             Map<String, Object> values = new LinkedHashMap<>();
+            Map<String, Object> multiwayUsers = new LinkedHashMap<>();
+            Map<String, Object> multiway = new LinkedHashMap<>(); // LinkedHashMap: rule may be null
             try (ExperimentationClient valued = new ExperimentationClient(config)) {
                 values.put("string", valued.getStringValue(user, "sdk_contract_value_string", "smoke-default"));
                 values.put("number", valued.getNumberValue(user, "sdk_contract_value_number", -1));
                 values.put("json", valued.getJsonValue(user, "sdk_contract_value_json",
                         Collections.singletonList("smoke-default")));
+                for (String id : env("CONTRACT_MULTIWAY_USERS", "").split(",")) {
+                    if (!id.isEmpty()) {
+                        multiwayUsers.put(id, valued.getStringValue(
+                                User.builder(id).build(), "sdk_contract_multiway", "smoke-default"));
+                    }
+                }
+                multiway.put("users", multiwayUsers);
+                multiway.put("rule", valued.getStringValue(
+                        User.builder(userId).attribute("plan", "pro").build(), "sdk_contract_rule_value",
+                        "smoke-default"));
             }
 
             Map<String, Object> assign = new LinkedHashMap<>();
@@ -242,6 +260,7 @@ public final class ContractSmoke {
             eventId.put("sends", 2);
             report.put("event_id", eventId);
             report.put("values", values);
+            report.put("multiway", multiway);
 
             System.out.println(new ObjectMapper().writeValueAsString(report));
         } catch (Exception e) {

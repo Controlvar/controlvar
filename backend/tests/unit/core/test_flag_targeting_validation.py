@@ -20,7 +20,7 @@ Pinned here, without a database:
   "no rules" by ``normalise_targeting_rules`` (V7);
 * dashboard rules hold at most 1,000 groups and conditions in all, counted
   before any condition is converted (#828); experiments are not capped;
-* the SDK ruleset vectors split exactly 153 accepted / 6 refused / 2 legacy
+* the SDK ruleset vectors split exactly 164 accepted / 6 refused / 2 legacy
   rows the API now refuses (V12); since #1204 the refused include
   ``op-json-path`` and ``op-percentage-bucket``, operators flag evaluation does
   not implement;
@@ -765,14 +765,15 @@ def test_what_is_accepted_is_what_the_flag_evaluator_applies(monkeypatch):
     )
     service = ffs.FeatureFlagService(db=MagicMock())
     corpus = _accepted_corpus()
-    # The vectors' 161 accepted rows: 141 (143 until #1204 refused
+    # The vectors' 164 accepted rows: 141 (143 until #1204 refused
     # op-json-path and op-percentage-bucket), since #1497 (F5) the 12
     # value flags' (each value type, four ways a flag reaches an SDK), and
-    # since #2012 the 8 flags with a split whose rules have no value of their
-    # own. The builder grid's 641 accepted rows: 529 until #1775, which stopped
+    # since #2012 the 8 flags with a split and the 3 whose rules carry a value
+    # of their own (the write path takes one since #2012's switch). The builder
+    # grid's 641 accepted rows: 529 until #1775, which stopped
     # suggesting session.new_user and suggests device_type, app_version and
     # account_age_days with every operator they had as custom attributes.
-    assert len(corpus) == len(ACCEPTED) + 161 + 641
+    assert len(corpus) == len(ACCEPTED) + 164 + 641
     with_rules = 0
     diverged = []
     for name, raw in corpus:
@@ -859,16 +860,12 @@ def test_the_ruleset_vectors_split_exactly():
             accepted.append(flag["key"])
         else:
             refused.append(flag["key"])
-    assert (len(accepted), len(refused), len(legacy)) == (161, 9, 2)
+    assert (len(accepted), len(refused), len(legacy)) == (164, 6, 2)
     assert sorted(refused) == [
         "empty-list",
         # #1204: flag evaluation does not implement either operator.
         "op-json-path",
         "op-percentage-bucket",
-        # #2012: no request sends a rule's own value yet.
-        "rule-value",
-        "rule-value-half",
-        "rule-value-split",
         "unconvertible-attribute",
         "unconvertible-number",
         "unconvertible-operator",

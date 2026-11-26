@@ -38,6 +38,8 @@ export interface FeatureFlag {
   on_value?: unknown;
   /** What everyone else gets, and everyone while it is off; `false` for a boolean flag. */
   off_value?: unknown;
+  /** Production's split (#2012); null when it has none, and always for a boolean flag. */
+  split?: FlagSplitEntry[] | null;
   owner_id: string | null;
   created_at: string;
   updated_at: string;
@@ -193,6 +195,12 @@ export interface RolloutScheduleListResponse {
 // `/api/v1/environments/{environment}/feature-flag-settings`
 // ---------------------------------------------------------------------------
 
+/** One entry of a split: a value of the flag's type and its whole-number share, 0 to 100. */
+export interface FlagSplitEntry {
+  value: unknown;
+  weight: number;
+}
+
 /**
  * A flag's settings in one environment. Production's come from the flag row
  * and are always `configured`. A flag with no setting in Staging or
@@ -205,6 +213,8 @@ export interface FlagEnvironmentSettings {
   is_active: boolean;
   rollout_percentage: number;
   targeting_rules: TargetingRules | Record<string, unknown> | null;
+  /** The environment's split (#2012); null when it has none, and always for a boolean flag. */
+  split?: FlagSplitEntry[] | null;
   configured: boolean;
   updated_at: string | null;
 }

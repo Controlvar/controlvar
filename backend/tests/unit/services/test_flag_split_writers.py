@@ -1,20 +1,28 @@
-"""Nothing sets a flag's split (#2012): a promotion copies one, and that is all.
+"""Who sets a flag's split (#2012): the requests, and a promotion's copy.
 
-``t2012_flag_split`` adds ``feature_flags.split`` and
-``flag_environment_settings.split``, before anything can set one:
+``t2012_flag_split`` added ``feature_flags.split`` and
+``flag_environment_settings.split``; a request sets one:
 
-* a flag create, update, environment or promotion request refuses a split, and
-  the first three a rule's own value; the flag responses have no such field;
-* of what the scan sees, a split is written by a promotion alone, which copies
-  it with the rest of an environment's settings: into production through
-  ``FeatureFlagService.update_feature_flag``, which only ``_save`` of
-  ``flag_environments.py`` passes one to, and into staging or development as
-  one of ``flag_environment_service``'s ``SETTING_FIELDS``. A split comes from
-  ``effective_settings``, which only the promotion (and its audit entry) calls;
-* the only attribute reads of one are the view of a flag in an environment,
-  ``effective_settings``, the column the ruleset's query loads and the
-  stale-flag hint; ``flag_values`` reads it by name in one function, for what a
-  flag serves and for its ruleset entry. No response carries one;
+* a flag create and update, and an environment change, take a ``split`` and
+  rules with a value of their own, and every flag response carries the split;
+  a promotion request takes neither (it copies them);
+* of what the scan sees, a split is written by a create (the model built from
+  the request), by an update through ``FeatureFlagService.update_feature_flag``
+  (the request's field, or the split the environment change of production and
+  a promotion into production write, which only ``_save`` of
+  ``flag_environments.py`` passes, and which the update's check counts the
+  rules sent with), and into staging or development as one of
+  ``flag_environment_service``'s ``SETTING_FIELDS``. What a promotion copies
+  comes from ``effective_settings``, which only the promotion, the check of
+  what an environment will serve and the audit entry call; every writer a
+  request reaches checks it with ``flag_values.serving_errors`` first. The
+  live SDK contract's seed writes its two flags through the model, as it
+  writes its other flags;
+* the attribute reads of one are the view of a flag in an environment,
+  ``effective_settings``, an environment's response, the update's check, the
+  column the ruleset's query loads and the stale-flag hint; ``flag_values``
+  reads it by name in one function, for what a flag serves and for its ruleset
+  entry;
 * the generic writer that would copy any column, ``crud_feature_flag``, is
   used for reading only.
 
@@ -194,18 +202,28 @@ STALE = "backend/app/services/stale_flags.py"
 ROUTES = "backend/app/api/v1/endpoints/flag_environments.py"
 SETTINGS = "backend/app/services/flag_environment_service.py"
 SERVICE = "backend/app/services/feature_flag_service.py"
+SCHEMAS = "backend/app/schemas/feature_flag.py"
+ENVIRONMENT_SCHEMAS = "backend/app/schemas/flag_environment.py"
 
 #: Every use there is. ``models/feature_flag.py`` declares the two columns;
 #: ``core/flag_environments.py`` names the field in the two lists and the
-#: mapping of the read-only view. A promotion copies it: ``SETTING_FIELDS``,
-#: ``NOT_CONFIGURED`` and ``effective_settings`` name it, the route passes it to
-#: the service beside the request (which leaves it out, ``_as_requested``), and
-#: the service takes the parameter and assigns it. ``audit_setting`` and
-#: ``AUDIT_NAME_ONLY_FIELDS`` name it in an entry. ``core/balanced_blocks.py``'s
-#: keyword fills a message about an experiment's traffic split, not a column.
-#: Serving one writes none: ``core/flag_values.py`` reads it by name in one
-#: function, and its variables and parameters are called that; the two vector
-#: generators build a transient row of their own corpus, never saved.
+#: mapping of the read-only view. The request and response models declare the
+#: field (``schemas/feature_flag.py``, ``schemas/flag_environment.py``), and a
+#: response reads it by name (``read_split``); a create stores the request's.
+#: A promotion copies it: ``SETTING_FIELDS``, ``NOT_CONFIGURED`` and
+#: ``effective_settings`` name it, the route passes it to the service beside
+#: the request (which leaves it out, ``_as_requested``), and the service takes
+#: the parameter and assigns it, and its check (``_check_sent_values``) counts
+#: the rules sent with it; ``flag_values.serving_errors`` checks a request's
+#: and a promotion's, by name. The live SDK contract's seed builds its two
+#: flags with ``split`` and lists the field among those it puts back.
+#: ``audit_setting`` and ``AUDIT_NAME_ONLY_FIELDS`` name it in an entry, and
+#: ``JSON_FIELDS`` among the columns stored whenever their JSON changes.
+#: ``core/balanced_blocks.py``'s keyword fills a message about an experiment's
+#: traffic split, not a column. Serving one writes none: ``core/flag_values.py``
+#: reads it by name in one function, and its variables and parameters are
+#: called that; the two vector generators build a transient row of their own
+#: corpus, never saved.
 EXPECTED: Dict[str, Dict[str, List[str]]] = {
     "backend/app/core/balanced_blocks.py": {"balance_problem": ["keyword argument"]},
     VALUES: {
@@ -214,6 +232,18 @@ EXPECTED: Dict[str, Dict[str, List[str]]] = {
         "serve": ["name assigned"],
         "split_errors": ["parameter"],
         "split_value": ["parameter"],
+        "served_value_bytes": ["parameter"],
+        "serving_errors": ["name assigned"] + ["string"] * 8,
+        MODULE: ["string"],
+    },
+    SCHEMAS: {
+        "FeatureFlagRead._normalise": ["string", "string"],
+        "read_split": ["parameter"],
+        MODULE: ["name assigned"] * 3 + ["string"],
+    },
+    ENVIRONMENT_SCHEMAS: {
+        "FlagEnvironmentSettings.of": ["keyword argument"],
+        MODULE: ["name assigned"] * 2,
     },
     "backend/scripts/generate_ruleset_vectors.py": {
         "Corpus.flag": ["parameter", "string"],
@@ -224,6 +254,10 @@ EXPECTED: Dict[str, Dict[str, List[str]]] = {
         "stored_flag": ["keyword argument", "string"],
         MODULE: ["string"] * 3,
     },
+    "backend/scripts/seed_sdk_contract.py": {
+        "seed_multiway_flags": ["keyword argument", "keyword argument"],
+        MODULE: ["string"],
+    },
     ENVIRONMENTS: {
         "FlagInEnvironment.__init__": ["string"],
         MODULE: ["string", "string"],
@@ -231,7 +265,9 @@ EXPECTED: Dict[str, Dict[str, List[str]]] = {
     "backend/app/models/feature_flag.py": {MODULE: ["name assigned"] * 2},
     "backend/app/services/audit_service.py": {MODULE: ["string"]},
     SERVICE: {
-        "FeatureFlagService.update_feature_flag": ["attribute assigned", "parameter"]
+        "_check_sent_values": ["parameter", "string"],
+        "FeatureFlagService.update_feature_flag": ["attribute assigned", "parameter"],
+        MODULE: ["string"],
     },
     SETTINGS: {
         "audit_setting": ["string"],
@@ -245,7 +281,7 @@ EXPECTED: Dict[str, Dict[str, List[str]]] = {
 }
 
 
-def test_the_only_writer_is_a_promotion():
+def test_the_writers_are_the_requests_and_a_promotion():
     sources = _sources()
     assert len(sources) > 200, "the scan found too few files: it is broken"
     found = {name: by_function(tree, uses) for name, tree in sources.items()}
@@ -371,9 +407,9 @@ def calls(called: str) -> Dict[Tuple[str, str], List[ast.Call]]:
     return found
 
 
-def test_only_a_promotion_passes_the_service_a_split():
-    """``_save`` passes one: the split in *changes*, and only a promotion's
-    changes have one (the test after this)."""
+def test_only_the_environment_routes_pass_the_service_a_split_beside_the_request():
+    """``_save`` passes one: the split in *changes*, an environment change's or
+    a promotion's; ``PUT /feature-flags/{id}`` sends it as the request's field."""
     # A bare ``**`` is a keyword whose name is None: it could carry one.
     passed = {
         where: [[keyword.arg for keyword in call.keywords] for call in found]
@@ -391,12 +427,24 @@ def callers(called: str) -> Set[Tuple[str, str]]:
     return set(calls(called))
 
 
-def test_a_split_reaches_a_writer_from_a_promotion_alone():
-    """The writers of a flag's settings are given a request's fields, which have
-    no split, or a promotion's, which ``effective_settings`` reads."""
+def test_a_split_reaches_a_writer_from_a_request_or_a_promotion_checked_first():
+    """The writers of a flag's settings are given a request's fields, or a
+    promotion's, which ``effective_settings`` reads; the environment routes
+    check both against what the environment stores now
+    (``_refuse_what_cannot_be_served``) before ``_save``."""
     assert callers("effective_settings") == {
         (ROUTES, "promote_flag_environment"),
+        (ROUTES, "_refuse_what_cannot_be_served"),
         (SETTINGS, "audit_setting"),
+    }
+    assert callers("_refuse_what_cannot_be_served") == {
+        (ROUTES, "promote_flag_environment"),
+        (ROUTES, "update_flag_environment"),
+    }
+    assert callers("serving_errors") == {
+        (SCHEMAS, "FeatureFlagCreate.values_fit_the_type"),
+        (SERVICE, "_check_sent_values"),
+        (ROUTES, "_refuse_what_cannot_be_served"),
     }
     assert callers("_save") == {
         (ROUTES, "promote_flag_environment"),
@@ -417,12 +465,18 @@ def test_the_generic_writer_is_used_for_reading_only():
     assert used == {"count", "get_multi"}
 
 
-PARTS = [{"value": "a", "weight": 50}, {"value": "b", "weight": 50}]
+PARTS = [
+    {"value": "a", "weight": 50},
+    {"value": "b", "weight": 25},
+    {"value": "c", "weight": 25},
+]
 
 
-@pytest.mark.parametrize("sent", [PARTS, [], None], ids=["parts", "empty", "null"])
+@pytest.mark.parametrize("sent", [PARTS, None], ids=["parts", "null"])
 @pytest.mark.parametrize("model", [FeatureFlagCreate, FeatureFlagUpdate])
-def test_a_request_that_sends_a_split_is_refused(model, sent):
+def test_a_request_takes_a_split(model, sent):
+    """Replaces "a request that sends a split is refused": the field is the
+    write path's now (``test_flag_split_write.py`` holds what it refuses)."""
     body = {
         "key": "k",
         "name": "n",
@@ -431,45 +485,36 @@ def test_a_request_that_sends_a_split_is_refused(model, sent):
         "off_value": "b",
         SPLIT: sent,
     }
-    with pytest.raises(ValidationError) as refused:
-        model.model_validate(body)
-    assert [(e["type"], e["loc"]) for e in refused.value.errors()] == [
-        ("extra_forbidden", (SPLIT,))
-    ]
+    assert model.model_validate(body).split == sent
 
 
-@pytest.mark.parametrize("sent", [PARTS, [], None], ids=["parts", "empty", "null"])
-@pytest.mark.parametrize(
-    "model, body",
-    [
-        (FlagEnvironmentUpdate, {"rollout_percentage": 5}),
-        (FlagPromotion, {"from": "staging"}),
-    ],
-    ids=["environment", "promotion"],
-)
-def test_an_environment_request_that_sends_a_split_is_refused(model, body, sent):
-    model.model_validate(body)
+@pytest.mark.parametrize("sent", [PARTS, None], ids=["parts", "null"])
+def test_an_environment_change_takes_a_split_and_a_promotion_does_not(sent):
+    """Replaces "an environment request that sends a split is refused": a
+    promotion copies the source's, and is sent nothing else."""
+    assert FlagEnvironmentUpdate.model_validate({SPLIT: sent}).split == sent
     with pytest.raises(ValidationError) as refused:
-        model.model_validate({**body, SPLIT: sent})
+        FlagPromotion.model_validate({"from": "staging", SPLIT: sent})
     assert [(e["type"], e["loc"]) for e in refused.value.errors()] == [
         ("extra_forbidden", (SPLIT,))
     ]
 
 
 @pytest.mark.parametrize(
-    "model",
+    "model, has_it",
     [
-        FeatureFlagCreate,
-        FeatureFlagUpdate,
-        FeatureFlagRead,
-        FeatureFlagListItem,
-        FlagEnvironmentUpdate,
-        FlagEnvironmentSettings,
-        FlagPromotion,
+        (FeatureFlagCreate, True),
+        (FeatureFlagUpdate, True),
+        (FeatureFlagRead, True),
+        (FeatureFlagListItem, True),
+        (FlagEnvironmentUpdate, True),
+        (FlagEnvironmentSettings, True),
+        (FlagPromotion, False),
     ],
 )
-def test_no_request_or_response_model_has_the_field(model):
-    assert SPLIT not in model.model_fields
+def test_every_flag_request_and_response_but_a_promotion_has_the_field(model, has_it):
+    """Replaces "no request or response model has the field"."""
+    assert (SPLIT in model.model_fields) is has_it
 
 
 CONDITION = {"attribute": "plan", "operator": "eq", "value": "pro"}
@@ -483,7 +528,7 @@ DASHBOARD = {
         }
     ],
 }
-#: Each place a rule's own value would be sent, beside the rules without one.
+#: Each place a rule's own value is sent, beside the rules without one.
 RULE_VALUES = {
     "dashboard": (DASHBOARD, {**DASHBOARD, "value": "B"}),
     "native": ({"rules": [RULE]}, {"rules": [{**RULE, "value": "B"}]}),
@@ -496,8 +541,9 @@ RULE_VALUES = {
 
 @pytest.mark.parametrize("shape", sorted(RULE_VALUES))
 @pytest.mark.parametrize("model", [FeatureFlagCreate, FeatureFlagUpdate])
-def test_a_request_that_sends_a_rule_value_is_refused(model, shape):
-    accepted, refused = RULE_VALUES[shape]
+def test_a_request_takes_a_rule_value(model, shape):
+    """Replaces "a request that sends a rule value is refused"."""
+    plain, valued = RULE_VALUES[shape]
     body = {
         "key": "k",
         "name": "n",
@@ -505,19 +551,23 @@ def test_a_request_that_sends_a_rule_value_is_refused(model, shape):
         "on_value": "a",
         "off_value": "b",
     }
-    model.model_validate({**body, "targeting_rules": accepted})
-    with pytest.raises(ValidationError, match="unknown key") as raised:
-        model.model_validate({**body, "targeting_rules": refused})
-    assert [e["loc"] for e in raised.value.errors()] == [("targeting_rules",)]
+    for rules in (plain, valued):
+        assert (
+            model.model_validate({**body, "targeting_rules": rules}).targeting_rules
+            == rules
+        )
 
 
 @pytest.mark.parametrize("shape", sorted(RULE_VALUES))
-def test_an_environment_request_that_sends_a_rule_value_is_refused(shape):
-    accepted, refused = RULE_VALUES[shape]
-    FlagEnvironmentUpdate.model_validate({"targeting_rules": accepted})
-    with pytest.raises(ValidationError, match="unknown key") as raised:
-        FlagEnvironmentUpdate.model_validate({"targeting_rules": refused})
-    assert [e["loc"] for e in raised.value.errors()] == [("targeting_rules",)]
+def test_an_environment_change_takes_a_rule_value(shape):
+    """Replaces "an environment request that sends a rule value is refused"."""
+    for rules in RULE_VALUES[shape]:
+        assert (
+            FlagEnvironmentUpdate.model_validate(
+                {"targeting_rules": rules}
+            ).targeting_rules
+            == rules
+        )
 
 
 def reads(tree: ast.AST) -> List[str]:
@@ -534,16 +584,18 @@ def reads(tree: ast.AST) -> List[str]:
     ]
 
 
-def test_the_only_readers_are_the_environment_view_a_promotion_and_serving():
+def test_the_readers_are_the_environment_view_a_promotion_a_response_and_serving():
     """Serving one: the ruleset's query loads the column, the stale-flag hint
     asks whether there is one, and ``flag_values._split_of`` (in EXPECTED above,
-    read by name) is the rest."""
+    read by name) is the rest. An environment's response reads the view's; a
+    flag response and an update's check read it by name."""
     found = {name: by_function(tree, reads) for name, tree in _sources().items()}
     assert {name: places for name, places in found.items() if places} == {
         ENVIRONMENTS: {"FlagInEnvironment.__init__": ["read"]},
         SETTINGS: {"effective_settings": ["read"]},
         RULESET_ROUTE: {"_ruleset_response": ["read"]},
         STALE: {"_one_answer": ["read"]},
+        ENVIRONMENT_SCHEMAS: {"FlagEnvironmentSettings.of": ["read"]},
     }
     assert reads(ast.parse("value = flag.split\nwords = 'a b'.split(' ')\n")) == [
         "read"

@@ -16,8 +16,10 @@ The create/update contract (#94, D39 as narrowed by D40):
   ``number`` or ``json``), set on create and read-only afterwards, and two
   values: ``on_value`` for the users it is on for, ``off_value`` for everyone
   else (#1497, DECISIONS T229). A boolean flag's are ``true`` and ``false``.
-  The value rules are ``backend.app.core.flag_values``; a create is checked
-  here, an update by ``FeatureFlagService`` against the stored type.
+  A string, number or json flag may also have a ``split`` and rules with a
+  ``value`` of their own (#2012): what the users it is on for are served. The
+  value rules are ``backend.app.core.flag_values``; a create is checked here,
+  an update by ``FeatureFlagService`` against the stored type.
 * ``default_value`` is stored and type-checked, and accepts only ``false``
   for every flag (D40). It is deprecated in favour of ``off_value``.
 * ``targeting_rules`` the flag evaluator would not apply as written answer
@@ -53,10 +55,16 @@ from pydantic_core import InitErrorDetails, PydanticCustomError
 from backend.app.core.flag_values import (
     BOOLEAN,
     MAX_SAFE_INTEGER,
+    MAX_SERVED_VALUE_BYTES,
+    MAX_SPLIT_ENTRIES,
     MAX_VALUE_BYTES,
     MAX_VALUE_DEPTH,
+    MIN_SPLIT_ENTRIES,
+    SERVING_FIELDS,
+    SPLIT_TOTAL,
     VALUE_FIELDS,
     read_values,
+    serving_errors,
     write_errors,
 )
 from backend.app.core.targeting_adapter import (
@@ -111,8 +119,9 @@ VALUE_TYPE_DESCRIPTION = (
 ON_VALUE_DESCRIPTION = (
     "What a user the flag is on for gets: a user who matches a targeting rule "
     "and falls inside its percentage, or matches no rule and falls inside "
-    "`rollout_percentage`. Required for a string, number or json flag, and of "
-    "that type; a boolean flag's is `true`."
+    "`rollout_percentage`. A matched rule's own `value`, or else the `split`, "
+    "is served instead where one is set. Required for a string, number or json "
+    "flag, and of that type; a boolean flag's is `true`."
 )
 OFF_VALUE_DESCRIPTION = (
     "What everyone else gets, and what everyone gets while the flag is off. "
@@ -126,6 +135,25 @@ VALUE_LIMITS_DESCRIPTION = (
     f"{MAX_SAFE_INTEGER}; no NUL or unpaired surrogate character; the two "
     "values differ."
 )
+SPLIT_DESCRIPTION = (
+    "What share of the users the flag is on for gets each value: a list of "
+    f"{MIN_SPLIT_ENTRIES} to {MAX_SPLIT_ENTRIES} entries, each "
+    '`{"value": <value>, "weight": <0 to 100>}`, the weights whole numbers '
+    f"adding up to {SPLIT_TOTAL}, the values of the flag's type and all "
+    "different. A user's value is picked by the flag's key and the user's ID, "
+    "and stays theirs while the rollout percentage changes; the entries are "
+    "used in the order sent. Only a string, number or json flag has one. A "
+    "matched rule's own `value` is served before it, and `on_value` when there "
+    "is no split; a release older than 0.49.0 ignores the split and serves "
+    "`on_value`."
+)
+SPLIT_REQUEST_DESCRIPTION = SPLIT_DESCRIPTION + (
+    " null, or leaving it out of a create, means no split; on an update, null "
+    "clears it and leaving it out keeps it. Each value follows the limits of "
+    f"`on_value`; a split's values and the rules' own values take at most "
+    f"{MAX_SERVED_VALUE_BYTES} bytes together."
+)
+SPLIT_READ_DESCRIPTION = SPLIT_DESCRIPTION + " null when the flag has none."
 DEFAULT_VALUE_REQUEST_DESCRIPTION = (
     "Deprecated: `off_value` replaces it. Only `false` is accepted, for every flag."
 )
@@ -153,6 +181,33 @@ def _flag_value_schema() -> Dict[str, Any]:
     }
 
 
+def _split_schema() -> Dict[str, Any]:
+    """What the request documents say ``split`` accepts: a list of entries or
+    null. Only the documents: the field stays ``Any``, and
+    ``flag_values.serving_errors`` decides, so each refusal has its own words
+    and place. A fresh dict for each field."""
+    entry = {
+        "type": "object",
+        "properties": {
+            "value": _flag_value_schema(),
+            "weight": {"type": "integer", "minimum": 0, "maximum": SPLIT_TOTAL},
+        },
+        "required": ["value", "weight"],
+        "additionalProperties": False,
+    }
+    return {
+        "anyOf": [
+            {
+                "type": "array",
+                "items": entry,
+                "minItems": MIN_SPLIT_ENTRIES,
+                "maxItems": MAX_SPLIT_ENTRIES,
+            },
+            {"type": "null"},
+        ]
+    }
+
+
 #: The description of ``targeting_rules`` on a create and an update.
 TARGETING_RULES_DESCRIPTION = (
     "Who gets the flag: the dashboard rule builder's shape "
@@ -162,7 +217,10 @@ TARGETING_RULES_DESCRIPTION = (
     "flag evaluator would not apply as written answer 422, with the place and "
     "the reason in the message, for example "
     '"groups[0].conditions[1].operator: unknown operator". A list of rules '
-    "is refused. Stored as sent."
+    "is refused. Stored as sent. On a string, number or json flag a rule may "
+    "carry a `value` of its own, of the flag's type, served to the users the "
+    "rule matches inside its percentage: at the top of the dashboard shape, or "
+    "on a native rule and `default_rule`."
 )
 
 
@@ -277,9 +335,11 @@ class _FeatureFlagRequest(BaseModel):
 def value_errors_to_raise(
     title: str, errors: List[Any], prefix: tuple = ()
 ) -> ValidationError:
-    """The ``ValidationError`` for ``flag_values.write_errors`` pairs.
+    """The ``ValidationError`` for ``flag_values.write_errors`` and
+    ``serving_errors`` pairs.
 
-    Each error sits at its own field (``prefix`` + the field name), so a 422
+    Each error sits at its own field (``prefix`` + the field name, or the
+    field's place as a tuple, such as ``("split", 2, "weight")``), so a 422
     names ``["body", "on_value"]`` rather than the body as a whole.  ``input``
     is ``None``: the value is never repeated (and the 422 handler drops
     ``input`` anyway).
@@ -287,10 +347,15 @@ def value_errors_to_raise(
     return ValidationError.from_exception_data(
         title,
         [
-            InitErrorDetails(type=error, loc=(*prefix, field), input=None)
+            InitErrorDetails(type=error, loc=(*prefix, *error_place(field)), input=None)
             for field, error in errors
         ],
     )
+
+
+def error_place(field: Any) -> tuple:
+    """A refusal's place below the body: a field name, or a tuple of them."""
+    return tuple(field) if isinstance(field, tuple) else (field,)
 
 
 class FeatureFlagCreate(_FeatureFlagRequest):
@@ -320,15 +385,22 @@ class FeatureFlagCreate(_FeatureFlagRequest):
         description=OFF_VALUE_DESCRIPTION + VALUE_LIMITS_DESCRIPTION,
         json_schema_extra=_flag_value_schema(),
     )
+    split: Any = Field(
+        None,
+        description=SPLIT_REQUEST_DESCRIPTION,
+        json_schema_extra=_split_schema(),
+    )
     tags: Optional[List[str]] = None
 
     @model_validator(mode="after")
     def values_fit_the_type(self) -> "FeatureFlagCreate":
-        """The two values follow the value rules for ``value_type``.
+        """The two values, the split and the rules' own values follow the value
+        rules for ``value_type``.
 
-        A string, number or json flag sends both, of its type and within the
-        limits, and different; a boolean flag sends neither, or ``true`` and
-        ``false``.  Each refusal is at its own field.
+        A string, number or json flag sends both values, of its type and within
+        the limits, and different; a boolean flag sends neither, or ``true``
+        and ``false``, and no split or rule value.  Each refusal is at its own
+        field (``flag_values.write_errors`` and ``serving_errors``).
         """
         sent = {
             field: getattr(self, field)
@@ -336,6 +408,12 @@ class FeatureFlagCreate(_FeatureFlagRequest):
             if field in self.model_fields_set
         }
         errors = write_errors(self.value_type, sent, None)
+        serving = {
+            field: getattr(self, field)
+            for field in SERVING_FIELDS
+            if field in self.model_fields_set
+        }
+        errors += serving_errors(self.value_type, serving, None)
         if errors:
             raise value_errors_to_raise(type(self).__name__, errors)
         return self
@@ -346,10 +424,11 @@ class FeatureFlagUpdate(_FeatureFlagRequest):
 
     Every field is optional, and a field left out keeps its value. key, name,
     is_active, rollout_percentage, default_value, value_type, on_value and
-    off_value refuse null; description, targeting_rules and tags accept null,
-    which clears them. A field not listed here answers 422.
+    off_value refuse null; description, targeting_rules, split and tags accept
+    null, which clears them. A field not listed here answers 422.
 
-    ``value_type`` and the two values are checked against the stored flag, by
+    ``value_type``, the two values, the split and the rules' own values are
+    checked against the stored flag, by
     ``FeatureFlagService.update_feature_flag``: this model cannot see the
     stored type.
     """
@@ -377,6 +456,11 @@ class FeatureFlagUpdate(_FeatureFlagRequest):
         None,
         description=OFF_VALUE_DESCRIPTION + VALUE_LIMITS_DESCRIPTION,
         json_schema_extra=_flag_value_schema(),
+    )
+    split: Any = Field(
+        None,
+        description=SPLIT_REQUEST_DESCRIPTION,
+        json_schema_extra=_split_schema(),
     )
     tags: Optional[List[str]] = None
 
@@ -409,7 +493,8 @@ class FeatureFlagRead(BaseModel):
     # normaliser below is the only logic: ``status`` is lower-cased and
     # ``is_active`` is derived from it, so the two never disagree and
     # ``is_active`` is never null; a boolean flag (both value columns NULL)
-    # reads ``on_value: true`` and ``off_value: false``.
+    # reads ``on_value: true`` and ``off_value: false``, and ``split: null``
+    # whatever a direct database write left, since it is never read.
     model_config = ConfigDict(
         from_attributes=True, json_schema_serialization_defaults_required=True
     )
@@ -430,6 +515,7 @@ class FeatureFlagRead(BaseModel):
     value_type: str = Field(..., description=VALUE_TYPE_DESCRIPTION)
     on_value: Any = Field(..., description=ON_VALUE_DESCRIPTION)
     off_value: Any = Field(..., description=OFF_VALUE_DESCRIPTION)
+    split: Optional[Any] = Field(None, description=SPLIT_READ_DESCRIPTION)
     tags: Optional[List[str]] = None
     owner_id: Optional[UUID] = Field(
         None, description="The user who created the flag; null once that user is gone."
@@ -461,7 +547,16 @@ class FeatureFlagRead(BaseModel):
         values["on_value"], values["off_value"] = read_values(
             value_type, values.get("on_value"), values.get("off_value")
         )
+        values["split"] = read_split(value_type, values.get("split"))
         return values
+
+
+def read_split(value_type: Any, split: Any) -> Any:
+    """A flag's split as a response reads it: ``None`` for a boolean flag,
+    which never serves one, so that its GET body can be sent back."""
+    if value_type is None or value_type == BOOLEAN:
+        return None
+    return split
 
 
 def flag_to_read(flag: Any) -> FeatureFlagRead:
@@ -535,6 +630,7 @@ class FeatureFlagListResponse(BaseModel):
                         "value_type": "boolean",
                         "on_value": True,
                         "off_value": False,
+                        "split": None,
                         "tags": None,
                         "owner_id": "5f0c8a52-1d7e-4c3b-9a6f-2b8e4d1c7a90",
                         "created_at": "2023-01-01T00:00:00Z",

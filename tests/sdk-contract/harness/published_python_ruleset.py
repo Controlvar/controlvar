@@ -20,7 +20,8 @@ Every case is then answered by the package's own ``index_ruleset`` and
 ``sequence`` (G2): the plan lists response bodies captured from
 ``GET /api/v1/sdk/ruleset``; each is served, in order, to one ``refresh_once``
 and the plan's probes are answered after it. The plan's ``server`` part replays
-captured responses to an ``ExperimentationClient`` in server mode.
+captured responses to an ``ExperimentationClient`` in server mode, typed getters
+included where the release has them.
 """
 
 import json
@@ -271,6 +272,22 @@ def _sequence(root, plan_path):
                     )
                 elif call["op"] == "get_all_flags":
                     results.append(client.get_all_flags(call["user_id"]))
+                elif call["op"] == "typed":
+                    # A typed getter (get_string_value and the others), where
+                    # the release has one.
+                    getter = getattr(client, call["getter"], None)
+                    if getter is None:
+                        results.append({"absent": call["getter"]})
+                    else:
+                        results.append(
+                            {
+                                "value": getter(
+                                    call["flag"],
+                                    call["user_id"],
+                                    default=call["default"],
+                                )
+                            }
+                        )
                 else:
                     results.append({"error": f"unknown op {call['op']}"})
             except Exception as exc:  # reported; the test judges it

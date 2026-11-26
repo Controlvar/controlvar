@@ -28,7 +28,7 @@ What Controlvar does not do is in [Limitations](getting-started/limitations.md),
 
 - [Feature flags](feature-flags/create.md): on or off for each user, or serving a string, number or JSON value instead.
 - [Rollout percentage](feature-flags/create.md): a flag is on for a share of users, and a targeting rule can give the users it matches their own share.
-- [Flag environments](feature-flags/environments.md) (beta): a flag has its own settings in production, staging and development, and a promotion copies its status, rollout percentage and targeting rules from one into another.
+- [Flag environments](feature-flags/environments.md) (beta): a flag has its own settings in production, staging and development, and a promotion copies its status, rollout percentage, targeting rules and split from one into another.
 - [Environment API keys](feature-flags/environments.md#keys-and-environments) (beta): an API key belongs to one environment and is answered that environment's flags; experiments and event tracking take production keys only.
 - [Rollout schedules](feature-flags/rollouts.md): a flag's percentage raised in stages, each started at its date or by hand.
 - [Safety monitoring](feature-flags/safety.md): each active flag's error rate and latency checked against your thresholds, and an automatic rollback on a breach when you turn that on.

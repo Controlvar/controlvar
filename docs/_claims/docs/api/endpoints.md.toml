@@ -1756,8 +1756,11 @@ text = "An archived flag's status is archived in every environment"
 by = ["test:backend/tests/integration/api/test_flag_environments_api.py::test_an_archived_flag_is_archived_in_every_environment"]
 
 [[unit]]
-text = "PUT body: {\"is_active\", \"rollout_percentage\", \"targeting_rules\"}, each optional; only the fields sent change, and targeting_rules: null clears the rules."
-by = ["test:backend/tests/integration/api/test_flag_environments_api.py::test_only_the_fields_sent_change_and_null_clears_the_rules"]
+text = "PUT body: {\"is_active\", \"rollout_percentage\", \"targeting_rules\", \"split\"}, each optional; only the fields sent change, and targeting_rules: null clears the rules, split: null the split."
+by = [
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_only_the_fields_sent_change_and_null_clears_the_rules",
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_a_put_keeps_the_split_and_sets_it_in_its_environment_alone",
+]
 
 [[unit]]
 text = "A change to production is the one PUT /api/v1/feature-flags/{flag_id} makes"
@@ -1771,11 +1774,12 @@ by = [
 ]
 
 [[unit]]
-text = "is_active, rollout_percentage and targeting_rules are copied, all three together, and nothing else: not the flag's value type and values, its rollout schedules or its safety configuration"
+text = "is_active, rollout_percentage, targeting_rules and split are copied, all four together, and nothing else: not the flag's value type, on value and off value, its rollout schedules or its safety configuration"
 by = [
     "test:backend/tests/integration/api/test_flag_environments_api.py::test_promotion_copies_exactly_the_per_environment_fields",
     "test:backend/tests/integration/api/test_flag_environments_api.py::test_promotion_copies_all_three_fields_and_nothing_else",
     "test:backend/tests/integration/api/test_flag_environments_api.py::test_a_change_and_its_entries_are_one_transaction_under_the_lock",
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_promotion_copies_the_split_and_changes_no_other",
 ]
 
 [[unit]]

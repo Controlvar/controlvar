@@ -21,7 +21,12 @@ link a fresh anonymous id to a fresh known id with its ``alias`` method, using
 the seed's ``sdk:ruleset`` key, which every smoke is given: the runner then
 requires one assignment row among the two ids, the anonymous id's, and the
 key-less event sent under the known id stored under the anonymous id with the
-experiment and its variant. No other SDK may report it.
+experiment and its variant. No other SDK may report it. An SDK listed in
+``MULTIWAY_SDKS`` (the SDKs of ``VALUE_SDKS``) must also report what its string
+getter returned for the seed's ``sdk_contract_multiway`` flag (on at 100%, a
+split of three values) for each user in ``CONTRACT_MULTIWAY_USERS``, and for
+``sdk_contract_rule_value`` with ``{"plan": "pro"}``: each user's own value of
+the split, and the rule's own value. No other SDK may report them.
 
 After the react row, the React SDK's bootstrap runs for one new user
 (``BOOTSTRAP_SMOKE``): the documented ``ServerClient.bootstrap()`` call and a
@@ -39,6 +44,12 @@ flag environment (#2011): the seed's staging keys are answered what staging
 serves for ``sdk_contract_flag`` (off) and ``sdk_contract_targeted`` (on),
 through the evaluate route and through the ruleset, while its production key
 is answered the other way round. The SDK rows use the production keys only.
+Then, also once, the seed's two multi-way flags (#2012, ``multiway (server)``):
+the evaluate route answers the three users of ``CONTRACT_MULTIWAY_USERS`` three
+distinct values, each the one the seed picked the user for, and a user with
+``{"plan": "pro"}`` the rule's own value; ``/feature-flags/user/{id}`` answers
+both flags with booleans. The seed's ``multiway_users()`` picks the three users
+with the server's own split function, one per value of the split.
 
 After the SDKs, each SDK with a local-evaluation mode (``LOCAL_MANIFEST``) runs
 its ``local_eval_smoke`` with the ``sdk:ruleset`` key: N evaluations of
@@ -61,7 +72,12 @@ flags (string, number and json) locally as on; the runner turns those flags
 off through the API, as a DEVELOPER; within one refresh each answers
 ``inactive``, still locally; the runner turns them back on. A release that
 cannot read the ruleset the server sends would answer from the server, or
-keep answering on.
+keep answering on. The published Python 0.3.0 row reads the seed's multi-way
+flag instead (#2012): its ruleset entry is ``remote``, so the release answers
+one of the seed's users from the server, with the value of the split the
+server picked; turned off through the API, within one refresh it answers
+``inactive`` locally, with the off value. A release that answered the flag
+locally would serve its on value to every user.
 
 Prerequisites
     1. A backend at ``$CONTROLVAR_API_URL`` (default http://localhost:8000)
@@ -82,6 +98,7 @@ Usage
 from __future__ import annotations
 
 import argparse
+import functools
 import importlib.util
 import json
 import os
@@ -151,10 +168,17 @@ LOCAL_MANIFEST: dict[str, tuple[str, tuple[str, ...]]] = {
 }
 
 #: Published releases with a local evaluator, run against this server (#1497,
-#: G3): sdk name -> the version pinned in tests/sdk-contract/published-sdks.json.
-#: Each runs after LOCAL_MANIFEST, under the name "<sdk> <version> (published,
-#: local)", when its sdk is selected.
-PUBLISHED_LOCAL: dict[str, str] = {"python": "0.2.0", "js": "0.2.0"}
+#: G3): (sdk name, the version pinned in tests/sdk-contract/published-sdks.json,
+#: the flags its row reads). Each runs after LOCAL_MANIFEST when its sdk is
+#: selected: a "values" row under the name "<sdk> <version> (published, local)"
+#: reads the seed's value flags, the "multiway" row under "<sdk> <version>
+#: (published, multi-way)" the seed's multi-way flag (#2012). Only the Python
+#: harness reports values, so a multi-way row is a Python one.
+PUBLISHED_LOCAL: tuple[tuple[str, str, str], ...] = (
+    ("python", "0.2.0", "values"),
+    ("js", "0.2.0", "values"),
+    ("python", "0.3.0", "multiway"),
+)
 #: The seed's value flags (backend/scripts/seed_sdk_contract.py VALUE_FLAGS).
 VALUE_FLAG_KEYS = ("sdk_contract_value_string", "sdk_contract_value_number", "sdk_contract_value_json")
 #: Who turns them off and on: the seed's DEVELOPER (a non-superuser role that
@@ -165,6 +189,11 @@ PUBLISHED_REFRESH_SECONDS = 5
 PUBLISHED_WAIT_SECONDS = 30
 PUBLISHED_ON = {"enabled": True, "reason": "rollout", "source": "local"}
 PUBLISHED_OFF = {"enabled": False, "reason": "inactive", "source": "local"}
+#: The multi-way row: on, answered by the server, with the server's value of
+#: the split; then off, answered locally with the off value (the seed's
+#: string off value, VALUE_FLAGS["string"]).
+PUBLISHED_SERVER = {"enabled": True, "reason": "rollout", "source": "server"}
+MULTIWAY_OFF_VALUE = "off-copy"
 SDK_CONTRACT_DIR = Path(__file__).resolve().parents[1]
 
 EXPECTED_VARIANTS = {"control", "treatment"}
@@ -240,6 +269,50 @@ VALUE_SDKS: frozenset[str] = frozenset(
 )
 #: The seed's on values (backend/scripts/seed_sdk_contract.py VALUE_FLAGS).
 VALUE_EXPECTED = {"string": "on-copy", "number": 10, "json": {"color": "blue"}}
+
+# The SDKs whose contract smoke must report what its string getter returns for
+# the seed's two multi-way flags (#2012): every SDK of VALUE_SDKS, since a
+# typed getter is what reads a split's value or a rule's own value (a unit test
+# pins the two lists equal). A listed SDK's smoke is to read, with a default
+# that is no flag value, MULTIWAY_FLAG_KEY (on at 100%, a split of three
+# values) for each user in CONTRACT_MULTIWAY_USERS (comma-separated, given by
+# the runner), and RULE_VALUE_FLAG_KEY (0%, one rule plan equals pro with a
+# value of its own) for one user with {"plan": "pro"}, and report
+#   "multiway": {"users": {<user>: <returned>, ...}, "rule": <returned>}
+# validate() requires each user's value of the split, as the seed's
+# multiway_users() picked it with the server's own split function, and
+# RULE_VALUE: an SDK that reads the on value, or falls back to its default,
+# fails. The check runs both ways, as EXPOSURE_SDKS does.
+MULTIWAY_SDKS: frozenset[str] = frozenset(
+    [
+        # One line per SDK, in the form "js",
+        "js",
+        "react",
+        "react-native",
+        "java",
+        "dotnet",
+    ]
+)
+#: The seed's two multi-way flags and the rule's own value
+#: (backend/scripts/seed_sdk_contract.py).
+MULTIWAY_FLAG_KEY = "sdk_contract_multiway"
+RULE_VALUE_FLAG_KEY = "sdk_contract_rule_value"
+RULE_VALUE = "pro-copy"
+#: The users given to the smokes, comma-separated.
+MULTIWAY_USERS_ENV = "CONTRACT_MULTIWAY_USERS"
+#: The user the server row asks the rule value flag about, with plan=pro.
+RULE_USER = "contract-rule-user"
+
+
+@functools.cache
+def multiway_users() -> dict[str, str]:
+    """``{user: value}``: the three users of the seed's multi-way flag and the
+    value of the split each is served, as the seed picks them
+    (``seed_sdk_contract.multiway_users``, the server's own split function)."""
+    sys.path.insert(0, str(REPO_ROOT))
+    from backend.scripts.seed_sdk_contract import multiway_users as picked
+
+    return dict(picked())
 
 # The React SDK's bootstrap (#1518), run after the react row (which builds
 # sdk/react/dist) for one new user, in two steps: "server" is the documented
@@ -339,7 +412,32 @@ def validate(sdk: str, payload: dict, experiment_key: str = "sdk_contract_ab") -
     problems.extend(_targeting_problems(sdk, payload))
     problems.extend(_event_id_problems(sdk, payload))
     problems.extend(_value_problems(sdk, payload))
+    problems.extend(_multiway_problems(sdk, payload))
     problems.extend(_alias_problems(sdk, payload))
+    return problems
+
+
+def _multiway_problems(sdk: str, payload: dict) -> list[str]:
+    """What is wrong with the smoke's ``multiway`` report (see ``MULTIWAY_SDKS``)."""
+    if sdk not in MULTIWAY_SDKS:
+        return [f"multiway reported but {sdk} is not in MULTIWAY_SDKS"] if "multiway" in payload else []
+    report = payload.get("multiway")
+    if not isinstance(report, dict):
+        return [f"multiway missing ({sdk} is in MULTIWAY_SDKS)"]
+    problems: list[str] = []
+    expected = multiway_users()
+    users = report.get("users")
+    if not isinstance(users, dict) or sorted(users) != sorted(expected):
+        found = sorted(users) if isinstance(users, dict) else users
+        problems.append(f"multiway.users has {found!r}, expected the users {sorted(expected)!r}")
+    else:
+        for user, want in expected.items():
+            got = users[user]
+            if type(got) is not str or got != want:
+                problems.append(f"multiway.users[{user!r}]={got!r} (expected {want!r}, the split's value for the user)")
+    rule = report.get("rule")
+    if type(rule) is not str or rule != RULE_VALUE:
+        problems.append(f"multiway.rule={rule!r} (expected {RULE_VALUE!r}, the rule's own value)")
     return problems
 
 
@@ -651,6 +749,80 @@ def check_staging(
     if problems:
         return "FAIL", "; ".join(problems)
     return "PASS", f"{flag_key} off and {targeted_key} on, by evaluate and by the ruleset; production the other way round"
+
+
+def _api_key_get(api_url: str, key: str, path: str, query: dict[str, str]) -> tuple[int, object]:
+    """``GET`` *path* with the API key and *query*: (status, the JSON body or None)."""
+    url = f"{api_url}{path}"
+    if query:
+        url += "?" + urllib.parse.urlencode(query)
+    request = urllib.request.Request(url, headers={"X-API-Key": key})
+    try:
+        with urllib.request.urlopen(request, timeout=10) as resp:  # noqa: S310
+            return resp.status, json.loads(resp.read())
+    except urllib.error.HTTPError as exc:
+        return exc.code, None
+
+
+def _context(context: dict | None) -> dict[str, str]:
+    return {} if context is None else {"context": json.dumps(context)}
+
+
+def check_multiway(api_url: str, key: str, users: dict[str, str]) -> tuple[str, str]:
+    """The seed's two multi-way flags, on the running stack (#2012).
+
+    The evaluate route answers each of *users* (``{user: value}``, picked by
+    the seed with the server's own split function) its value of the split,
+    so as many distinct values as users, and a user with ``plan`` equals
+    ``pro`` the rule's own value. ``/feature-flags/user/{id}`` stays boolean:
+    the split flag ``true`` for each user, the rule flag ``true`` with plan=pro
+    and ``false`` without.
+    """
+    evaluate = f"/api/v1/feature-flags/evaluate/{urllib.parse.quote(MULTIWAY_FLAG_KEY, safe='')}"
+    problems: list[str] = []
+    served: dict[str, object] = {}
+    for user, expected in users.items():
+        status, answer = _api_key_get(api_url, key, evaluate, {"user_id": user})
+        answer = answer if isinstance(answer, dict) else {}
+        served[user] = answer.get("value") if status == 200 else f"HTTP {status}"
+        if status != 200 or answer.get("enabled") is not True or served[user] != expected:
+            problems.append(
+                f"evaluate {MULTIWAY_FLAG_KEY!r} for {user!r}: enabled {answer.get('enabled')!r},"
+                f" value {served[user]!r} (expected {expected!r})"
+            )
+    distinct = len({json.dumps(value, sort_keys=True) for value in served.values()})
+    if distinct != len(users):
+        plural = "" if distinct == 1 else "s"
+        problems.insert(0, f"{len(users)} users got {distinct} distinct value{plural}; expected {len(users)}")
+    rule_path = f"/api/v1/feature-flags/evaluate/{urllib.parse.quote(RULE_VALUE_FLAG_KEY, safe='')}"
+    status, answer = _api_key_get(api_url, key, rule_path, {"user_id": RULE_USER, **_context({"plan": "pro"})})
+    answer = answer if isinstance(answer, dict) else {}
+    if status != 200 or answer.get("reason") != "targeting_rule" or answer.get("value") != RULE_VALUE:
+        problems.append(
+            f"evaluate {RULE_VALUE_FLAG_KEY!r} with plan=pro: HTTP {status}, reason {answer.get('reason')!r},"
+            f" value {answer.get('value')!r} (expected {RULE_VALUE!r} by the rule)"
+        )
+    bulk = [(user, None, {MULTIWAY_FLAG_KEY: True, RULE_VALUE_FLAG_KEY: False}) for user in users]
+    bulk.append((RULE_USER, {"plan": "pro"}, {RULE_VALUE_FLAG_KEY: True}))
+    for user, context, wanted in bulk:
+        path = f"/api/v1/feature-flags/user/{urllib.parse.quote(user, safe='')}"
+        status, flags = _api_key_get(api_url, key, path, _context(context))
+        flags = flags if isinstance(flags, dict) else {}
+        for flag, expected in wanted.items():
+            got = flags.get(flag) if status == 200 else f"HTTP {status}"
+            if type(got) is not bool or got is not expected:
+                problems.append(
+                    f"/feature-flags/user/{user} answered {flag!r}: {got!r}"
+                    f" (expected {json.dumps(expected)}, a boolean)"
+                )
+    if problems:
+        return "FAIL", "; ".join(problems)
+    shown = ", ".join(f"{user} {value!r}" for user, value in served.items())
+    return (
+        "PASS",
+        f"{len(users)} users, {distinct} distinct values ({shown}); the rule's own value {RULE_VALUE!r} for"
+        " plan=pro; /feature-flags/user answers booleans",
+    )
 
 
 def _flag_counters(flag_key: str) -> dict[str, int]:
@@ -976,14 +1148,33 @@ def _shown(answers: dict) -> str:
     return ", ".join(f"{key}: {json.dumps(answer, sort_keys=True)}" for key, answer in sorted(answers.items()))
 
 
-def run_published_local(sdk: str, version: str, api_url: str, local_key: str, timeout: int) -> tuple[str, str]:
+def run_published_local(
+    sdk: str,
+    version: str,
+    api_url: str,
+    local_key: str,
+    timeout: int,
+    multiway: tuple[str, str] | None = None,
+) -> tuple[str, str]:
     """A published release's own client, in local mode, against this server (G3).
 
     It must load the server's ruleset (its version is the one the route serves)
     and answer every value flag locally as on; after the runner turns them off
     through the API it must answer each ``inactive``, locally, within
     PUBLISHED_WAIT_SECONDS. The flags are turned back on whatever happens.
+
+    With *multiway* (``(user, the value of the split the server serves the
+    user)``), the row reads the seed's multi-way flag for that user instead
+    (#2012): first answered by the server with that value, then, after the
+    runner turns it off, ``inactive`` locally with the off value.
     """
+    if multiway is None:
+        flags, user_id = VALUE_FLAG_KEYS, f"published-{sdk}-{version}"
+        expected_on, expected_off = PUBLISHED_ON, PUBLISHED_OFF
+    else:
+        flags, user_id = (MULTIWAY_FLAG_KEY,), multiway[0]
+        expected_on = {**PUBLISHED_SERVER, "value": multiway[1]}
+        expected_off = {**PUBLISHED_OFF, "value": MULTIWAY_OFF_VALUE}
     try:
         ps = _published_sdks()
         (artefact,) = [a for a in ps.load_pins() if a.language == sdk and a.version == version]
@@ -999,12 +1190,14 @@ def run_published_local(sdk: str, version: str, api_url: str, local_key: str, ti
         config = {
             "api_url": api_url,
             "api_key": local_key,
-            "flags": list(VALUE_FLAG_KEYS),
-            "user_id": f"published-{sdk}-{version}",
+            "flags": list(flags),
+            "user_id": user_id,
             "refresh_seconds": PUBLISHED_REFRESH_SECONDS,
             "ready_seconds": 30,
             "wait_seconds": PUBLISHED_WAIT_SECONDS,
         }
+        if multiway is not None:
+            config["values"] = True
         process = subprocess.Popen(
             _published_harness(artefact.language, root, config),
             cwd=work / "cwd",
@@ -1037,22 +1230,28 @@ def run_published_local(sdk: str, version: str, api_url: str, local_key: str, ti
                 f"it did not load the ruleset the server serves ({served}): ready {loaded['ready']}, "
                 f"version {loaded['status'].get('version')!r}"
             )
-        if any(answer != PUBLISHED_ON for answer in loaded["answers"].values()):
-            problems.append(f"before the change it answered {_shown(loaded['answers'])}; expected each {PUBLISHED_ON}")
+        if any(answer != expected_on for answer in loaded["answers"].values()):
+            problems.append(f"before the change it answered {_shown(loaded['answers'])}; expected each {expected_on}")
         if problems:
             return "FAIL", "; ".join(problems + loaded.get("errors", [])[:3])
 
         token = _sign_in(api_url)
-        ids = _flag_ids(api_url, token, VALUE_FLAG_KEYS)
+        ids = _flag_ids(api_url, token, tuple(flags))
         turned_off = True
         _turn(api_url, token, ids, on=False)
         process.stdin.write("turned off\n")
         process.stdin.flush()
         after = report("after")
-        if any(answer != PUBLISHED_OFF for answer in after["answers"].values()):
+        if any(answer != expected_off for answer in after["answers"].values()):
             return "FAIL", (
                 f"answer unchanged after the flags were turned off: after {after['seconds']:.1f}s it answered "
-                f"{_shown(after['answers'])}; expected each {PUBLISHED_OFF}"
+                f"{_shown(after['answers'])}; expected each {expected_off}"
+            )
+        if multiway is not None:
+            return "PASS", (
+                f"{artefact.digest[:19]}... at {module}: loaded ruleset {served[:12]}, {MULTIWAY_FLAG_KEY} answered "
+                f"by the server for {user_id} ({multiway[1]!r}); turned off through the API, it answered inactive "
+                f"locally after {after['seconds']:.1f}s"
             )
         return "PASS", (
             f"{artefact.digest[:19]}... at {module}: loaded ruleset {served[:12]}, the {len(ids)} value flags "
@@ -1069,7 +1268,7 @@ def run_published_local(sdk: str, version: str, api_url: str, local_key: str, ti
             try:
                 _turn(api_url, token, ids, on=True)
             except Exception as exc:  # reported; the next run's seed turns them back on too
-                print(f"could not turn the value flags back on: {exc}", file=sys.stderr)
+                print(f"could not turn {', '.join(flags)} back on: {exc}", file=sys.stderr)
         if process is not None:
             if process.poll() is None:
                 try:
@@ -1211,6 +1410,18 @@ def main() -> int:
     results.append(("ruleset (staging)", status, detail))
     print(f"{status:4} {'ruleset (staging)':<20} {detail}", flush=True)
 
+    # And the seed's two multi-way flags (#2012), for the users the smokes are given.
+    try:
+        users = multiway_users()
+    except Exception as exc:  # the seed module or the backend package does not import
+        users = {}
+        status, detail = "FAIL", f"cannot pick the seed's users of {MULTIWAY_FLAG_KEY}: {exc}"
+    else:
+        status, detail = check_multiway(args.api_url, api_key, users)
+    results.append(("multiway (server)", status, detail))
+    print(f"{status:4} {'multiway (server)':<20} {detail}", flush=True)
+    env[MULTIWAY_USERS_ENV] = ",".join(users)
+
     # Every smoke also gets the sdk:ruleset key, under the new name only (the decoy under the
     # former one): the alias step needs a server-side key (ALIAS_SDKS), and a smoke that links ids
     # without being listed then reports it, and fails.
@@ -1248,10 +1459,11 @@ def main() -> int:
         results.append((name, status, detail))
         print(f"{status:4} {name:<20} {detail}", flush=True)
 
-    # The published releases, last (they turn the seed's value flags off and on).
-    for sdk in [s for s in selected if s in PUBLISHED_LOCAL]:
-        version = PUBLISHED_LOCAL[sdk]
-        name = f"{sdk} {version} (published, local)"
+    # The published releases, last (they turn the seed's value flags, and its
+    # multi-way flag, off and on).
+    published = [(sdk, version, reads) for sdk in selected for (s, version, reads) in PUBLISHED_LOCAL if s == sdk]
+    for sdk, version, reads in published:
+        name = f"{sdk} {version} (published, {'multi-way' if reads == 'multiway' else 'local'})"
         tools = ("node",) if sdk == "js" else ()
         missing = [t for t in tools if shutil.which(t) is None]
         if missing:
@@ -1260,7 +1472,16 @@ def main() -> int:
         if not local_key:
             results.append((name, "FAIL" if args.strict else "SKIP", "no sdk:ruleset key"))
             continue
-        status, detail = run_published_local(sdk, version, args.api_url, local_key, args.timeout)
+        if reads == "multiway":
+            if not users:
+                results.append((name, "FAIL", "no users of the multi-way flag (see the multiway (server) row)"))
+                continue
+            user = next(iter(users))
+            status, detail = run_published_local(
+                sdk, version, args.api_url, local_key, args.timeout, multiway=(user, users[user])
+            )
+        else:
+            status, detail = run_published_local(sdk, version, args.api_url, local_key, args.timeout)
         results.append((name, status, detail))
         print(f"{status:4} {name:<20} {detail}", flush=True)
 

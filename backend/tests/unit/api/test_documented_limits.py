@@ -79,13 +79,59 @@ def routes():
 
 
 # ---------------------------------------------------------------------------
-# A feature flag serves two values, never a split among three or more (#1497)
+# A flag's split has 3 to 10 values (#2012); variants stay refused (#1497)
 # ---------------------------------------------------------------------------
+def _split(count):
+    weights = [100 // count] * count
+    weights[0] += 100 - sum(weights)
+    return [{"value": f"v{n}", "weight": w} for n, w in enumerate(weights)]
+
+
 @pytest.mark.parametrize("model", [FeatureFlagCreate, FeatureFlagUpdate])
-def test_a_flag_request_with_variants_is_refused(model):
+def test_a_split_has_three_to_ten_values_and_variants_stay_refused(model):
+    """Replaces "a flag request with variants is refused": a string, number or
+    json flag serves a split of 3 to 10 values, and ``variants`` is still not a
+    field. The update's split is checked against the stored flag."""
+    from backend.app.core.flag_values import (
+        MAX_SPLIT_ENTRIES,
+        MIN_SPLIT_ENTRIES,
+        serving_errors,
+    )
+
+    assert (MIN_SPLIT_ENTRIES, MAX_SPLIT_ENTRIES) == (3, 10)
     body = {"key": "k", "name": "n", "variants": [{"key": "a"}, {"key": "b"}]}
     with pytest.raises(ValidationError, match="variants"):
         model(**body)
+    for count, accepted in ((2, False), (3, True), (10, True), (11, False)):
+        refused = serving_errors("string", {"split": _split(count)}, None)
+        assert (not refused) is accepted, count
+    created = FeatureFlagCreate(
+        key="k",
+        name="n",
+        value_type="string",
+        on_value="a",
+        off_value="b",
+        split=_split(3),
+    )
+    assert len(created.split) == 3
+    with pytest.raises(ValidationError, match="at least 3"):
+        FeatureFlagCreate(
+            key="k",
+            name="n",
+            value_type="string",
+            on_value="a",
+            off_value="b",
+            split=_split(2),
+        )
+    with pytest.raises(ValidationError, match="at most 10"):
+        FeatureFlagCreate(
+            key="k",
+            name="n",
+            value_type="string",
+            on_value="a",
+            off_value="b",
+            split=_split(11),
+        )
 
 
 def test_a_boolean_flag_serves_false_when_off_and_a_value_flag_its_off_value():

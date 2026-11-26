@@ -124,7 +124,7 @@ whatever its attributes. Call `ClearCache()` after changing a user's attributes.
 | `Key` | `string` | The flag key you asked for |
 | `Enabled` | `bool` | Server decision for this user (`false` on any failure) |
 | `Config` | `JsonElement?` | Always `null`: the evaluate endpoint returns `config: null` for every flag |
-| `Value` | `JsonElement?` | The value the flag serves this user (its on value when `Enabled`, its off value otherwise); `null` when the server sent none. Read it with a [typed getter](#flag-values) |
+| `Value` | `JsonElement?` | The value the flag serves this user (its off value when `Enabled` is false; otherwise its on value, or its split's or a matched rule's own value); `null` when the server sent none. Read it with a [typed getter](#flag-values) |
 | `ValueType` | `string?` | `"boolean"`, `"string"`, `"number"` or `"json"`; `null` when the server sent none |
 
 ```csharp
@@ -144,9 +144,11 @@ cached, so the next call retries.
 
 ## Flag values
 
-A flag serves two values: its on value to the users it is on for, and its off value to everyone
-else, and to everyone while it is turned off. For a string, number or json flag, read the value
-with the getter of its type: `GetStringValueAsync`, `GetNumberValueAsync` or `GetJsonValueAsync`.
+A flag serves its on value to the users it is on for, and its off value to everyone else, and
+to everyone while it is turned off; a string, number or json flag with a split, or a matched
+rule with a value of its own, serves those users that value instead. For a string, number or
+json flag, read the value with the getter of its type: `GetStringValueAsync`,
+`GetNumberValueAsync` or `GetJsonValueAsync`.
 
 ```csharp
 string label = await client.GetStringValueAsync("checkout-button-label", "user-123", "Buy now");

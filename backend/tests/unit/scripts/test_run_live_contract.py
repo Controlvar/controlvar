@@ -98,12 +98,19 @@ PR_QA_GATE = REPO_ROOT / ".github" / "workflows" / "pr-qa-gate.yml"
 PLATFORM = REPO_ROOT / ".github" / "workflows" / "_platform.yml"
 
 
+def multiway(runner) -> dict:
+    """What the smoke of an SDK in MULTIWAY_SDKS adds (#2012): each of the
+    seed's three users of its split flag with the value the seed picked it for,
+    and the rule's own value."""
+    return {"users": dict(runner.multiway_users()), "rule": "pro-copy"}
+
+
 def good(runner, sdk: str, experiment_key: str = "sdk_contract_ab") -> dict:
     """A passing report from *sdk*'s smoke: GOOD, with EXPOSURE only if the
     runner lists *sdk* in EXPOSURE_SDKS, TARGETED only if it lists *sdk* in
     ATTRIBUTE_SDKS, EVENT_ID only if in EVENT_ID_SDKS, VALUES only if in
-    VALUE_SDKS and ALIAS only if in ALIAS_SDKS (an unlisted SDK may report none
-    of them)."""
+    VALUE_SDKS, the multi-way report only if in MULTIWAY_SDKS and ALIAS only
+    if in ALIAS_SDKS (an unlisted SDK may report none of them)."""
     report = {"sdk": sdk, **GOOD}
     if sdk in runner.EXPOSURE_SDKS:
         hook = {**EXPOSURE["payload"], "experiment_key": experiment_key}
@@ -114,6 +121,8 @@ def good(runner, sdk: str, experiment_key: str = "sdk_contract_ab") -> dict:
         report["event_id"] = dict(EVENT_ID)
     if sdk in runner.VALUE_SDKS:
         report["values"] = json.loads(json.dumps(VALUES))
+    if sdk in runner.MULTIWAY_SDKS:
+        report["multiway"] = multiway(runner)
     if sdk in runner.ALIAS_SDKS:
         report["alias"] = json.loads(json.dumps(ALIAS))
     return report
@@ -140,6 +149,7 @@ def runner(monkeypatch, tmp_path):
         *STAGING_KEYS,
         "CONTRACT_EXPERIMENT_KEY",
         "CONTRACT_FLAG_KEY",
+        "CONTRACT_MULTIWAY_USERS",
     ):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("CONTROLVAR_API_KEY", "contract-key")
@@ -147,6 +157,8 @@ def runner(monkeypatch, tmp_path):
     for name, value in STAGING_KEYS.items():
         monkeypatch.setenv(name, value)
     monkeypatch.setattr(module, "check_staging", lambda *args: ("PASS", "ok"))
+    # And so does the multi-way row (#2012).
+    monkeypatch.setattr(module, "check_multiway", lambda *args: ("PASS", "ok"))
     # No database here: the one event sent twice is one stored row, unless a
     # test says otherwise.
     monkeypatch.setattr(module, "_event_rows", lambda user_id, event_name: 1)
@@ -311,6 +323,7 @@ def test_each_wrong_exposure_report_gives_exactly_its_problem(
     monkeypatch.setattr(runner, "ATTRIBUTE_SDKS", frozenset())  # exposure alone here
     monkeypatch.setattr(runner, "EVENT_ID_SDKS", frozenset())  # exposure alone here
     monkeypatch.setattr(runner, "VALUE_SDKS", frozenset())  # exposure alone here
+    monkeypatch.setattr(runner, "MULTIWAY_SDKS", frozenset())  # exposure alone here
     monkeypatch.setattr(runner, "ALIAS_SDKS", frozenset())  # exposure alone here
     report = {"sdk": sdk, **GOOD}
     if exposure is not None:
@@ -1281,19 +1294,21 @@ def test_the_published_releases_run_last_with_the_scoped_key(monkeypatch, runner
     monkeypatch.setattr(
         runner,
         "run_published_local",
-        lambda sdk, version, api_url, key, timeout: (
-            order.append(("published", sdk, version, key)) or ("PASS", "ok")
+        lambda sdk, version, api_url, key, timeout, multiway=None: (
+            order.append(("published", sdk, version, key, multiway)) or ("PASS", "ok")
         ),
     )
     status, _ = run_main(
         monkeypatch, runner, "--sdk", "python", "--sdk", "js", "--strict"
     )
     assert status == 0
+    (first_user, first_value), *_ = runner.multiway_users().items()
     assert order == [
         ("local", "python"),
         ("local", "js"),
-        ("published", "python", "0.2.0", "scoped"),
-        ("published", "js", "0.2.0", "scoped"),
+        ("published", "python", "0.2.0", "scoped", None),
+        ("published", "python", "0.3.0", "scoped", (first_user, first_value)),
+        ("published", "js", "0.2.0", "scoped", None),
     ]
 
 
@@ -1325,8 +1340,18 @@ def test_the_published_rows_use_the_pins_the_seeds_flags_and_its_developer(runne
     from backend.scripts.seed_demo_data import DEMO_USERS
 
     pinned = {(a.language, a.version) for a in runner._published_sdks().load_pins()}
-    assert runner.PUBLISHED_LOCAL == {"python": "0.2.0", "js": "0.2.0"}
-    assert set(runner.PUBLISHED_LOCAL.items()) <= pinned
+    assert runner.PUBLISHED_LOCAL == (
+        ("python", "0.2.0", "values"),
+        ("js", "0.2.0", "values"),
+        ("python", "0.3.0", "multiway"),
+    )
+    assert {(sdk, version) for sdk, version, _ in runner.PUBLISHED_LOCAL} <= pinned
+    # The multi-way row needs the value in each answer, which only the Python
+    # harness reports.
+    assert {sdk for sdk, _, reads in runner.PUBLISHED_LOCAL if reads == "multiway"} == {
+        "python"
+    }
+    assert runner.MULTIWAY_OFF_VALUE == seed.VALUE_FLAGS["string"][2]
     assert set(seed.VALUE_FLAGS) == set(VALUE_TYPES) - {BOOLEAN}
     assert runner.VALUE_FLAG_KEYS == tuple(
         key for key, _, _ in seed.VALUE_FLAGS.values()
@@ -1347,13 +1372,13 @@ print(json.dumps(reports[1]), flush=True)
 """
 
 
-def _fake_published(monkeypatch, runner, tmp_path, loaded, after):
+def _fake_published(monkeypatch, runner, tmp_path, loaded, after, version="0.2.0"):
     """``run_published_local`` with everything around it replaced: the pins,
     the download, the API and the harness. Returns the flag changes made."""
     from types import SimpleNamespace
 
     artefact = SimpleNamespace(
-        language="python", version="0.2.0", digest="sha256:" + "0" * 64
+        language="python", version=version, digest="sha256:" + "0" * 64
     )
     monkeypatch.setattr(
         runner,
@@ -1388,20 +1413,23 @@ def _fake_published(monkeypatch, runner, tmp_path, loaded, after):
     return turned
 
 
-def _report(phase, answer, version="v1", ready=True):
+def _report(
+    phase,
+    answer,
+    version="v1",
+    ready=True,
+    keys=(
+        "sdk_contract_value_string",
+        "sdk_contract_value_number",
+        "sdk_contract_value_json",
+    ),
+):
     return {
         "phase": phase,
         "seconds": 5.0,
         "ready": {"ok": ready},
         "status": {"ready": ready, "version": version},
-        "answers": {
-            key: dict(answer)
-            for key in (
-                "sdk_contract_value_string",
-                "sdk_contract_value_number",
-                "sdk_contract_value_json",
-            )
-        },
+        "answers": {key: dict(answer) for key in keys},
         "errors": [],
     }
 
@@ -1458,6 +1486,482 @@ def test_a_release_that_cannot_read_the_ruleset_fails_before_any_change(
     assert "did not load the ruleset the server serves (v1)" in detail
     assert '"source": "server"' in detail
     assert turned == []
+
+
+# ---------------------------------------------------------------------------
+# The seed's multi-way flags (#2012)
+# ---------------------------------------------------------------------------
+
+MULTIWAY_KEYS = ("sdk_contract_multiway",)
+
+
+def test_the_published_multiway_row_is_answered_by_the_server_then_turned_off(
+    monkeypatch, runner, tmp_path
+):
+    """0.3.0 defers the remote entry to the server, which serves the user its
+    value of the split; turned off, it answers inactive locally with the off
+    value."""
+    turned = _fake_published(
+        monkeypatch,
+        runner,
+        tmp_path,
+        _report(
+            "loaded",
+            {**runner.PUBLISHED_SERVER, "value": "green"},
+            keys=MULTIWAY_KEYS,
+        ),
+        _report(
+            "after",
+            {**runner.PUBLISHED_OFF, "value": "off-copy"},
+            keys=MULTIWAY_KEYS,
+        ),
+        version="0.3.0",
+    )
+    status, detail = runner.run_published_local(
+        "python", "0.3.0", "http://x", "k", 30, multiway=("mw-user-1", "green")
+    )
+    assert status == "PASS", detail
+    assert (
+        "sdk_contract_multiway answered by the server for mw-user-1 ('green')" in detail
+    )
+    assert turned == [
+        (["sdk_contract_multiway"], False),
+        (["sdk_contract_multiway"], True),
+    ]
+
+
+@pytest.mark.regression
+def test_a_release_that_answers_the_multiway_flag_locally_fails(
+    monkeypatch, runner, tmp_path
+):
+    """The ruleset's plant: a local entry for the flag with a split. The release
+    answers every user the on value, locally, and the row fails before any
+    change."""
+    local = {**runner.PUBLISHED_ON, "value": "on-copy"}
+    turned = _fake_published(
+        monkeypatch,
+        runner,
+        tmp_path,
+        _report("loaded", local, keys=MULTIWAY_KEYS),
+        _report("after", local, keys=MULTIWAY_KEYS),
+        version="0.3.0",
+    )
+    status, detail = runner.run_published_local(
+        "python", "0.3.0", "http://x", "k", 30, multiway=("mw-user-1", "green")
+    )
+    assert status == "FAIL"
+    assert detail == (
+        'before the change it answered sdk_contract_multiway: {"enabled": true, '
+        '"reason": "rollout", "source": "local", "value": "on-copy"}; expected each '
+        "{'enabled': True, 'reason': 'rollout', 'source': 'server', 'value': 'green'}"
+    )
+    assert turned == []
+
+
+def test_a_multiway_answer_the_off_switch_does_not_reach_fails(
+    monkeypatch, runner, tmp_path
+):
+    """The cached server answer kept after the flag is off."""
+    server = {**runner.PUBLISHED_SERVER, "value": "green"}
+    turned = _fake_published(
+        monkeypatch,
+        runner,
+        tmp_path,
+        _report("loaded", server, keys=MULTIWAY_KEYS),
+        _report("after", server, keys=MULTIWAY_KEYS),
+        version="0.3.0",
+    )
+    status, detail = runner.run_published_local(
+        "python", "0.3.0", "http://x", "k", 30, multiway=("mw-user-1", "green")
+    )
+    assert status == "FAIL"
+    assert "answer unchanged after the flags were turned off" in detail
+    assert "'value': 'off-copy'" in detail
+    assert [on for _, on in turned] == [False, True]
+
+
+def test_the_multiway_sdks_are_the_value_sdks(runner):
+    """Both ways: an SDK with typed getters reads the multi-way flags too, and
+    no SDK without them is asked to."""
+    assert runner.MULTIWAY_SDKS == runner.VALUE_SDKS
+    assert runner.MULTIWAY_SDKS == frozenset(
+        {"js", "react", "react-native", "java", "dotnet"}
+    )
+    for sdk in sorted(runner.MULTIWAY_SDKS):
+        assert runner.validate(sdk, good(runner, sdk)) == [], sdk
+
+
+def test_the_runner_reads_the_seeds_multiway_flags(runner):
+    from backend.scripts import seed_sdk_contract as seed
+
+    assert runner.MULTIWAY_FLAG_KEY == seed.MULTIWAY_FLAG_KEY == "sdk_contract_multiway"
+    assert (
+        runner.RULE_VALUE_FLAG_KEY
+        == seed.RULE_VALUE_FLAG_KEY
+        == "sdk_contract_rule_value"
+    )
+    assert runner.RULE_VALUE == seed.RULE_VALUE == seed.RULE_VALUE_FLAG_RULES["value"]
+    assert runner.multiway_users() == seed.multiway_users()
+
+
+def test_the_seeds_users_get_three_distinct_values_by_the_servers_split(runner):
+    """Picked with the server's own function, one user per value of the split:
+    never typed by hand."""
+    from backend.app.core.flag_values import split_bucket, split_value
+    from backend.scripts import seed_sdk_contract as seed
+
+    users = runner.multiway_users()
+    assert len(users) == 3
+    assert sorted(users.values()) == sorted(e["value"] for e in seed.MULTIWAY_SPLIT)
+    for user, value in users.items():
+        assert (
+            split_value(
+                seed.MULTIWAY_SPLIT, split_bucket(user, "sdk_contract_multiway")
+            )
+            == value
+        )
+    assert [e["weight"] for e in seed.MULTIWAY_SPLIT] == [34, 33, 33]
+
+
+@pytest.mark.parametrize(
+    ("sdk", "change", "problems"),
+    [
+        pytest.param(
+            "java",
+            {"user": "mw-user-1", "value": "smoke-default"},
+            [
+                "multiway.users['mw-user-1']='smoke-default' (expected 'green', "
+                "the split's value for the user)"
+            ],
+            id="java-the-default",
+        ),
+        pytest.param(
+            "js",
+            {"user": "mw-user-0", "value": "on-copy"},
+            [
+                "multiway.users['mw-user-0']='on-copy' (expected 'red', "
+                "the split's value for the user)"
+            ],
+            id="the-on-value",
+        ),
+        pytest.param(
+            "dotnet",
+            {"rule": "on-copy"},
+            ["multiway.rule='on-copy' (expected 'pro-copy', the rule's own value)"],
+            id="rule-on-value",
+        ),
+        pytest.param(
+            "react",
+            {"rule": "smoke-default"},
+            [
+                "multiway.rule='smoke-default' (expected 'pro-copy', the rule's own "
+                "value)"
+            ],
+            id="rule-the-default",
+        ),
+        pytest.param(
+            "react-native",
+            {"users": {}},
+            [
+                "multiway.users has [], expected the users "
+                "['mw-user-0', 'mw-user-1', 'mw-user-2']"
+            ],
+            id="no-users-read",
+        ),
+        pytest.param(
+            "react-native",
+            None,
+            ["multiway missing (react-native is in MULTIWAY_SDKS)"],
+            id="missing",
+        ),
+        pytest.param(
+            "python",
+            {},
+            ["multiway reported but python is not in MULTIWAY_SDKS"],
+            id="unlisted",
+        ),
+    ],
+)
+def test_each_wrong_multiway_report_gives_exactly_its_problems(
+    runner, sdk, change, problems
+):
+    """The gate's own planted reports. ``java-the-default`` is a getter that
+    fell back; ``the-on-value`` an SDK, or a server, that serves the on value
+    in place of the split's."""
+    assert runner.multiway_users() == {
+        "mw-user-0": "red",
+        "mw-user-1": "green",
+        "mw-user-2": "blue",
+    }
+    report = good(runner, sdk)
+    report.pop("multiway", None)
+    if change is not None:
+        planted = multiway(runner)
+        if "user" in change:
+            planted["users"][change["user"]] = change["value"]
+        planted.update({k: v for k, v in change.items() if k in ("users", "rule")})
+        report["multiway"] = planted
+    assert runner.validate(sdk, report) == problems
+
+
+@pytest.mark.regression
+def test_a_smoke_that_reads_its_default_for_a_multiway_user_fails_its_row(
+    monkeypatch, runner, capsys
+):
+    """main() on java whose string getter fell back for one user."""
+    planted = multiway(runner)
+    planted["users"]["mw-user-1"] = "smoke-default"
+    wrong = {**good(runner, "java"), "multiway": planted}
+    monkeypatch.setattr(
+        runner, "_run_command", lambda command, env, timeout: ("PASS", "0.1s", wrong)
+    )
+    monkeypatch.setattr(runner.shutil, "which", lambda tool: f"/usr/bin/{tool}")
+    monkeypatch.setattr(sys, "argv", ["run_live_contract.py", "--sdk", "java"])
+    assert runner.main() == 1
+    out = " ".join(capsys.readouterr().out.split())
+    assert (
+        "FAIL java multiway.users['mw-user-1']='smoke-default' (expected 'green', "
+        "the split's value for the user)" in out
+    )
+
+
+def test_the_smokes_are_given_the_seeds_multiway_users(monkeypatch, runner, capsys):
+    """CONTRACT_MULTIWAY_USERS, comma-separated, in the seed's order; the
+    multiway (server) row runs once, after the staging row and before the
+    SDKs, with the plain key and the same users."""
+    asked = []
+    monkeypatch.setattr(
+        runner, "check_multiway", lambda *args: asked.append(args) or ("PASS", "ok")
+    )
+    monkeypatch.setattr(runner.shutil, "which", lambda tool: f"/usr/bin/{tool}")
+    status, ran = run_main(monkeypatch, runner, "--sdk", "js", "--sdk", "go")
+    users = runner.multiway_users()
+    assert asked == [("http://localhost:8000", "contract-key", users)]
+    for _, env in ran:
+        assert env["CONTRACT_MULTIWAY_USERS"] == ",".join(users)
+        assert env["CONTRACT_MULTIWAY_USERS"] == "mw-user-0,mw-user-1,mw-user-2"
+    out = " ".join(capsys.readouterr().out.split())
+    assert out.index("ruleset (staging)") < out.index("PASS multiway (server) ok")
+    assert out.index("multiway (server)") < out.index("PASS js")
+
+
+def test_every_multiway_sdk_runs_in_the_sdk_live_contract_job(runner):
+    """CI runs every SDK in MULTIWAY_SDKS with --strict (the attribute test
+    above pins --strict), so a multi-way SDK cannot pass as SKIP."""
+    import yaml
+
+    job = yaml.safe_load(PR_QA_GATE.read_text(encoding="utf-8"))["jobs"][
+        "sdk-live-contract"
+    ]
+    assert set(runner.MULTIWAY_SDKS) <= set(job["with"]["sdks"].split())
+
+
+#: Each multi-way SDK's smoke, as MANIFEST runs it.
+MULTIWAY_SMOKES = {
+    "js": "sdk/js/examples/contract_smoke.mjs",
+    "react": "sdk/react/examples/contract_smoke.mjs",
+    "react-native": "sdk/react-native/examples/contract_smoke.test.ts",
+    "java": "sdk/java/core/src/main/java/com/controlvar/sdk/examples/ContractSmoke.java",
+    "dotnet": "sdk/dotnet/examples/ContractSmoke/Program.cs",
+}
+
+
+def test_each_multiway_smoke_reads_the_users_and_both_flags(runner):
+    """A static floor under the live rows (the .NET one has no toolchain in
+    the unit job): each smoke reads the users it is given and both flags, and
+    reports them."""
+    assert set(MULTIWAY_SMOKES) == set(runner.MULTIWAY_SDKS)
+    for sdk, path in MULTIWAY_SMOKES.items():
+        source = (REPO_ROOT / path).read_text(encoding="utf-8")
+        for needle in (
+            "CONTRACT_MULTIWAY_USERS",
+            "'sdk_contract_multiway'"
+            if path.endswith(("mjs", "ts"))
+            else '"sdk_contract_multiway"',
+            "sdk_contract_rule_value",
+            "multiway",
+        ):
+            assert needle in source, (sdk, needle)
+
+
+#: What the server answers in check_multiway's tests: (path, query) -> body.
+def _served(runner, value_for, rule=("targeting_rule", "pro-copy"), bulk=True):
+    users = runner.multiway_users()
+
+    def get(api_url, key, path, query):
+        assert key == "contract-key"
+        if path == "/api/v1/feature-flags/evaluate/sdk_contract_multiway":
+            return 200, {"enabled": True, "value": value_for(query["user_id"], users)}
+        if path == "/api/v1/feature-flags/evaluate/sdk_contract_rule_value":
+            assert json.loads(query["context"]) == {"plan": "pro"}
+            return 200, {"enabled": True, "reason": rule[0], "value": rule[1]}
+        user = path.rsplit("/", 1)[1]
+        pro = "context" in query
+        answer = {
+            "sdk_contract_multiway": True if bulk else "red",
+            "sdk_contract_rule_value": pro,
+        }
+        assert user == runner.RULE_USER if pro else user in users
+        return 200, answer
+
+    return get
+
+
+@pytest.fixture
+def multiway_runner(monkeypatch):
+    """The runner with its own ``check_multiway``."""
+    spec = importlib.util.spec_from_file_location(
+        "run_live_contract_multiway_under_test", RUNNER
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_the_multiway_server_row_passes_on_the_splits_values(
+    multiway_runner, monkeypatch
+):
+    runner = multiway_runner
+    monkeypatch.setattr(
+        runner, "_api_key_get", _served(runner, lambda user, users: users[user])
+    )
+    status, detail = runner.check_multiway(
+        "http://x", "contract-key", runner.multiway_users()
+    )
+    assert status == "PASS", detail
+    assert detail.startswith("3 users, 3 distinct values (mw-user-0 'red', ")
+
+
+@pytest.mark.regression
+def test_a_server_that_serves_the_on_value_to_all_fails_the_row(
+    multiway_runner, monkeypatch
+):
+    """The plan's plant for the server row."""
+    runner = multiway_runner
+    monkeypatch.setattr(
+        runner, "_api_key_get", _served(runner, lambda user, users: "on-copy")
+    )
+    status, detail = runner.check_multiway(
+        "http://x", "contract-key", runner.multiway_users()
+    )
+    assert status == "FAIL"
+    assert detail.startswith("3 users got 1 distinct value; expected 3; ")
+    assert (
+        "evaluate 'sdk_contract_multiway' for 'mw-user-1': enabled True, value 'on-copy' (expected 'green')"
+        in detail
+    )
+
+
+def test_a_rule_that_serves_the_on_value_fails_the_row(multiway_runner, monkeypatch):
+    runner = multiway_runner
+    monkeypatch.setattr(
+        runner,
+        "_api_key_get",
+        _served(
+            runner, lambda user, users: users[user], rule=("targeting_rule", "on-copy")
+        ),
+    )
+    status, detail = runner.check_multiway(
+        "http://x", "contract-key", runner.multiway_users()
+    )
+    assert status == "FAIL"
+    assert detail == (
+        "evaluate 'sdk_contract_rule_value' with plan=pro: HTTP 200, reason "
+        "'targeting_rule', value 'on-copy' (expected 'pro-copy' by the rule)"
+    )
+
+
+def test_a_bulk_answer_that_is_not_a_boolean_fails_the_row(
+    multiway_runner, monkeypatch
+):
+    """/feature-flags/user/{id} stays boolean."""
+    runner = multiway_runner
+    monkeypatch.setattr(
+        runner,
+        "_api_key_get",
+        _served(runner, lambda user, users: users[user], bulk=False),
+    )
+    status, detail = runner.check_multiway(
+        "http://x", "contract-key", runner.multiway_users()
+    )
+    assert status == "FAIL"
+    assert (
+        "/feature-flags/user/mw-user-0 answered 'sdk_contract_multiway': 'red' "
+        "(expected true, a boolean)" in detail
+    )
+
+
+def test_the_seeds_multiway_flags_are_put_back(runner):
+    """The split flag on at 100% with its split, the rule value flag at 0% with
+    the targeted flag's rule and its own value; an edited one is put back."""
+    from types import SimpleNamespace
+
+    from backend.app.models import register_core_models
+    from backend.app.models.feature_flag import FeatureFlagStatus
+    from backend.scripts import seed_sdk_contract as seed
+
+    register_core_models()
+
+    class Db:
+        """The flags *existing* holds, by key; what is added is kept."""
+
+        def __init__(self, existing):
+            self.existing, self.key, self.added = existing, None, []
+
+        def query(self, model):
+            return self
+
+        def filter(self, criterion):
+            self.key = criterion.right.value  # FeatureFlag.key == <key>
+            return self
+
+        def first(self):
+            return self.existing.get(self.key)
+
+        def add(self, obj):
+            self.added.append(obj)
+
+        def commit(self):
+            pass
+
+        def refresh(self, obj):
+            pass
+
+    admin = SimpleNamespace(id="00000000-0000-0000-0000-000000000001")
+    fresh = Db({})
+    created = seed.seed_multiway_flags(fresh, admin)
+    assert fresh.added == created
+    edited = [
+        SimpleNamespace(
+            key=key,
+            id=key,
+            status=FeatureFlagStatus.INACTIVE,
+            value_type="boolean",
+            on_value=None,
+            off_value=None,
+            rollout_percentage=50,
+            targeting_rules={},
+            split=[{"value": "x", "weight": 100}],
+        )
+        for key in (seed.MULTIWAY_FLAG_KEY, seed.RULE_VALUE_FLAG_KEY)
+    ]
+    kept = Db({flag.key: flag for flag in edited})
+    restored = seed.seed_multiway_flags(kept, admin)
+    assert restored == edited and kept.added == []
+    for split, rule in (created, restored):
+        for flag in (split, rule):
+            assert flag.status == FeatureFlagStatus.ACTIVE
+            assert (flag.value_type, flag.on_value, flag.off_value) == (
+                "string",
+                "on-copy",
+                "off-copy",
+            )
+        assert split.key == "sdk_contract_multiway"
+        assert (split.rollout_percentage, split.targeting_rules) == (100, {})
+        assert split.split == seed.MULTIWAY_SPLIT
+        assert rule.key == "sdk_contract_rule_value"
+        assert (rule.rollout_percentage, rule.split) == (0, None)
+        assert rule.targeting_rules == {**seed.TARGETED_FLAG_RULES, "value": "pro-copy"}
 
 
 # ---------------------------------------------------------------------------

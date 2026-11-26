@@ -1,6 +1,7 @@
 # Feature flag management service
 # backend/app/services/feature_flag_service.py
 import enum
+import json
 import logging
 import time
 from datetime import datetime, timezone
@@ -11,14 +12,17 @@ from pydantic_core import PydanticCustomError
 from sqlalchemy import delete, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 
 from backend.app.core.flag_environments import PRODUCTION, FlagInEnvironment
 from backend.app.core.flag_values import (
     BOOLEAN,
+    SERVING_FIELDS,
     VALUE_FIELDS,
     VALUE_TYPE_READ_ONLY,
     flag_value_type,
     percent_bucket,
+    serving_errors,
     stored_values,
     values_equal_refusal,
     write_errors,
@@ -87,6 +91,25 @@ _LEGACY_OPERATORS = ("eq", "ne", "gt", "lt", "contains", "in")
 #: split is kept. Not ``None``, which clears it.
 KEEP_SPLIT: Any = object()
 
+#: The flag's JSON columns an update writes. Each is stored whenever its JSON
+#: changes, including a change Python's ``==`` does not see (``true`` for
+#: ``1``, ``1.0`` for ``1``), which the session would otherwise leave unwritten.
+JSON_FIELDS = ("targeting_rules", "on_value", "off_value", "split", "tags")
+
+
+def _json_text(value: Any) -> str:
+    """*value* as JSON text with sorted keys: two values with the same text
+    are stored the same."""
+    return json.dumps(value, sort_keys=True, default=str)
+
+
+def _store_changed_json(flag: FeatureFlag, before: Dict[str, str]) -> None:
+    """Mark each of :data:`JSON_FIELDS` whose JSON text differs from *before*
+    as changed, so the update writes it even when ``==`` says it is equal."""
+    for field, text in before.items():
+        if _json_text(getattr(flag, field, None)) != text:
+            flag_modified(flag, field)
+
 
 class FlagStatusReadOnly(Exception):
     """A request's ``status`` differs from the flag's status.
@@ -114,19 +137,32 @@ class FlagValuesRefused(Exception):
         self.errors = errors
 
 
-def _check_sent_values(flag_data: FeatureFlagUpdate, flag: FeatureFlag) -> None:
+def _check_sent_values(
+    flag_data: FeatureFlagUpdate, flag: FeatureFlag, split: Any = KEEP_SPLIT
+) -> None:
     """Raise :class:`FlagValuesRefused` when an update's values do not fit.
 
     ``value_type`` is read-only: sent, it must equal the stored type, compared
     exactly. Each sent value is checked against the stored type, and the pair
     as it will be stored (each value as sent, otherwise as stored) must differ
-    (EMF-5). The update route reads *flag* with ``SELECT ... FOR UPDATE`` when
+    (EMF-5). The update route reads *flag* and locks the row when
     a value is sent, so the stored pair is the committed one and a concurrent
     update of the same flag waits for this one. A check violation that still
     reaches the commit -- a writer that does not take that lock -- is answered
     as the same 422 by :meth:`FeatureFlagService.update_feature_flag`.
     A boolean flag accepts ``on_value: true`` and ``off_value: false`` -- its
     GET body sent back -- and stores neither.
+
+    A sent ``split`` and sent ``targeting_rules`` are checked by
+    ``flag_values.serving_errors`` against the stored type and the stored split
+    and rules; their places are tuples (``("split", 2, "weight")``). The update
+    route locks the row when either is sent, as for a value, and the
+    environment routes always do. *split* is
+    the split the update writes beside the request (``update_feature_flag``'s
+    ``split``): the environment PUT and a promotion into production pass it,
+    and their route checks it first, with the same function
+    (``flag_environments._refuse_what_cannot_be_served``). Sent rules are
+    counted with that split, not the one it replaces.
     """
     fields_set = flag_data.model_fields_set
     stored_type = flag_value_type(flag)
@@ -139,13 +175,23 @@ def _check_sent_values(flag_data: FeatureFlagUpdate, flag: FeatureFlag) -> None:
         for field in VALUE_FIELDS
         if field in fields_set
     }
-    if not sent:
-        return
-    errors = write_errors(
-        stored_type,
-        sent,
-        {"on_value": flag.on_value, "off_value": flag.off_value},
-    )
+    errors = []
+    if sent:
+        errors += write_errors(
+            stored_type,
+            sent,
+            {"on_value": flag.on_value, "off_value": flag.off_value},
+        )
+    serving = {
+        field: getattr(flag_data, field)
+        for field in SERVING_FIELDS
+        if field in fields_set
+    }
+    if serving:
+        stored = {field: getattr(flag, field, None) for field in SERVING_FIELDS}
+        if split is not KEEP_SPLIT:
+            stored["split"] = split
+        errors += serving_errors(stored_type, serving, stored)
     if errors:
         raise FlagValuesRefused(errors)
 
@@ -392,9 +438,14 @@ class FeatureFlagService:
         transaction (see ``_commit``).
 
         ``split``, when given, is stored as the flag's split in the same
-        transaction, as it is, unchecked, and ``None`` clears it; left out, the
-        stored split is kept. No request field sets it: a promotion into
-        production passes the split it copies (``flag_environments.py``, #2012).
+        transaction, and ``None`` clears it; left out, the stored split is
+        kept. A request sets it as ``flag_data.split``, checked by
+        :func:`_check_sent_values`; the environment PUT and a promotion into
+        production pass the split they write here, checked by their route
+        (``flag_environments.py``, #2012), and sent rules are checked with it.
+
+        A JSON column is written whenever its JSON changes, even where
+        Python's ``==`` holds the two equal (:data:`JSON_FIELDS`).
 
         Raises:
             FlagStatusReadOnly: a sent ``status`` differs from the stored one.
@@ -412,7 +463,7 @@ class FeatureFlagService:
 
         stored = FeatureFlagStatus(_status_value(flag.status))
         _check_sent_status(flag_data, stored)
-        _check_sent_values(flag_data, flag)
+        _check_sent_values(flag_data, flag, split)
 
         update_data = flag_data.model_dump(
             exclude_unset=True, exclude=READ_ONLY_FIELDS | LIST_ITEM_FIELDS
@@ -426,11 +477,15 @@ class FeatureFlagService:
             update_data["status"] = transition(stored, verb)
 
         flag_id = flag.id
+        before = {
+            field: _json_text(getattr(flag, field, None)) for field in JSON_FIELDS
+        }
         try:
             for field, value in update_data.items():
                 setattr(flag, field, value)
             if split is not KEEP_SPLIT:
                 flag.split = split
+            _store_changed_json(flag, before)
 
             # Commit changes
             self._commit(flag, record)

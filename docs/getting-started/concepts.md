@@ -21,7 +21,7 @@ Common uses: gradual rollouts, kill switches, beta programs, maintenance mode.
 
 ### Several Experiences
 
-A flag serves two values: on or off, or a string, a number or a JSON value with an off value. To split users among three or more experiences, or to measure which one does better, run a multivariate experiment instead. Each of its variants carries a `configuration`, which `POST /api/v1/tracking/assign` returns.
+A flag serves on or off, or a string, a number or a JSON value with an off value. A string, number or JSON flag can also give the users it is on for one of 3 to 10 values by weight (a split), or a matched targeting rule's own value. A split measures nothing: to measure which value does better, run a multivariate experiment instead. Each of its variants carries a `configuration`, which `POST /api/v1/tracking/assign` returns.
 
 ### Why Use Feature Flags
 

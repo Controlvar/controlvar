@@ -70,6 +70,7 @@ ROUTES = "backend/app/api/v1/endpoints/"
 ATTRIBUTES = (
     "rollout_percentage",
     "targeting_rules",
+    "split",
     "role",
     "is_superuser",
     "is_active",
@@ -198,6 +199,13 @@ SITES: Dict[Tuple[str, str, str], Tuple[int, object]] = {
         "backend/app/services/feature_flag_service.py",
         "FeatureFlagService.deactivate_feature_flag",
         "flag status",
+    ): (1, RouteReached()),
+    # The split a promotion into production copies (#2012); the update's own
+    # field goes through the dynamic setattr below. Both recorded by record=.
+    (
+        "backend/app/services/feature_flag_service.py",
+        "FeatureFlagService.update_feature_flag",
+        "split",
     ): (1, RouteReached()),
     (
         "backend/app/crud/crud_feature_flag.py",
@@ -663,7 +671,7 @@ def test_the_sites_are_exact():
         f"{sorted((k, n) for k, n in found.items() if expected.get(k) != n)}; "
         f"gone: {sorted(k for k in expected if k not in found)}"
     )
-    assert sum(expected.values()) == 37
+    assert sum(expected.values()) == 38
 
 
 def test_every_dynamic_setattr_is_listed():

@@ -119,8 +119,9 @@ Types (`types.go`):
 
 ## Flag values
 
-`EvalResult.Value` is what the flag serves this user: its on value when `Enabled` is true, its
-off value otherwise (`true` or `false` for a boolean flag). `EvalResult.ValueType` is the flag's
+`EvalResult.Value` is what the flag serves this user: its off value when `Enabled` is false,
+and otherwise its on value, or the value its split or a matched rule's own value gives them
+(`true` or `false` for a boolean flag). `EvalResult.ValueType` is the flag's
 type. Read the value with the method for its type:
 
 ```go

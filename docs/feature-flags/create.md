@@ -466,8 +466,10 @@ KEY=$(curl -s -X POST localhost:8000/api/v1/api-keys \
 ### Serve a value
 
 A flag can serve a string, a number or a JSON value instead of on or off. Its `value_type`
-is set when it is created, and it has two values: `on_value`, what the users it is on for
-get, and `off_value`, what everyone else gets, and everyone while the flag is off. This
+is set when it is created, and it has an `on_value`, what the users it is on for get, and an
+`off_value`, what everyone else gets, and everyone while the flag is off. Through the API, a
+`split` or a targeting rule's own `value` can give the users it is on for other values of its
+type instead. This
 creates a string flag for a checkout button's label, on for enterprise-plan users, and
 turns it on:
 
@@ -579,8 +581,8 @@ digit. Anything else is refused with `422`.
 
 ## When a Flag Evaluates to Off
 
-Every flag serves two values. Evaluation returns `enabled: false`, and `value` set to the
-flag's `off_value` (`false` for a boolean flag), when:
+Evaluation returns `enabled: false`, and `value` set to the flag's `off_value` (`false` for a
+boolean flag), when:
 
 - the flag is off (`reason: "inactive"`), which includes a flag that a safety rollback to
   0% turned off (see [Safety Monitoring](safety.md#what-a-rollback-changes));
@@ -694,8 +696,8 @@ curl -s -G localhost:8000/api/v1/feature-flags/evaluate/new-checkout-flow \
 decided), `rollout` (no rule matched; the global rollout percentage decided), `inactive` or
 `error`. A `context` that is not a JSON object returns `422`.
 `GET /api/v1/feature-flags/user/{user_id}?context=...` evaluates every active flag the same way
-and returns `{"flag-key": true|false, ...}`. A value flag answers `true` when the user gets
-its on value.
+and returns `{"flag-key": true|false, ...}`. A value flag answers `true` when the flag is on
+for the user, whatever value it serves them.
 
 ### Reporting client-side errors
 
