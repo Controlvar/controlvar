@@ -569,10 +569,16 @@ export function MetricComparisonTable({
                   {metricLowerIsBetter(metric) === true && (
                     <span className="ml-1.5 text-xs text-slate-600 font-normal">lower is better</span>
                   )}
+                  {/* The tag is set apart by margin only: the sr-only space
+                      makes the cell's name end "... within 7 days", not
+                      "...primarywithin 7 days". */}
                   {typeof metric.conversion_window_hours === 'number' && (
-                    <span className="ml-1.5 text-xs text-slate-600 font-normal" data-testid="metric-window-tag">
-                      {windowTag(metric.conversion_window_hours)}
-                    </span>
+                    <>
+                      <span className="sr-only"> </span>
+                      <span className="ml-1.5 text-xs text-slate-600 font-normal" data-testid="metric-window-tag">
+                        {windowTag(metric.conversion_window_hours)}
+                      </span>
+                    </>
                   )}
                 </td>
                 <td className="px-4 py-3 text-slate-700">

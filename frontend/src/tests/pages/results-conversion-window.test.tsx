@@ -317,6 +317,32 @@ describe('the notice, from answers the API gave', () => {
     expect(noticeTexts()).toEqual(lines);
   });
 
+  it('the metric cell’s name reads the window tag as its own words', async () => {
+    const refund = {
+      ...purchase([10, 20], 36),
+      metric_id: 'm-3',
+      metric_name: 'Refund',
+      is_primary: false,
+      lower_is_better: true,
+    } as MetricResult;
+    await renderLoaded(results({ metrics: [purchase(), visits(), refund] }));
+    // jsdom's name computation puts a space between inline elements, which a
+    // browser does not: the tags are set apart by margin only, and Chromium's
+    // accessibility tree read "Purchaseprimarywithin 7 days". So the text the
+    // browser concatenates is pinned too. "Purchaseprimary" is the table's
+    // older run-together name, which the docs journeys find the row by; only
+    // the window tag is set apart here.
+    const cells = (name: string) => screen.getAllByRole('cell', { name });
+    for (const [name, text] of [
+      ['Purchase primary within 7 days', 'Purchaseprimary within 7 days'],
+      ['Refund lower is better within 36 hours', 'Refundlower is better within 36 hours'],
+      ['Visit', 'Visit'],
+    ] as const) {
+      expect(cells(name)).toHaveLength(2);
+      for (const cell of cells(name)) expect(cell.textContent).toBe(text);
+    }
+  });
+
   it('the active answer: the summary card names the window, and only that metric’s rows are tagged', async () => {
     await renderLoaded(captured('results-active')());
     expect(screen.getByTestId('summary-window')).toHaveTextContent(windowSummaryLine(168));
