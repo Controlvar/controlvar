@@ -8,6 +8,11 @@
  * "7 hours".
  */
 
+/**
+ * The API's bounds (`MetricBase.conversion_window_hours`): the box refuses
+ * what the API refuses. results-window-types.test.ts holds them to the API
+ * snapshot's minimum and maximum.
+ */
 export const WINDOW_MIN_HOURS = 1;
 export const WINDOW_MAX_HOURS = 8760;
 
@@ -59,7 +64,9 @@ export function windowHelp(hours: number): string {
 
 /** The refusal of a window that cannot be saved, naming its metric. */
 export function windowRefusal(metricName: string): string {
-  return `“${metricName}”: the conversion window must be a whole number of hours from 1 to 8,760, or blank.`;
+  const from = WINDOW_MIN_HOURS.toLocaleString('en-US');
+  const to = WINDOW_MAX_HOURS.toLocaleString('en-US');
+  return `“${metricName}”: the conversion window must be a whole number of hours from ${from} to ${to}, or blank.`;
 }
 
 /** What guided setup's Review adds to a metric's line. */

@@ -17,8 +17,10 @@
  *  - the summary card's line for the primary metric, and the table's tag.
  */
 import React from 'react';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import ResultDetailPage from '@/pages/results/[id]';
+import { PICKER_LABEL } from '@/components/results/ResultsDashboard/SavedSegment';
 import { ApiError, apiFetch } from '@/services/api';
 import { ExperimentResultsResponse, MetricResult } from '@/types/results';
 import {
@@ -174,7 +176,10 @@ const SAMPLE_SIZE = {
   power_target: 0.8,
 };
 
-function install(body: ExperimentResultsResponse) {
+const SEGMENT_ID = '3f1e2d4c-5b6a-4978-8a9b-0c1d2e3f4a5b';
+const SEGMENT_NAME = 'Pilot customers';
+
+function install(body: ExperimentResultsResponse, segmentBody?: Record<string, unknown>) {
   mockedApiFetch.mockImplementation(
     routedApi([
       {
@@ -182,6 +187,21 @@ function install(body: ExperimentResultsResponse) {
         handler: () => ({ id: 'exp-1', correction_method: 'none', confidence_level: 0.95, bayesian_enabled: false }),
       },
       { path: '/api/v1/results/exp-1', handler: () => body },
+      {
+        path: '/api/v1/segments',
+        handler: () => [
+          {
+            id: SEGMENT_ID,
+            name: SEGMENT_NAME,
+            kind: 'id_list',
+            rules: null,
+            status: 'active',
+            created_at: '2026-11-01T00:00:00Z',
+            updated_at: '2026-11-01T00:00:00Z',
+          },
+        ],
+      },
+      { path: `/api/v1/results/exp-1/segments/${SEGMENT_ID}`, handler: () => segmentBody },
       { path: '/api/v1/results/exp-1/daily', handler: () => ({ experiment_id: 'exp-1', metric_id: null, series: [] }) },
       { path: '/api/v1/results/exp-1/sample-size', handler: () => SAMPLE_SIZE },
       {
@@ -281,6 +301,54 @@ describe('the notice, on the page', () => {
 // still inside it; then the same experiment paused, then completed; another
 // paused and archived (no end); and one paused for longer than its 1-day
 // window and then completed, which leaves 0 with less than the full window.
+describe('a saved segment’s results', () => {
+  it('show the members’ own line, not the line for all users', async () => {
+    // The segment's members: 4 of the 9,830, 1 of them still inside the window.
+    const members = {
+      ...results(),
+      summary: { ...results().summary, total_users: 4 },
+      metrics: [
+        {
+          ...purchase(),
+          variants: [
+            variant('v-ctrl', 'Control', true, 2, 1, 0),
+            variant('v-treat', 'Treatment', false, 2, 1, 1),
+          ],
+        },
+        visits(),
+      ],
+      srm: { chi2: 0, p_value: 1, warning: false, expected: {}, observed: {} },
+      segment: {
+        id: SEGMENT_ID,
+        name: SEGMENT_NAME,
+        kind: 'id_list',
+        status: 'active',
+        membership: 'current',
+        member_count: 4,
+        experiment_users: 9830,
+        experiment_srm_warning: false,
+      },
+      is_exploratory: true,
+    };
+    install(results(), members);
+    render(<ResultDetailPage />);
+    await screen.findByTestId('results-dashboard');
+    expect(noticeTexts()).toEqual([ACTIVE_LINE]);
+
+    const picker = screen.getByRole('combobox', { name: PICKER_LABEL });
+    await userEvent.hover(picker);
+    await waitFor(() => expect(within(picker).getByRole('option', { name: SEGMENT_NAME })).toBeInTheDocument());
+    await userEvent.selectOptions(picker, SEGMENT_ID);
+    await screen.findByTestId('summary-segment-line');
+
+    expect(noticeTexts()).toEqual([
+      'Purchase: 1 of 4 users (25%) was still inside their 7 days when these results were computed ' +
+        '(24 Nov 2026, 23:40 UTC). They are in the sample size, and count as not converted until they convert. ' +
+        'The numbers and the comparison can change, in either direction. Still inside: Control 0%, Treatment 50%.',
+    ]);
+  });
+});
+
 describe('the notice, from answers the API gave', () => {
   const ANSWERS: Record<string, unknown> = {
     'results-active': ANSWER_ACTIVE,
