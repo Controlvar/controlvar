@@ -947,8 +947,13 @@ def test_the_upgrade_changes_no_answer(test_db, scratch_schema, tmp_path):
     assert (len(corpus["stored_flags"]), len(corpus["cases"])) == (161, 2242)
     assert len(cases) > 2200, len(unsent)
     assert not any(case["must_local"] for case in unsent)
-    assert {status for status, _, _ in before} == {200}, [
-        (r[1], a) for r, a in zip(requests, before) if a[0] != 200
+    # #2176: a user_id over 255 characters is refused, before and after alike.
+    too_long = [len(case["user_id"]) > 255 for case in cases]
+    assert sum(too_long) == 6
+    expected = [422 if long else 200 for long in too_long]
+    expected += [200] * (len(requests) - len(cases))
+    assert [status for status, _, _ in before] == expected, [
+        (r[1], a) for r, a, e in zip(requests, before, expected) if a[0] != e
     ][:5]
     changed = [
         f"{request[1]}: {then} before, {now} after"
@@ -960,7 +965,11 @@ def test_the_upgrade_changes_no_answer(test_db, scratch_schema, tmp_path):
     wrong = [
         (case["id"], body, case["expected"])
         for case, (_, body, _) in zip(cases, after)
-        if {k: body[k] for k in ("enabled", "reason")} != case["expected"]
+        if (
+            [error["type"] for error in body["detail"]] != ["string_too_long"]
+            if len(case["user_id"]) > 255
+            else {k: body[k] for k in ("enabled", "reason")} != case["expected"]
+        )
     ]
     assert wrong == [], (len(wrong), wrong[:5])
     legacy_bodies = [

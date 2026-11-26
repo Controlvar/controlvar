@@ -16,7 +16,7 @@ preview endpoint — is the module's. The rules come in three layers:
   allocations summing to 100; each ``url`` an absolute ``http://`` or
   ``https://`` URL of at most 2048 characters with an ASCII host name without
   a ``%`` sign, and without user information, a fragment, a backslash,
-  whitespace or control characters; its path without a ``.`` or ``..``
+  whitespace, control characters or an unpaired surrogate; its path without a ``.`` or ``..``
   segment (also written ``%2e``) and without a character a browser
   percent-encodes in a path (a non-ASCII character or one of
   ``" < > ^ ` { | }``). A URL is stored exactly as sent.
@@ -45,6 +45,11 @@ from pydantic import (
     model_validator,
 )
 from pydantic_core import PydanticCustomError
+
+from backend.app.schemas.storable_text import (
+    contains_unstorable_text,
+    unstorable_text_message,
+)
 
 #: The error ``type`` of every refusal below, in a 422 and wherever else a
 #: problem is reported.
@@ -121,7 +126,8 @@ DESTINATION_IS_ENTRY = (
 SAME_ENTRY = "same_entry"
 CHAIN = "chain"
 
-#: Characters no variant URL may contain, besides whitespace and controls.
+#: Characters no variant URL may contain, besides whitespace, controls and
+#: unpaired surrogates (which the database cannot store, #2180).
 _FORBIDDEN_CHARACTERS = frozenset("#\\")
 
 #: The path segments a browser treats as ``.`` and ``..``, lower case.
@@ -136,7 +142,7 @@ def _forbidden(character: str) -> bool:
     return (
         character in _FORBIDDEN_CHARACTERS
         or character.isspace()
-        or unicodedata.category(character) == "Cc"
+        or unicodedata.category(character) in ("Cc", "Cs")
     )
 
 
@@ -248,6 +254,15 @@ class SplitUrlConfig(BaseModel):
     cookie_name: Optional[str] = Field(None, description=STORED_NOT_READ)
     cookie_ttl_days: int = Field(30, description=STORED_NOT_READ)
     canonical_url: Optional[str] = Field(None, description=STORED_NOT_READ)
+
+    @field_validator("cookie_name", "canonical_url", mode="before")
+    @classmethod
+    def refuse_unstorable_text(cls, value: Any, info: ValidationInfo) -> Any:
+        """NUL or an unpaired surrogate, which the database cannot store,
+        answers 422 at the field (#2180); the message never repeats it."""
+        if contains_unstorable_text(value):
+            raise ValueError(unstorable_text_message(info.field_name))
+        return value
 
     @field_validator("variants")
     @classmethod

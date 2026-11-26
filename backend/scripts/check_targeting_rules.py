@@ -7,9 +7,16 @@ when saved (#535)::
     python -m backend.scripts.check_targeting_rules
 
 Stored rules are not re-judged: they are evaluated as before, and a flag whose
-rules are listed here keeps working, with one exception: native rules holding
+rules are listed here keeps working, with two exceptions. Native rules holding
 a ``time_window`` without ``start`` or ``end`` were ignored and are read from
 #1527, so their answer changes (``--time-window-changes``, below, lists them).
+A native rule or ``default_rule`` whose ``id`` is longer than 255 characters
+(``rules[0].id  must be at most 255 characters``, #2179) does not work: with a
+production key, every evaluation that reaches that rule answers 500, and so
+does ``GET /api/v1/feature-flags/user/{user_id}`` for each user it matches,
+because the id a production evaluation records does not fit. That stays so
+until the id is shortened: send the rules again with an id of at most 255
+characters.
 But a ``PUT`` that sends listed rules back unchanged answers 422, so fix them
 (or leave ``targeting_rules`` out of the request). The report reads, and
 never writes, ``feature_flags.targeting_rules`` and prints one tab-separated

@@ -1572,9 +1572,17 @@ by = [
 count = 5
 
 [[unit]]
+text = "user_id: string, 1 to 255 characters"
+by = [
+    "test:backend/tests/integration/api/test_evaluate_user_id_refused.py::test_an_id_over_255_characters_answers_422_and_nothing_is_recorded",
+    "test:backend/tests/integration/api/test_evaluate_user_id_refused.py::test_an_id_of_255_characters_is_answered_and_recorded",
+    "test:backend/tests/integration/api/test_evaluate_user_id_refused.py::test_characters_are_counted_not_bytes",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
 text = "user_id: string"
 by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
-count = 2
 
 [[unit]]
 text = "context: object (optional), URL-encoded JSON; at most 8,192 bytes and 10 levels deep (Targeting Context Limits)"

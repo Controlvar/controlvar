@@ -38,6 +38,10 @@ from backend.app.schemas.split_url_config import (
     SplitUrlConfig,
     find_split_url_config_problem,
 )
+from backend.app.schemas.storable_text import (
+    contains_unstorable_text,
+    unstorable_text_message,
+)
 from backend.app.schemas.variance_reduction import VarianceReductionConfig
 from backend.app.schemas.visual import (
     VisualChanges,
@@ -149,6 +153,17 @@ def _zone(name: str) -> tzinfo:
     if name == "UTC":
         return timezone.utc
     return ZoneInfo(name)
+
+
+def _refuse_unstorable_text(value: Any, info: ValidationInfo) -> Any:
+    """Refuse NUL and unpaired surrogates anywhere in a request field's value,
+    keys included: the database cannot store them, and the save failed (#2180).
+    Called from a ``mode="before"`` validator of each request model below, so
+    no other check of the field reads the value first; the message names the
+    field, never the value."""
+    if contains_unstorable_text(value):
+        raise ValueError(unstorable_text_message(info.field_name))
+    return value
 
 
 class ScheduleConfig(BaseModel):
@@ -297,6 +312,19 @@ class MetricBase(BaseModel):
         }
     )
 
+    @field_validator(
+        "name",
+        "description",
+        "event_name",
+        "aggregation_method",
+        "event_value_path",
+        mode="before",
+    )
+    @classmethod
+    def refuse_unstorable_text(cls, value: Any, info: ValidationInfo) -> Any:
+        """A metric's text the database cannot store answers 422 at the field."""
+        return _refuse_unstorable_text(value, info)
+
 
 #: The 422 message for a metric name that repeats in one request (#1461). It
 #: gives the 0-based positions of the first repeated pair and never a name, so
@@ -383,6 +411,13 @@ class VariantBase(BaseModel):
         }
     )
 
+    @field_validator("name", "description", "configuration", mode="before")
+    @classmethod
+    def refuse_unstorable_text(cls, value: Any, info: ValidationInfo) -> Any:
+        """A variant's text the database cannot store answers 422 at the
+        field. ``visual_changes`` refuses it in its own models."""
+        return _refuse_unstorable_text(value, info)
+
     @field_validator("traffic_allocation")
     @classmethod
     def validate_traffic_allocation(cls, v: int) -> int:
@@ -449,6 +484,15 @@ class ExperimentBase(BaseModel):
         None, description="Rules for targeting users"
     )
     tags: Optional[List[str]] = Field(None, description="Tags for categorization")
+
+    @field_validator(
+        "name", "description", "hypothesis", "targeting_rules", "tags", mode="before"
+    )
+    @classmethod
+    def refuse_unstorable_text(cls, value: Any, info: ValidationInfo) -> Any:
+        """Text the database cannot store answers 422 at the field, before the
+        rules are read. ``key`` already answers 422 for both characters."""
+        return _refuse_unstorable_text(value, info)
 
 
 class SequentialTestingConfigInput(BaseModel):
@@ -984,6 +1028,15 @@ class ExperimentUpdate(BaseModel):
         the key is absent: pydantic does not validate a default.
         """
         raise PydanticCustomError("value_error", SCHEDULE_ON_UPDATE_REFUSED)
+
+    @field_validator(
+        "name", "description", "hypothesis", "targeting_rules", "tags", mode="before"
+    )
+    @classmethod
+    def refuse_unstorable_text(cls, value: Any, info: ValidationInfo) -> Any:
+        """Text the database cannot store answers 422 at the field, as on a
+        create."""
+        return _refuse_unstorable_text(value, info)
 
     @field_validator("targeting_rules")
     @classmethod

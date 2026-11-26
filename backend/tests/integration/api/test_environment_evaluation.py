@@ -673,22 +673,46 @@ def test_a_staging_keys_ruleset_is_the_vectors_ruleset(client, staging_corpus, k
             assert entry["active"] is False, entry
 
 
+#: The answer to a user_id longer than the evaluation can record (#2176), in
+#: every environment.
+TOO_LONG_USER_ID = {
+    "detail": [
+        {
+            "type": "string_too_long",
+            "loc": ["query", "user_id"],
+            "msg": "String should have at most 255 characters",
+            "ctx": {"max_length": 255},
+        }
+    ]
+}
+
+
 @pytest.mark.regression
 def test_a_staging_key_is_answered_every_vector_a_url_can_carry(
     client, db_session, staging_corpus, keys
 ):
     """2395 of the 2406 cases, through ``GET /evaluate`` with a real staging
     key. The other 11 hold a lone surrogate, which no client can put in a URL,
-    and are not sent, as in the production run of the same file. 215 of them
-    expect a value: the value flags' 51 and the 164 of the flags with a split
-    or a rule's own value, which staging alone has here (#2012)."""
-    checked = values = skipped = 0
+    and are not sent, as in the production run of the same file. The 7 with a
+    300-character user_id answer 422 (#2176); the other 2388 are answered.
+    214 of those expect a value: the value flags' 51 and 163 of the 164 of
+    the flags with a split or a rule's own value, which staging alone has here
+    (#2012)."""
+    checked = values = skipped = refused = 0
     wrong = []
     rows_before = db_session.query(RawMetric).count()
     for case in staging_corpus["cases"]:
         if _has_lone_surrogate(case["user_id"]) or _has_lone_surrogate(case["context"]):
             assert not case["must_local"], case["id"]
             skipped += 1
+            continue
+        if len(case["user_id"]) > 255:
+            response = _get(
+                client, keys["staging"], case["flag"], case["user_id"], case["context"]
+            )
+            assert response.status_code == 422, (case["id"], response.text)
+            assert response.json() == TOO_LONG_USER_ID, case["id"]
+            refused += 1
             continue
         answer = _evaluate(
             client, keys["staging"], case["flag"], case["user_id"], case["context"]
@@ -703,9 +727,14 @@ def test_a_staging_key_is_answered_every_vector_a_url_can_carry(
                 wrong.append((case["id"], served, case["expected_value"]))
         checked += 1
     assert not wrong, f"{len(wrong)} wrong; first {wrong[:5]}"
-    assert (checked, skipped, values) == (2395, 11, 215)
+    assert (checked, skipped, refused, values) == (2388, 11, 7, 214)
     total = len(staging_corpus["cases"])
-    assert checked + skipped == total == staging_corpus["counts"]["cases"] == 2406
+    assert (
+        checked + skipped + refused
+        == total
+        == staging_corpus["counts"]["cases"]
+        == 2406
+    )
     # Not one of them was recorded, and production answers each flag off.
     db_session.rollback()
     assert db_session.query(RawMetric).count() == rows_before

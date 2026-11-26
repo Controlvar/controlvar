@@ -667,10 +667,18 @@ by = [
 ]
 
 [[unit]]
-text = "a rollout_percentage, top-level or on a native rule, that is not an integer from 0 to 100 (100.0 is accepted; 33.5, true and \"50\" are not), or an id that is not text of 1 to 100 characters."
+text = "a rollout_percentage, top-level or on a native rule, that is not an integer from 0 to 100 (100.0 is accepted; 33.5, true and \"50\" are not), or a dashboard-shape id (beside groups) that is not text of 1 to 100 characters;"
 by = [
     "test:backend/tests/unit/core/test_flag_targeting_validation.py::test_refused",
     "test:backend/tests/unit/core/test_flag_targeting_validation.py::test_a_rollout_percentage_outside_the_integers_0_to_100_is_refused",
+]
+
+[[unit]]
+text = "a native rule's id (rules[0].id) or the default_rule's id longer than 255 characters."
+by = [
+    "test:backend/tests/integration/api/test_flag_rule_id_refused.py::test_a_create_refuses_an_id_over_255_characters",
+    "test:backend/tests/integration/api/test_flag_rule_id_refused.py::test_an_update_refuses_it_and_keeps_the_stored_rules",
+    "test:backend/tests/integration/api/test_flag_rule_id_refused.py::test_an_id_of_255_characters_is_saved_evaluated_and_recorded",
 ]
 
 [[unit]]
