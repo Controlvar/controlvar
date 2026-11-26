@@ -272,6 +272,14 @@ describe("Q18: an input cannot change the route", () => {
     expect(stub.requests).toEqual([]);
   });
 
+  test("evaluate_feature_flag accepts a 255-character user_id and refuses 256", async () => {
+    const { stub, proc } = await serve((_request, response) => json(response, 200, { key: "f", enabled: true }));
+    expect((await call(proc, "evaluate_feature_flag", { flag_key: "f", user_id: "u".repeat(255) })).isError).toBeFalsy();
+    expect(stub.requests).toHaveLength(1);
+    expect((await call(proc, "evaluate_feature_flag", { flag_key: "f", user_id: "u".repeat(256) })).isError).toBe(true);
+    expect(stub.requests).toHaveLength(1);
+  });
+
   test("an accepted key with every allowed character stays one path segment", async () => {
     const { stub, proc } = await serve((_request, response) =>
       json(response, 200, { key: "A.b_c-1", enabled: false, value: false, value_type: "boolean", reason: "inactive" }),
