@@ -208,7 +208,7 @@ it('names the logo "Controlvar home" once where it links, and the platform build
   cleanup();
   mode.mockReturnValue(false);
   render(<SiteHeader />);
-  expect(screen.getByLabelText('Controlvar home')).toHaveTextContent(/^CControlvar$/);
+  expect(screen.getByRole('link', { name: 'Controlvar home' })).toHaveTextContent(/^CControlvar home$/);
   expect(document.querySelector('svg[viewBox="0 0 273 64"]')).toBeNull();
 });
 

@@ -55,7 +55,7 @@ const ACTION_META: Record<
   start: {
     label: 'Start',
     pending: 'Starting…',
-    className: 'bg-green-600 text-white hover:bg-green-700',
+    className: 'bg-green-700 text-white hover:bg-green-800',
   },
   pause: {
     label: 'Pause',
@@ -887,7 +887,7 @@ export default function ExperimentDetailPage() {
                   Use the experiment key with an API key from{' '}
                   <Link
                     href="/admin/api-keys"
-                    className="text-blue-600 hover:underline"
+                    className="text-blue-600 underline"
                     data-testid="sdk-hint-admin-api-keys"
                   >
                     Admin → API Keys

@@ -151,6 +151,37 @@ test.describe("Journey: feature flags", () => {
     await expect(adminPage.getByTestId("safety-error")).toHaveCount(0);
   });
 
+  test("a flag whose name, key and description are one long word fits a 320 px screen", async ({
+    adminPage,
+  }) => {
+    const flags = new FeatureFlagsPage(adminPage);
+    await flags.goto();
+    await flags.clickFlag(SCHEDULED_FLAG);
+
+    // The API answers with one long word for each text field; nothing is stored.
+    const word = "Unbroken".repeat(12);
+    await adminPage.route("**/api/v1/feature-flags/**", async (route) => {
+      const response = await route.fetch();
+      const body = await response.json().catch(() => null);
+      if (body && !Array.isArray(body) && body.key === SCHEDULED_FLAG) {
+        await route.fulfill({
+          response,
+          json: { ...body, name: word, key: `${word}_key`, description: word.repeat(2) },
+        });
+      } else {
+        await route.fulfill({ response });
+      }
+    });
+    await adminPage.setViewportSize({ width: 320, height: 800 });
+    await adminPage.reload();
+
+    await expect(flags.detailName).toHaveText(word, { timeout: 15_000 });
+    await expect(adminPage.getByTestId("flag-description")).toHaveText(word.repeat(2));
+    // WCAG 1.4.10: nothing makes the page itself scroll sideways.
+    const scrollWidth = await adminPage.evaluate(() => document.documentElement.scrollWidth);
+    expect(scrollWidth).toBeLessThanOrEqual(320);
+  });
+
   test("an unknown flag id shows the 404 view", async ({ adminPage }) => {
     const flags = new FeatureFlagsPage(adminPage);
     await flags.gotoFlag("00000000-0000-0000-0000-000000000000");

@@ -126,7 +126,7 @@ describe('AppShell', () => {
     expect(screen.getByTestId('page-content')).toBeInTheDocument();
     expect(screen.getByText('Controlvar')).toBeInTheDocument();
     // The wordmark is the badge letter and the name, nothing appended.
-    expect(screen.getByLabelText('Controlvar home')).toHaveTextContent(/^CControlvar$/);
+    expect(screen.getByRole('link', { name: 'Controlvar home' })).toHaveTextContent(/^CControlvar home$/);
     await waitFor(() => expect(screen.getByTestId('user-menu')).toBeInTheDocument());
   });
 

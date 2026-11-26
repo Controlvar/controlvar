@@ -853,7 +853,7 @@ function FlagInEnvironment({
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-3">
-                <h1 className="text-2xl font-bold text-slate-900 break-words" data-testid="flag-name">
+                <h1 className="text-2xl font-bold text-slate-900 [overflow-wrap:anywhere]" data-testid="flag-name">
                   {flag.name}
                 </h1>
                 <span
@@ -883,11 +883,11 @@ function FlagInEnvironment({
                   </span>
                 )}
               </div>
-              <p className="text-sm text-slate-500 mt-1 font-mono" data-testid="flag-key">
+              <p className="text-sm text-slate-500 mt-1 font-mono [overflow-wrap:anywhere]" data-testid="flag-key">
                 {flag.key}
               </p>
               {flag.description && (
-                <p className="text-sm text-slate-600 mt-2" data-testid="flag-description">
+                <p className="text-sm text-slate-600 mt-2 [overflow-wrap:anywhere]" data-testid="flag-description">
                   {flag.description}
                 </p>
               )}

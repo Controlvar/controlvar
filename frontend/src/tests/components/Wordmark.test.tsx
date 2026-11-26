@@ -169,7 +169,7 @@ describe('Wordmark', () => {
     expect(container.querySelector('svg')).toBeNull();
     cleanup();
     render(<Wordmark />);
-    expect(screen.getByLabelText('Controlvar home')).toHaveTextContent(/^CControlvar$/);
+    expect(screen.getByRole('link', { name: 'Controlvar home' })).toHaveTextContent(/^CControlvar home$/);
     expect(document.querySelector('svg')).toBeNull();
   });
 });

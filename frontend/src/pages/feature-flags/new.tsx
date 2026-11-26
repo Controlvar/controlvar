@@ -224,7 +224,7 @@ export default function NewFeatureFlagPage() {
                 value={name}
                 onChange={handleNameChange}
                 placeholder="My Feature Flag"
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
                 data-testid="flag-name-input"
               />
             </div>
@@ -240,7 +240,7 @@ export default function NewFeatureFlagPage() {
                 value={key}
                 onChange={handleKeyChange}
                 placeholder="my_feature_flag"
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-400"
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-600"
                 data-testid="flag-key-input"
               />
               <p className="text-xs text-slate-600 mt-1">
@@ -258,7 +258,7 @@ export default function NewFeatureFlagPage() {
                 onChange={(e) => setDescription(e.target.value)}
                 rows={2}
                 placeholder="What does this feature flag control?"
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none"
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 resize-none"
               />
             </div>
           </section>
