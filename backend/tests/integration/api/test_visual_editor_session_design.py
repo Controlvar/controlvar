@@ -382,9 +382,16 @@ def _custom_role(db_session, user, actions: List[str]) -> None:
 
 
 def _changing_only(db_session, client, developer, experiment_id: str) -> str:
-    """A session for a user with no built-in role (every built-in role may
-    list experiments) and a custom role granting experiment read and update
-    only: it may change the draft, and neither list nor create experiments."""
+    """The token of :func:`_opened_changing_only`'s session."""
+    opened = _opened_changing_only(db_session, client, developer, experiment_id)
+    return opened.json()["token"]
+
+
+def _opened_changing_only(db_session, client, developer, experiment_id: str):
+    """The exchange's answer for a user with no built-in role (every built-in
+    role may list experiments) and a custom role granting experiment read and
+    update only: it may change the draft, and neither list nor create
+    experiments."""
     user = _user(db_session, UserRole.VIEWER)
     session = _session(db_session)
     try:
@@ -395,7 +402,7 @@ def _changing_only(db_session, client, developer, experiment_id: str) -> str:
     finally:
         session.close()
     _custom_role(db_session, user, ["read", "update"])
-    return _token(client, user, experiment_id)
+    return _exchanged(client, user, experiment_id)
 
 
 # --- the session's answer -----------------------------------------------------------
@@ -539,10 +546,13 @@ def test_the_holdout_is_not_shown_to_a_user_who_may_only_change_experiments(
     client, db_session, developer, experiment, holdout_slot
 ):
     holdout_slot(7)
-    token = _changing_only(db_session, client, developer, experiment)
+    opened = _opened_changing_only(db_session, client, developer, experiment)
+    token = opened.json()["token"]
 
     current = _get(client, CURRENT, token)
 
+    exchanged = opened.json()["experiment"]["holdout"]
+    assert exchanged is None, f"exchange 201 update-only: {exchanged} != None"
     assert current.status_code == 200, current.text
     shown = current.json()["experiment"]["holdout"]
     assert shown is None, f"update-only role: {shown} != None"
