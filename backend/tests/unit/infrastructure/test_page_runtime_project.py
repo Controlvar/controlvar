@@ -15,6 +15,10 @@ job stays green -- each pinned here:
   fixture skips the fixture's command-line check, with no error; so every
   ``*.runtime.spec.ts`` must take ``test`` from the launch fixture or from a
   fixture that extends it.
+
+Also pinned: the real-API specs read the export once per file, through
+frontend/tests/e2e/runtime/export-read.ts, so a run stays under the export
+routes' shared limit.
 """
 
 from __future__ import annotations
@@ -523,6 +527,69 @@ def test_a_type_import_from_playwright_is_allowed(tmp_path: Path) -> None:
         'import { test } from "./runtime.fixture";\n'
     )
     assert _plant(tmp_path, spec) == []
+
+
+# ---------------------------------------------------------------------------
+# The real-API specs read the export once per file
+# ---------------------------------------------------------------------------
+RUNTIME_DIR = SPEC_DIR / "runtime"
+EXPORT_READ = "export-read.ts"
+EXPORT_READERS = [
+    "real-api-details.runtime.spec.ts",
+    "real-api-preview.runtime.spec.ts",
+    "real-api.runtime.spec.ts",
+]
+EXPORT_MARKER = "page-runtime export read: ${file} ("
+EXPORT_PATH = re.compile(r"\bexport/")
+READ_CALL = re.compile(r"\breadExport\s*\(")
+# What the fixtures' builds write under runtime/fixtures (gitignored).
+BUILT = {"node_modules", ".next", "out"}
+
+
+def export_read_problems(runtime_dir: Path) -> list[str]:
+    """Every way the files under ``runtime_dir`` read the export other than
+    once per real-API spec file, through export-read.ts; empty when none does."""
+    problems = []
+    readers = []
+    for path in sorted(runtime_dir.rglob("*")):
+        relative = path.relative_to(runtime_dir)
+        if (
+            not path.is_file()
+            or BUILT & set(relative.parts)
+            or path.suffix not in {".ts", ".tsx", ".js", ".mjs", ".cjs"}
+        ):
+            continue
+        name = relative.as_posix()
+        text = path.read_text(encoding="utf-8")
+        if name != EXPORT_READ:
+            problems += [
+                f"{name}:{number}: an export path outside {EXPORT_READ}"
+                for number, line in enumerate(text.splitlines(), 1)
+                if EXPORT_PATH.search(line)
+            ]
+        if name.endswith(".runtime.spec.ts"):
+            calls = len(READ_CALL.findall(text))
+            if calls > 1:
+                problems.append(f"{name}: {calls} export reads != 1")
+            if calls:
+                readers.append(name)
+    if readers != EXPORT_READERS:
+        problems.append(
+            f"files that read: {len(readers)} != {len(EXPORT_READERS)} ({readers})"
+        )
+    return problems
+
+
+def test_each_real_api_spec_reads_the_export_once() -> None:
+    """Every /api/v1/export/ route shares one limit of 10 reads a minute per
+    address, counted across the whole Browser E2E job. So each real-API spec
+    reads the export once, after its page views, through export-read.ts, which
+    prints the line the job's log is counted by; a read that goes around it
+    prints nothing, so it is refused here."""
+    helper = (RUNTIME_DIR / EXPORT_READ).read_text(encoding="utf-8")
+    markers = helper.count(EXPORT_MARKER)
+    assert markers == 1, f"{EXPORT_READ}: {markers} marker lines != 1"
+    assert export_read_problems(RUNTIME_DIR) == []
 
 
 # ---------------------------------------------------------------------------

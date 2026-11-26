@@ -3,6 +3,7 @@ import type { APIRequestContext, Page } from "@playwright/test";
 import { API_URL } from "../env";
 import { TEST_USERS } from "../fixtures/auth.fixture";
 import { SITE } from "./editor";
+import { exportWindowStart, readExport } from "./export-read";
 import { expect, test, type VisualPackage } from "./runtime.fixture";
 import { ERRORS_PATH, shown, sitePage, VISUAL_PATH, type Report } from "./visual";
 
@@ -16,10 +17,11 @@ import { ERRORS_PATH, shown, sitePage, VISUAL_PATH, type Report } from "./visual
  * on its own page of the site, and the page uses a key with no scopes made
  * through the API key route.
  *
- * The exposures are read back from the experiment's report
- * (GET /api/v1/export/reports/experiments/{id}): its total of event rows.
- * Nothing else records an event for these experiments (no test here calls
- * track()), so that total is the exposures.
+ * The exposures are read back once, after every page view of the file, from
+ * the export's list of experiments (export-read.ts): each experiment's total
+ * of event rows. Nothing else records an event for these experiments (no test
+ * here calls track()), so that total is the exposures. The tests run in order;
+ * each records the exposures its arm expects, and the last one reads.
  *
  * Every page is a fresh navigation, on the page clock, which stands in for
  * the seconds to the bound.
@@ -46,8 +48,15 @@ interface Made {
 let api: APIRequestContext;
 let bearer: Record<string, string>;
 let pageKey: string;
+let since: string;
+/** Each test's arm, its experiment and the exposures it expects. */
+const arms: { arm: string; id: string; exposures: number }[] = [];
+
+test.describe.configure({ mode: "serial" });
 
 test.beforeAll(async ({ playwright }) => {
+  since = exportWindowStart();
+  arms.length = 0;
   api = await playwright.request.newContext({ baseURL: API_URL });
   // The token route, not /login: the browser journeys that run before this
   // spec sign in through /login, and each route has its own limit.
@@ -92,15 +101,6 @@ async function running(arm: string, changes: unknown[]): Promise<Made> {
   });
   expect(started.status(), `start ${arm}: ${await started.text()}`).toBe(200);
   return { id, key, path };
-}
-
-/** The experiment's exposures: the event total of its report. */
-async function exposures(made: Made): Promise<number> {
-  const report = await api.get(`/api/v1/export/reports/experiments/${made.id}?format=json`, { headers: bearer });
-  expect(report.status(), "the experiment's report").toBe(200);
-  const rows = (await report.json()).experiments as { experiment_id: string; total_events: number }[];
-  expect(rows.map((row) => row.experiment_id)).toEqual([made.id]);
-  return rows[0].total_events;
 }
 
 /** Records the path of every fetch the page makes, the script's included; installed before any script. */
@@ -182,9 +182,10 @@ function hide(page: Page) {
 /**
  * Past the bound, with the tab reported hidden: every report the script would
  * send has been sent. Then every request the page sent to the API has its
- * answer, so the reads below see all that the page view recorded.
+ * answer, so the export read after the last test sees all that the page view
+ * recorded.
  */
-async function settle(page: Page, made: Made, s: Site) {
+async function settle(page: Page, s: Site) {
   await page.clock.runFor(6000);
   await hide(page);
   const paths = (await sent(page)).filter((path) => path.startsWith("/api/"));
@@ -192,7 +193,6 @@ async function settle(page: Page, made: Made, s: Site) {
   return {
     visual: s.forwarded.filter((call) => call.path === VISUAL_PATH),
     reports: s.forwarded.filter((call) => call.path === ERRORS_PATH),
-    exposures: await exposures(made),
   };
 }
 
@@ -205,8 +205,8 @@ test.describe("a page view against the real API", () => {
     await page.clock.install({ time: START });
     await page.goto(`${SITE}${made.path}`, { waitUntil: "load" });
     await expect(page.locator("#headline")).toHaveText("Changed");
-    const seen = await settle(page, made, s);
-    expect(seen.exposures, "applied: exposures").toBe(1);
+    const seen = await settle(page, s);
+    arms.push({ arm: "applied", id: made.id, exposures: 1 });
     expect(seen.reports, "applied: reports").toHaveLength(0);
     expect(seen.visual.map((call) => call.status), "applied: S3 answers").toEqual([200]);
     expect(s.direct, "requests from the browser to the API's origin").toEqual([]);
@@ -223,8 +223,8 @@ test.describe("a page view against the real API", () => {
     await expect
       .poll(() => s.forwarded.some((call) => call.path === VISUAL_PATH), { message: "the S3 answer, before the bound" })
       .toBe(true);
-    const seen = await settle(page, made, s);
-    expect(seen.exposures, "selector miss: exposures").toBe(1);
+    const seen = await settle(page, s);
+    arms.push({ arm: "selector miss", id: made.id, exposures: 1 });
     expect(seen.reports, "selector miss: reports").toHaveLength(1);
     expect(seen.reports[0].status, "the API's answer to the report").toBe(201);
     expect(seen.reports[0].body as Report).toEqual({
@@ -252,8 +252,8 @@ test.describe("a page view against the real API", () => {
     expect(s.forwarded, "nothing answered yet").toEqual([]);
     release();
     await expect(page.locator("#headline")).toHaveText("Changed");
-    const seen = await settle(page, made, s);
-    expect(seen.exposures, "slow: exposures").toBe(1);
+    const seen = await settle(page, s);
+    arms.push({ arm: "slow", id: made.id, exposures: 1 });
     expect(seen.reports, "slow: reports").toHaveLength(0);
     expect(seen.visual.map((call) => call.status), "slow: S3 answers").toEqual([200]);
     expect(s.direct, "requests from the browser to the API's origin").toEqual([]);
@@ -264,8 +264,8 @@ test.describe("a page view against the real API", () => {
     const s = await site(page, visualPackage, made, { blockScript: true });
     await page.clock.install({ time: START });
     await page.goto(`${SITE}${made.path}`, { waitUntil: "load" });
-    const seen = await settle(page, made, s);
-    expect(seen.exposures, "blocked: exposures").toBe(0);
+    const seen = await settle(page, s);
+    arms.push({ arm: "blocked", id: made.id, exposures: 0 });
     expect(seen.visual, "blocked: S3 calls").toHaveLength(0);
     expect(seen.reports, "blocked: reports").toHaveLength(0);
     expect(await shown(page), "shown").toBe(true);
@@ -289,8 +289,8 @@ test.describe("a page view against the real API", () => {
       copy.textContent = "Original";
       document.getElementById("headline")!.replaceWith(copy);
     });
-    const seen = await settle(page, made, s);
-    expect(seen.exposures, "replaced: exposures").toBe(1);
+    const seen = await settle(page, s);
+    arms.push({ arm: "replaced", id: made.id, exposures: 1 });
     expect(seen.reports, "replaced: reports").toHaveLength(1);
     expect(seen.reports[0].status, "the API's answer to the report").toBe(201);
     expect(seen.reports[0].body as Report).toEqual({
@@ -300,5 +300,16 @@ test.describe("a page view against the real API", () => {
       metadata: { index: 0, reason: "replaced_after_bound" },
     });
     expect(s.direct, "requests from the browser to the API's origin").toEqual([]);
+  });
+
+  test("the API recorded what each page view sent", async () => {
+    expect(
+      arms.map(({ arm }) => arm),
+      "the page views of this file",
+    ).toEqual(["applied", "selector miss", "slow", "blocked", "replaced"]);
+    const counts = await readExport(api, bearer, since, Object.fromEntries(arms.map(({ arm, id }) => [arm, id])));
+    for (const { arm, id, exposures } of arms) {
+      expect(counts[id].events, `${arm}: exposures`).toBe(exposures);
+    }
   });
 });
