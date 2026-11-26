@@ -576,9 +576,10 @@ by = ["exempt:intent"]
 tag = "X"
 
 [[unit]]
-text = "While the dashboard's Live tab is open, its results are computed again every 30 seconds."
+text = "While the dashboard's Live tab is open, its results are computed again every 30 seconds, the default of RESULTS_STREAM_INTERVAL_SECONDS."
 by = [
     "test:backend/tests/integration/api/test_websocket_results.py::TestPeriodicSnapshots::test_the_interval_is_30_seconds_by_default",
+    "test:backend/tests/integration/api/test_websocket_results.py::TestPeriodicSnapshots::test_the_interval_is_read_from_the_environment",
     "test:backend/tests/integration/api/test_metric_window_results.py::test_the_live_stream_counts_the_window",
 ]
 

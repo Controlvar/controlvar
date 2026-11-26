@@ -962,7 +962,9 @@ message: `0` and `8761` with `greater_than_equal` and `less_than_equal`, and
 a clone keeps it, and it cannot be changed once the experiment leaves draft
 (`400`). A `PUT` that sends `metrics` replaces them, so a metric resent without
 `conversion_window_hours` no longer has one. It also drops the experiment's
-cached results, so the next read is counted with the new windows.
+cached results, so when that reaches the cache the next read is counted with
+the new windows. When the cache cannot be reached at that moment, a warning is
+logged and an answer it holds is served until it expires.
 
 In the results, each metric carries the `conversion_window_hours` its numbers
 were counted with, and each of its variants `open_window_users`: how many of

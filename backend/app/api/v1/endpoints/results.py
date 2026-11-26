@@ -215,7 +215,8 @@ async def clear_cached_results(experiment_id: UUID) -> None:
     clears): the key does not name the experiment's metrics, so a change to
     them, such as a draft's conversion window (#1934), calls this. Best-effort,
     as ``invalidate-cache`` is: what a Redis that cannot be reached at that
-    moment holds stays until it expires."""
+    moment holds stays until it expires, so the failure is logged as a
+    warning, as the experiment cache's own invalidation logs one."""
     try:
         client = _async_cache_client()
         try:
@@ -227,8 +228,10 @@ async def clear_cached_results(experiment_id: UUID) -> None:
                 await client.delete(*keys)
         finally:
             await client.aclose()
-    except Exception:
-        pass
+    except Exception as cache_error:
+        logger.warning(
+            "Results cache clear failed for %s: %s", experiment_id, cache_error
+        )
 
 
 # ---------------------------------------------------------------------------

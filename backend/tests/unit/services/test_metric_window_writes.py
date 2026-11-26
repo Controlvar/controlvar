@@ -18,6 +18,7 @@ the same through the API, on PostgreSQL, is
 from __future__ import annotations
 
 import fnmatch
+import logging
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
@@ -399,6 +400,35 @@ async def test_the_results_cache_is_cleared_on_the_event_loop_at_most_a_second(
     monkeypatch.setattr(Connection, "_connect", counting_connect)
     assert await results_endpoint.clear_cached_results(uuid.uuid4()) is None
     assert attempts == [(1, 1, 1)]
+
+
+async def test_a_clear_that_does_not_reach_the_cache_is_logged(monkeypatch, caplog):
+    """A clear that fails leaves the cached answers in place until they
+    expire, so it says so in the log, naming the experiment."""
+    from backend.app.api.v1.endpoints import results as results_endpoint
+
+    closed = []
+
+    class Paused:
+        async def scan_iter(self, match):
+            raise ConnectionError("Redis is paused")
+            yield  # an async generator
+
+        async def aclose(self):
+            closed.append(True)
+
+    experiment_id = uuid.uuid4()
+    monkeypatch.setattr(results_endpoint, "_async_cache_client", lambda: Paused())
+    with caplog.at_level(logging.WARNING, logger=results_endpoint.logger.name):
+        assert await results_endpoint.clear_cached_results(experiment_id) is None
+    (record,) = [
+        r for r in caplog.records if r.getMessage().startswith("Results cache clear")
+    ]
+    assert record.levelno == logging.WARNING
+    assert record.getMessage() == (
+        f"Results cache clear failed for {experiment_id}: Redis is paused"
+    )
+    assert closed == [True]
 
 
 def test_the_design_etag_covers_every_column():
