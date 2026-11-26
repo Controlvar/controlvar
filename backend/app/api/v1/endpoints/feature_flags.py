@@ -701,10 +701,12 @@ async def update_feature_flag(
     # stored pair must be the committed one, and a concurrent update of the
     # same flag waits instead of storing an equal pair (#1514 review R2). A
     # split and rules lock it too: they are counted with the stored split and
-    # rules (#2012), which must likewise be the committed ones.
+    # rules (#2012), which must likewise be the committed ones. The lock is
+    # ``FOR NO KEY UPDATE``, the one ``lock_flag`` takes for the environment
+    # PUT and a promotion.
     query = db.query(FeatureFlag).filter(FeatureFlag.id == flag_id)
     if feature_flag_in.model_fields_set & {*VALUE_FIELDS, *SERVING_FIELDS}:
-        query = query.with_for_update()
+        query = query.with_for_update(key_share=True)
     flag = query.first()
     if not flag:
         raise HTTPException(

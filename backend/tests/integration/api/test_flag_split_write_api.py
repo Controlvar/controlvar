@@ -19,6 +19,7 @@ VIEWER cannot set a split.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import sys
 import threading
@@ -42,6 +43,7 @@ from backend.app.core.flag_values import (
 from backend.app.main import app
 from backend.app.models.audit_log import AuditLog
 from backend.app.models.feature_flag import FeatureFlag, FlagEnvironmentSetting
+from backend.app.models.metrics.metric import MetricType, RawMetric
 from backend.app.models.user import UserRole
 from backend.app.services import feature_flag_service
 from backend.app.services.feature_flag_service import FlagValuesRefused
@@ -575,6 +577,157 @@ def test_a_split_and_rules_sent_at_once_never_store_more_than_the_limit(
     split, rules = _stored(fresh, uuid.UUID(flag["id"]))["production"]
     assert (split, rules) == (LARGE_SPLIT, None)
     assert served_value_bytes(split, rules) <= MAX_SERVED_VALUE_BYTES
+
+
+def _own_client() -> TestClient:
+    """A client of its own per request: each runs on its own event loop."""
+    return TestClient(app, raise_server_exceptions=False)
+
+
+@contextlib.contextmanager
+def _open_save(monkeypatch, send, checks):
+    """Run *send* on a thread of its own and hold its request inside its
+    transaction, just after its flag update's check, until the block ends.
+    *checks* gets every check made meanwhile, the held one first. Yields the
+    dict that gets the save's ``response``."""
+    checked, release = threading.Event(), threading.Event()
+    real_check = feature_flag_service._check_sent_values
+
+    def check_then_hold(flag_data, row, *split):
+        real_check(flag_data, row, *split)
+        checks.append(flag_data)
+        if not checked.is_set():
+            checked.set()
+            assert release.wait(60)
+
+    monkeypatch.setattr(feature_flag_service, "_check_sent_values", check_then_hold)
+    saved: Dict[str, Any] = {}
+    save = threading.Thread(target=lambda: saved.update(response=send()))
+    save.start()
+    try:
+        assert checked.wait(60), "the save was never checked"
+        yield saved
+    finally:
+        release.set()
+        save.join(60)
+
+
+def _evaluations_recorded(fresh, flag_id) -> int:
+    session = fresh()
+    try:
+        return (
+            session.query(RawMetric)
+            .filter(
+                RawMetric.feature_flag_id == flag_id,
+                RawMetric.metric_type == MetricType.FLAG_EVALUATION.value,
+            )
+            .count()
+        )
+    finally:
+        session.close()
+
+
+#: A save of each field that is checked against the stored flag.
+CHECKED_SAVES = {
+    "targeting_rules": {"targeting_rules": {**RULE, "value": "pro"}},
+    "split": {"split": SPLIT},
+    "on_value": {"on_value": "opened"},
+    "off_value": {"off_value": "closed"},
+}
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("field", list(CHECKED_SAVES))
+def test_a_flag_save_does_not_hold_up_its_evaluation(
+    client, db_session, fresh, developer, keys, monkeypatch, field
+):
+    """While a ``PUT /feature-flags/{id}`` of the flag is still open, a
+    production evaluation of that flag answers and records its metric; it does
+    not wait for the save to end."""
+    flag = _create(client, developer)
+    evaluated: Dict[str, Any] = {}
+
+    def evaluate():
+        evaluated["response"] = _own_client().get(
+            f"{FLAGS}/evaluate/{flag['key']}",
+            params={"user_id": USERS[0]},
+            headers=keys["production"],
+        )
+
+    evaluation = threading.Thread(target=evaluate)
+    try:
+        with _open_save(
+            monkeypatch,
+            lambda: _put(_own_client(), developer, flag["id"], CHECKED_SAVES[field]),
+            [],
+        ) as saved:
+            evaluation.start()
+            _until_it_waits_for_a_lock_or_ends(db_session.get_bind(), evaluation)
+            waited = evaluation.is_alive()
+            save_open = "response" not in saved
+            recorded = _evaluations_recorded(fresh, uuid.UUID(flag["id"]))
+    finally:
+        if evaluation.ident is not None:
+            evaluation.join(60)
+    assert not waited, "the evaluation waited for the save"
+    assert save_open
+    assert recorded == 1
+    assert evaluated["response"].status_code == 200, evaluated["response"].text
+    assert saved["response"].status_code == 200, saved["response"].text
+
+
+#: Saves of one flag, by the route each takes; *n* tells two apart.
+SAVES = {
+    "value-put": lambda flag_id, user, n: _put(
+        _own_client(), user, flag_id, {"on_value": f"on-{n}"}
+    ),
+    "environment-put-production": lambda flag_id, user, n: _put_in(
+        _own_client(), user, flag_id, "production", {"rollout_percentage": 40 + n}
+    ),
+    "environment-put-staging": lambda flag_id, user, n: _put_in(
+        _own_client(), user, flag_id, "staging", {"rollout_percentage": 40 + n}
+    ),
+}
+
+
+@pytest.mark.parametrize(
+    "first,second",
+    [
+        ("value-put", "value-put"),
+        ("value-put", "environment-put-production"),
+        ("value-put", "environment-put-staging"),
+        ("environment-put-production", "value-put"),
+    ],
+)
+def test_two_saves_of_one_flag_wait_for_each_other(
+    client, db_session, developer, monkeypatch, first, second
+):
+    """A save of a flag's values and another save of the same flag, by the
+    stable PUT or the environment PUT: the second waits for the first to end
+    before it is checked, and both are stored."""
+    flag = _create(client, developer)
+    checks: List[Any] = []
+    answers: Dict[str, Any] = {}
+
+    def send_second():
+        answers["second"] = SAVES[second](flag["id"], developer, 2)
+
+    request = threading.Thread(target=send_second)
+    try:
+        with _open_save(
+            monkeypatch, lambda: SAVES[first](flag["id"], developer, 1), checks
+        ) as saved:
+            request.start()
+            _until_it_waits_for_a_lock_or_ends(db_session.get_bind(), request)
+            waited = request.is_alive()
+            checked_meanwhile = len(checks) - 1
+    finally:
+        if request.ident is not None:
+            request.join(60)
+    assert waited, "the second save did not wait for the first"
+    assert checked_meanwhile == 0, "the second save was checked before the first ended"
+    assert saved["response"].status_code == 200, saved["response"].text
+    assert answers["second"].status_code == 200, answers["second"].text
 
 
 # ---------------------------------------------------------------------------

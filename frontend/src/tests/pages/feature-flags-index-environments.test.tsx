@@ -65,6 +65,7 @@ function setting(environment: string, overrides: Partial<FlagEnvironmentSettings
     is_active: false,
     rollout_percentage: 0,
     targeting_rules: null,
+    split: null,
     configured: false,
     updated_at: null,
     ...overrides,
