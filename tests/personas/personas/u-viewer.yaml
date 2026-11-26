@@ -2,7 +2,7 @@
 # is live without being able to change it: every change is tried where the
 # dashboard would offer it, and decided by asking the API with a valid body,
 # then reading the thing back unchanged. The browser itself sends no change
-# outside the read-only allow-list all day.
+# outside its read-only allow-list all day.
 #
 # The day reads an experiment and a flag the superuser made just before it
 # (frontend/tests/e2e/personas/stamped.ts). Its password step changes the
@@ -96,5 +96,6 @@ day:
       - id: u-viewer.6.read-only-network
         kind: network_allowlist
         expect: >-
-          every request the viewer's browsers sent other than GET is on the
-          allow-list: signing in, and changing one's own password
+          every request other than GET is on its browser's allow-list: the
+          viewer's own browser only signs in; the browser of the account made
+          for the day signs in once and changes its own password once

@@ -20,15 +20,23 @@ import { csvByVariant, digits, downloadResultsCsv, ledgerCounts, stampDay, tryAs
  * password ever changes.
  */
 
+/** Changing one's own password, as a browser's request. */
+const PASSWORD_CHANGE = "POST /api/v1/users/me/password";
+
 /**
- * The read-only allow-list: the only requests other than GET a viewer's
- * browser may send, each classified by hand. A new one fails day 6 until it
- * is classified here.
+ * The read-only allow-list, per browser: the only requests other than GET
+ * each of the day's browsers may send, each classified by hand. A new one
+ * fails day 6 until it is classified here. The viewer's own browser only
+ * signs in; the browser of the account made for the day also changes its
+ * password, once.
  */
-const READ_ONLY_ALLOWED: ReadonlyArray<[string, string]> = [
-  [SIGN_IN_REQUEST, "signing in"],
-  ["POST /api/v1/users/me/password", "changing one's own password"],
-];
+const READ_ONLY_ALLOWED: Readonly<Record<"viewer" | "account", ReadonlyArray<[string, string]>>> = {
+  viewer: [[SIGN_IN_REQUEST, "signing in"]],
+  account: [
+    [SIGN_IN_REQUEST, "signing in"],
+    [PASSWORD_CHANGE, "changing one's own password"],
+  ],
+};
 
 const ROLE_NOTE_EXPERIMENT =
   "Starting, pausing, completing and archiving an experiment needs permission to change experiments, " +
@@ -45,13 +53,13 @@ interface Results {
 
 test("U-VIEWER: the viewer's day", async ({ viewer, request, browser }) => {
   const { page, api, watch } = viewer;
-  // Every request other than GET the viewer's browsers send, all day.
-  const sent: string[] = [];
-  const record = (r: Request) => {
-    if (r.method() !== "GET") sent.push(`${r.method()} ${new URL(r.url()).pathname}`);
-  };
-  const watchNetwork = (context: BrowserContext) => context.on("request", record);
-  watchNetwork(page.context());
+  // Every request other than GET each of the day's browsers sends, all day.
+  const sent: Record<"viewer" | "account", string[]> = { viewer: [], account: [] };
+  const watchNetwork = (context: BrowserContext, browserOf: "viewer" | "account") =>
+    context.on("request", (r: Request) => {
+      if (r.method() !== "GET") sent[browserOf].push(`${r.method()} ${new URL(r.url()).pathname}`);
+    });
+  watchNetwork(page.context(), "viewer");
 
   const day = await stampDay(request, "viewer");
   const { experiment, flag } = day;
@@ -178,7 +186,7 @@ test("U-VIEWER: the viewer's day", async ({ viewer, request, browser }) => {
 
     await test.step("U-VIEWER day 4: change a viewer account's own password at /account/password", async () => {
       const context = await browser.newContext({ baseURL: BASE_URL, timezoneId: "Asia/Tokyo" });
-      watchNetwork(context);
+      watchNetwork(context, "account");
       try {
         const own = await context.newPage();
         const ownWatch = new Watcher(own);
@@ -207,16 +215,23 @@ test("U-VIEWER: the viewer's day", async ({ viewer, request, browser }) => {
     });
 
     await test.step("U-VIEWER day 6: spend the day without sending a change outside the read-only allow-list", async () => {
-      const allowed = new Set(READ_ONLY_ALLOWED.map(([request]) => request));
+      const outside = (browserOf: "viewer" | "account") => {
+        const allowed = new Set(READ_ONLY_ALLOWED[browserOf].map(([request]) => request));
+        return sent[browserOf].filter((s) => !allowed.has(s));
+      };
       decide(
         "u-viewer.6.read-only-network",
         "network_allowlist",
-        // The sign-in and the password change were seen: the recorder was on both browsers.
-        { outside: [], signInSeen: true, passwordChangeSeen: true },
+        // The made account's browser signed in and changed its password once:
+        // the recorder was on that browser, and the change came from it.
+        { viewer: { outside: [] }, account: { outside: [], signIns: 1, passwordChanges: 1 } },
         {
-          outside: sent.filter((s) => !allowed.has(s)),
-          signInSeen: sent.includes(SIGN_IN_REQUEST),
-          passwordChangeSeen: sent.includes("POST /api/v1/users/me/password"),
+          viewer: { outside: outside("viewer") },
+          account: {
+            outside: outside("account"),
+            signIns: sent.account.filter((s) => s === SIGN_IN_REQUEST).length,
+            passwordChanges: sent.account.filter((s) => s === PASSWORD_CHANGE).length,
+          },
         },
       );
       await watch.step();
