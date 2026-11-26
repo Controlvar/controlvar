@@ -1,0 +1,211 @@
+# U-QA: the tester's role matrix. The day signs in as all five accounts of
+# tests/personas/role-matrix.yaml: admin@demo.com (role ADMIN and a superuser,
+# the matrix's OWNER, whose session makes everything the day needs), an
+# Admin-role account that is not a superuser (made in step 1, through
+# POST /api/v1/users/), dev@demo.com, analyst@demo.com and viewer@demo.com.
+#
+# Steps 2 on are the matrix's rows, one step per row in the file's order
+# (backend/tests/unit/personas pins that). Each row step reads, per role,
+# what the dashboard offers once the page's data has rendered, then makes the
+# row's call through the API with a valid body and a real id, and reads the
+# state back: a 2xx cell's change is there, a 403 cell's is not. A 404 or a
+# 422 is "not reached", never a refusal.
+id: U-QA
+role: ADMIN
+account: admin@demo.com
+goals:
+  - Make the Admin-role account, not a superuser, that the admin's day signs in as.
+  - See that each role is offered exactly the actions the API lets it take, except where docs/rbac/README.md says the two differ.
+day:
+  - n: 1
+    intent: make the Admin-role account that is not a superuser
+    layer: A
+    writes: true
+    oracles:
+      - id: u-qa.1.admin-account
+        kind: api_state
+        expect: >-
+          POST /api/v1/users/ as the superuser answers 201; the new account
+          signs in, GET /api/v1/auth/me answers role ADMIN and is_superuser
+          false, and GET /api/v1/admin/users lists it so
+        source:
+          path: docs/rbac/README.md
+          anchor: "**The Admin role is not a superuser.**"
+  - n: 2
+    intent: check the role matrix row experiment-create
+    layer: A
+    writes: true
+    oracles:
+      - id: u-qa.2.experiment-create.ui
+        kind: ui_matches_api
+        expect: >-
+          with the experiment list rendered, each role is offered New
+          Experiment exactly as the row's ui cell says
+        source:
+          path: tests/personas/role-matrix.yaml
+          anchor: "id: experiment-create"
+      - id: u-qa.2.experiment-create.allowed
+        kind: api_state
+        expect: each 2xx role's experiment is created and reads back by its key
+      - id: u-qa.2.experiment-create.refused
+        kind: api_refused
+        expect: each 403 role is refused with 403 and no experiment has its key
+  - n: 3
+    intent: check the role matrix row experiment-list
+    layer: A
+    oracles:
+      - id: u-qa.3.experiment-list.ui
+        kind: ui_matches_api
+        expect: each role's experiment list renders the day's experiment, the newest
+        source:
+          path: tests/personas/role-matrix.yaml
+          anchor: "id: experiment-list"
+      - id: u-qa.3.experiment-list.allowed
+        kind: api_state
+        expect: each role's list answers 200 and holds the day's experiment
+  - n: 4
+    intent: check the role matrix row flag-create
+    layer: A
+    writes: true
+    oracles:
+      - id: u-qa.4.flag-create.ui
+        kind: ui_matches_api
+        expect: >-
+          with the flag list rendered, each role is offered New Flag exactly
+          as the row's ui cell says
+        source:
+          path: tests/personas/role-matrix.yaml
+          anchor: "id: flag-create"
+      - id: u-qa.4.flag-create.allowed
+        kind: api_state
+        expect: each 2xx role's flag is created and reads back by its key
+      - id: u-qa.4.flag-create.refused
+        kind: api_refused
+        expect: each 403 role is refused with 403 and no flag has its key
+  - n: 5
+    intent: check the role matrix row flag-list
+    layer: A
+    oracles:
+      - id: u-qa.5.flag-list.ui
+        kind: ui_matches_api
+        expect: each role's flag list renders its rows
+        source:
+          path: tests/personas/role-matrix.yaml
+          anchor: "id: flag-list"
+      - id: u-qa.5.flag-list.allowed
+        kind: api_state
+        expect: each role's list answers 200 and holds the day's flag
+  - n: 6
+    intent: check the role matrix row flag-change
+    layer: A
+    writes: true
+    oracles:
+      - id: u-qa.6.flag-change.ui
+        kind: ui_matches_api
+        expect: >-
+          with the day's flag rendered on its page, each role is offered its
+          switch and Save exactly as the row's ui cell says
+        source:
+          path: tests/personas/role-matrix.yaml
+          anchor: "id: flag-change"
+      - id: u-qa.6.flag-change.allowed
+        kind: api_state
+        expect: each 2xx role's new description reads back
+      - id: u-qa.6.flag-change.refused
+        kind: api_refused
+        expect: each 403 role is refused with 403 and the description reads back unchanged
+  - n: 7
+    intent: check the role matrix row users-list
+    layer: A
+    oracles:
+      - id: u-qa.7.users-list.ui
+        kind: ui_matches_api
+        expect: >-
+          the Users page lists the day's Admin-role account for the superuser
+          and shows every other role its refusal, which asks for a superuser
+          account
+        source:
+          path: tests/personas/role-matrix.yaml
+          anchor: "id: users-list"
+      - id: u-qa.7.users-list.allowed
+        kind: api_state
+        expect: the superuser's list answers 200 and holds the day's Admin-role account
+      - id: u-qa.7.users-list.refused
+        kind: api_refused
+        expect: each other role is refused with 403
+  - n: 8
+    intent: check the role matrix row safety-settings-change
+    layer: A
+    writes: true
+    oracles:
+      - id: u-qa.8.safety-settings-change.ui
+        kind: ui_matches_api
+        expect: >-
+          the Safety page's settings form loads for the superuser, and every
+          other role sees the refusal, which asks for a superuser account
+        source:
+          path: tests/personas/role-matrix.yaml
+          anchor: "id: safety-settings-change"
+      - id: u-qa.8.safety-settings-change.allowed
+        kind: api_state
+        expect: the superuser's changed settings read back, and are then put back as they were
+      - id: u-qa.8.safety-settings-change.refused
+        kind: api_refused
+        expect: each other role is refused with 403 and the settings read back unchanged
+  - n: 9
+    intent: check the role matrix row api-keys-list-all
+    layer: A
+    oracles:
+      - id: u-qa.9.api-keys-list-all.ui
+        kind: ui_matches_api
+        expect: >-
+          the API Keys page, with all users' keys shown, lists another user's
+          key for the superuser, and every other role sees the refusal
+        source:
+          path: tests/personas/role-matrix.yaml
+          anchor: "id: api-keys-list-all"
+      - id: u-qa.9.api-keys-list-all.allowed
+        kind: api_state
+        expect: each 2xx role's list of every user's keys holds another user's key
+      - id: u-qa.9.api-keys-list-all.refused
+        kind: api_refused
+        expect: each 403 role is refused with 403
+  - n: 10
+    intent: check the role matrix row api-key-delete-others
+    layer: A
+    writes: true
+    oracles:
+      - id: u-qa.10.api-key-delete-others.ui
+        kind: ui_matches_api
+        expect: >-
+          the API Keys page offers the superuser Revoke on another user's key,
+          and every other role sees the refusal
+        source:
+          path: tests/personas/role-matrix.yaml
+          anchor: "id: api-key-delete-others"
+      - id: u-qa.10.api-key-delete-others.allowed
+        kind: api_state
+        expect: each 2xx role's delete answers 204 and the key is gone from its owner's list
+      - id: u-qa.10.api-key-delete-others.refused
+        kind: api_refused
+        expect: each 403 role is refused with 403 and the key is still in its owner's list
+  - n: 11
+    intent: check the role matrix row custom-role-create
+    layer: A
+    writes: true
+    profile: full
+    oracles:
+      - id: u-qa.11.custom-role-create.ui
+        kind: ui_matches_api
+        expect: >-
+          the Roles page loads its table and offers Create Role to the
+          superuser, and every other role sees the refusal
+        source:
+          path: tests/personas/role-matrix.yaml
+          anchor: "id: custom-role-create"
+      - id: u-qa.11.custom-role-create.allowed
+        kind: api_state
+        expect: each 2xx role's role is created and listed
+      - id: u-qa.11.custom-role-create.refused
+        kind: api_refused
+        expect: each 403 role is refused with 403 and no role has its name

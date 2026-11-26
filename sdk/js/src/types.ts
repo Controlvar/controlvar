@@ -141,11 +141,12 @@ export interface FlagEvaluation {
    */
   reason?: string;
   /**
-   * What the flag serves this user: its on value when `enabled` is true, its off value otherwise
-   * (a string, a number, or a JSON object or array); for a boolean flag, `enabled`. `undefined`
-   * when the server did not send one (a server without flag values, or a stored value it cannot
-   * serve). A JSON value is the object the SDK caches for this user and flag: read it, or call
-   * `getJsonValue`, which returns a copy.
+   * What the flag serves this user: its on value when `enabled` is true (or, in its place, the
+   * value its split or a matching rule gives them), its off value otherwise (a string, a number, or
+   * a JSON object or array); for a boolean flag, `enabled`. `undefined` when the server did not
+   * send one (a server without flag values, or a stored value it cannot serve). A JSON value is the
+   * object the SDK caches for this user and flag: read it, or call `getJsonValue`, which returns a
+   * copy.
    */
   value?: unknown;
   /**
@@ -255,7 +256,8 @@ export interface FlagEvaluateResponse {
   /** `targeting_rule` | `rollout` | `inactive` | `error`; absent on older servers. */
   reason?: string;
   /**
-   * The flag's `on_value` when `enabled`, its `off_value` otherwise; `enabled` for a boolean flag.
+   * The value served to this user: the on value when `enabled` (or, in its place, the value its
+   * split or a matching rule gives them), else the off value; `enabled` for a boolean flag.
    * Absent on older servers, and when the server cannot serve the stored value.
    */
   value?: unknown;

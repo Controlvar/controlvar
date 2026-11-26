@@ -31,9 +31,9 @@ import catalogue  # the path is set first
 
 pytestmark = pytest.mark.unit
 
-#: The number of cards and of matrix rows. A card or a row removed, or added
-#: without this changing, fails here: the count cannot shrink silently.
-PERSONA_CARDS = 1
+#: The number of matrix rows. A row removed, or added without this changing,
+#: fails here: the count cannot shrink silently. The number of cards is held
+#: to tests/personas/pinned.yaml instead (each card is one day, one test).
 MATRIX_ROWS = 10
 
 
@@ -67,14 +67,20 @@ def _matrix_problems(data: dict[str, Any]) -> list[str]:
 # ----------------------------------------------------------- the real files
 
 
-def test_the_real_cards_load_and_the_count_is_pinned():
+def test_the_real_cards_load_and_each_is_one_pinned_day():
+    """Each card is one day and each day one test, so the cards number
+    what pinned.yaml pins (which check_run.py holds the run to): a card
+    removed, or added without its day, fails here or in the run."""
     personas = catalogue.load_personas(PERSONAS_ROOT / "personas", REPO_ROOT)
-    assert [p.id for p in personas] == ["U-DEV"]
-    assert len(personas) == PERSONA_CARDS
+    ids = [p.id for p in personas]
+    assert "U-DEV" in ids
+    pinned = yaml.safe_load((PERSONAS_ROOT / "pinned.yaml").read_text("utf-8"))
+    assert len(ids) == pinned["tests"], (ids, pinned)
 
 
 def test_the_u_dev_day_is_eight_consecutive_steps_that_write_or_read_on_purpose():
-    (persona,) = catalogue.load_personas(PERSONAS_ROOT / "personas", REPO_ROOT)
+    personas = catalogue.load_personas(PERSONAS_ROOT / "personas", REPO_ROOT)
+    (persona,) = [p for p in personas if p.id == "U-DEV"]
     assert [s.n for s in persona.day] == list(range(1, 9))
     assert {s.layer for s in persona.day} == {"A"}
     # Only step 5 (the results page) reads without writing.
@@ -506,3 +512,130 @@ def test_the_matrix_loader_refuses_a_file_that_is_not_a_matrix(tmp_path):
     path.write_text("rows: []\n", encoding="utf-8")
     with pytest.raises(catalogue.CatalogueError):
         catalogue.load_matrix(path, REPO_ROOT)
+
+
+# ------------------------------------------- the tester's card and the matrix
+
+#: The tester's card: step 1 makes the Admin-role account, and each later step
+#: is one matrix row, in the file's order, which the role matrix spec
+#: (frontend/tests/e2e/personas/u-qa.persona.spec.ts) checks in that step.
+TESTER_CARD = "u-qa.yaml"
+ROW_INTENT = "check the role matrix row {id}"
+
+
+def _tester_card() -> dict[str, Any]:
+    return yaml.safe_load((PERSONAS_ROOT / "personas" / TESTER_CARD).read_text("utf-8"))
+
+
+def tester_card_problems(card: dict[str, Any], matrix: dict[str, Any]) -> list[str]:
+    """Why the tester's card and the matrix are not one step per row."""
+    problems = []
+    rows = matrix["rows"]
+    steps = {s["n"]: s for s in card["day"] if s["n"] > 1}
+    for n, row in enumerate(rows, start=2):
+        where = f"role-matrix row {row['id']}"
+        step = steps.get(n)
+        if step is None:
+            problems.append(f"{where}: no step {n} on the tester's card")
+            continue
+        if step["intent"] != ROW_INTENT.format(id=row["id"]):
+            problems.append(f"{where}: step {n} is {step['intent']!r}")
+            continue
+        cells = row["cells"].values()
+        want = {f"u-qa.{n}.{row['id']}.ui": "ui_matches_api"}
+        if any(c["api"] == "2xx" for c in cells):
+            want[f"u-qa.{n}.{row['id']}.allowed"] = "api_state"
+        if any(c["api"] == "403" for c in cells):
+            want[f"u-qa.{n}.{row['id']}.refused"] = "api_refused"
+        got = {o["id"]: o["kind"] for o in step["oracles"]}
+        if got != want:
+            problems.append(f"{where}: step {n} oracles {got}, expected {want}")
+        if bool(step.get("writes")) != (row["method"] != "GET"):
+            problems.append(f"{where}: step {n} writes is {bool(step.get('writes'))}")
+        if step.get("profile", "core") != row["profile"]:
+            problems.append(f"{where}: step {n} is not the row's profile")
+    for n in sorted(steps):
+        if n > len(rows) + 1:
+            problems.append(f"tester's card step {n}: no matrix row")
+    return problems
+
+
+def test_the_tester_card_has_one_step_per_matrix_row_in_order():
+    assert tester_card_problems(_tester_card(), _matrix()) == []
+    (persona,) = [
+        p
+        for p in catalogue.load_personas(PERSONAS_ROOT / "personas", REPO_ROOT)
+        if p.id == "U-QA"
+    ]
+    assert (
+        persona.day[0].intent == "make the Admin-role account that is not a superuser"
+    )
+    assert len(persona.day) == MATRIX_ROWS + 1
+
+
+def _a_row_with_no_step(card: dict[str, Any], matrix: dict[str, Any]) -> None:
+    row = copy.deepcopy(_row(matrix, "flag-list"))
+    row["id"] = "flag-list-again"
+    matrix["rows"].append(row)
+
+
+def _a_step_dropped(card: dict[str, Any], matrix: dict[str, Any]) -> None:
+    card["day"] = [s for s in card["day"] if s["n"] != 7]
+
+
+def _two_rows_swapped(card: dict[str, Any], matrix: dict[str, Any]) -> None:
+    rows = matrix["rows"]
+    rows[0], rows[1] = rows[1], rows[0]
+
+
+def _a_refusal_left_unchecked(card: dict[str, Any], matrix: dict[str, Any]) -> None:
+    step = _step(card, 6)
+    step["oracles"] = [o for o in step["oracles"] if o["kind"] != "api_refused"]
+
+
+def _a_write_row_read_only(card: dict[str, Any], matrix: dict[str, Any]) -> None:
+    _step(card, 2)["writes"] = False
+
+
+def _a_step_with_no_row(card: dict[str, Any], matrix: dict[str, Any]) -> None:
+    extra = copy.deepcopy(_step(card, 11))
+    extra["n"] = 12
+    card["day"].append(extra)
+
+
+TESTER_PLANTS: list[tuple[str, Callable[..., None], str]] = [
+    (
+        "a_row_with_no_step",
+        _a_row_with_no_step,
+        "role-matrix row flag-list-again: no step 12 on the tester's card",
+    ),
+    ("a_step_dropped", _a_step_dropped, "role-matrix row users-list: no step 7"),
+    (
+        "two_rows_swapped",
+        _two_rows_swapped,
+        "role-matrix row experiment-list: step 2 is 'check the role matrix row experiment-create'",
+    ),
+    (
+        "a_refusal_left_unchecked",
+        _a_refusal_left_unchecked,
+        "role-matrix row flag-change: step 6 oracles",
+    ),
+    (
+        "a_write_row_read_only",
+        _a_write_row_read_only,
+        "role-matrix row experiment-create: step 2 writes is False",
+    ),
+    ("a_step_with_no_row", _a_step_with_no_row, "tester's card step 12: no matrix row"),
+]
+
+
+@pytest.mark.parametrize(
+    ("plant", "expected"),
+    [(p, e) for _, p, e in TESTER_PLANTS],
+    ids=[name for name, _, _ in TESTER_PLANTS],
+)
+def test_a_tester_card_out_of_step_with_the_matrix_is_refused(plant, expected):
+    card, matrix = copy.deepcopy(_tester_card()), copy.deepcopy(_matrix())
+    plant(card, matrix)
+    problems = tester_card_problems(card, matrix)
+    assert any(expected in line for line in problems), (expected, problems)

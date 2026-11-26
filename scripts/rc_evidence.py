@@ -297,6 +297,7 @@ PLAYWRIGHT_PROJECTS: Tuple[Tuple[str, str, Tuple[str, ...]], ...] = (
             r"\.site\.spec\.ts$",
             r"\.launch\.spec\.ts$",
             r"\.runtime\.spec\.ts$",
+            r"\.persona\.spec\.ts$",
             r"visual-regression\.spec\.ts$",
         ),
     ),
@@ -304,6 +305,9 @@ PLAYWRIGHT_PROJECTS: Tuple[Tuple[str, str, Tuple[str, ...]], ...] = (
     ("launch", r"\.launch\.spec\.ts$", ()),
     ("page-runtime", r"\.runtime\.spec\.ts$", ()),
     ("visual", r"visual-regression\.spec\.ts$", ()),
+    # Present in the config only when PERSONAS=1; listed here so a persona
+    # spec belongs to one project (no rc-evidence leg runs it).
+    ("personas", r"\.persona\.spec\.ts$", ()),
 )
 
 
