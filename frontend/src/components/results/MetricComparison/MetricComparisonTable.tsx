@@ -28,6 +28,7 @@ import {
   showsAdjusted,
 } from '@/components/results/shared/resultFormat';
 import { IntervalText, LeadWithInterval } from '@/components/results/shared/IntervalText';
+import { windowTag } from '@/utils/conversionWindow';
 import {
   comparisonsOf,
   correctionName,
@@ -567,6 +568,11 @@ export function MetricComparisonTable({
                   )}
                   {metricLowerIsBetter(metric) === true && (
                     <span className="ml-1.5 text-xs text-slate-600 font-normal">lower is better</span>
+                  )}
+                  {typeof metric.conversion_window_hours === 'number' && (
+                    <span className="ml-1.5 text-xs text-slate-600 font-normal" data-testid="metric-window-tag">
+                      {windowTag(metric.conversion_window_hours)}
+                    </span>
                   )}
                 </td>
                 <td className="px-4 py-3 text-slate-700">

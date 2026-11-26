@@ -55,6 +55,28 @@ by = [
 ]
 
 [[unit]]
+text = "On Details, each metric's Conversion window in hours (beta, optional) takes a whole number from 1 to 8,760, or blank for none; Next refuses anything else, naming the metric, and focuses the box."
+by = [
+    "test:frontend/src/tests/pages/experiment-new-window.test.tsx::168 is sent as the number 168, on that metric only guided setup",
+    "test:frontend/src/tests/pages/experiment-new-window.test.tsx::blank sends no window, so the body is the one sent before guided setup",
+    "test:frontend/src/tests/pages/experiment-new-window.test.tsx::guided setup refuses \"%s\" on row 2 of 2, and stays on Details",
+]
+
+[[unit]]
+text = "With a window on the primary metric, the Estimate step says that the estimate counts users, not their windows."
+by = [
+    "test:frontend/src/tests/pages/experiment-new-window.test.tsx::say so when the primary metric has a window",
+    "test:frontend/src/tests/pages/experiment-new-window.test.tsx::a window on another metric only: Review names it there, and the estimate says nothing",
+]
+
+[[unit]]
+text = "The Review step's line for a metric with a window names it, as conversion window 7 days."
+by = [
+    "test:frontend/src/tests/pages/experiment-new-window.test.tsx::say so when the primary metric has a window",
+    "test:frontend/src/tests/pages/experiment-new-window.test.tsx::say nothing of a window when none is set",
+]
+
+[[unit]]
 text = "4. Estimate | How results will be judged (the confidence level and the correction, saved with the experiment), then, optionally, the minimum detectable effect (saved with the experiment), how many users each variant needs and roughly how many days that takes"
 by = [
     "journey:experiment-wizard#variants-next",

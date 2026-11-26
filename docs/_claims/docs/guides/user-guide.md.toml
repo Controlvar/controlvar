@@ -222,6 +222,32 @@ text = "The metric's event name must match exactly what your engineers track in 
 by = ["test:backend/tests/integration/services/test_conversion_event_matching.py"]
 
 [[unit]]
+text = "Each metric has an optional Conversion window in hours (beta, optional)."
+by = [
+    "test:frontend/src/tests/pages/experiment-new-window.test.tsx::has a visible label, numeric input, and guided setup’s border and focus ring",
+    "test:frontend/src/tests/pages/experiment-new-window.test.tsx::blank sends no window, so the body is the one sent before the single-page form",
+]
+
+[[unit]]
+text = "Blank sends none; a whole number from 1 to 8,760 is sent as the metric's conversion_window_hours, and the help under the box says it in days too, so 168 reads 7 days (168 hours)."
+by = [
+    "test:frontend/src/tests/pages/experiment-new-window.test.tsx::blank sends no window, so the body is the one sent before the single-page form",
+    "test:frontend/src/tests/pages/experiment-new-window.test.tsx::blank sends no window, so the body is the one sent before guided setup",
+    "test:frontend/src/tests/pages/experiment-new-window.test.tsx::168 is sent as the number 168, on that metric only the single-page form",
+    "test:frontend/src/tests/pages/experiment-new-window.test.tsx::168 is sent as the number 168, on that metric only guided setup",
+    "test:frontend/src/tests/pages/experiment-new-window.test.tsx::is described by its help, which says what the number means and is not a live region",
+    "test:frontend/src/tests/components/conversion-window.test.ts::\"%s\" is refused, as the API refuses it",
+]
+
+[[unit]]
+text = "Anything else is refused, naming the metric, and the box takes focus."
+by = [
+    "test:frontend/src/tests/pages/experiment-new-window.test.tsx::the single-page form refuses \"%s\" on row 2 of 2",
+    "test:frontend/src/tests/pages/experiment-new-window.test.tsx::guided setup refuses \"%s\" on row 2 of 2, and stays on Details",
+    "test:frontend/src/tests/pages/experiment-detail-window.test.tsx::refuses \"%s\" on row 2 of 2: that box takes focus, marked invalid and described by the refusal",
+]
+
+[[unit]]
 text = "Step 3: Variants"
 by = ["exempt:baseline"]
 
@@ -893,6 +919,47 @@ by = [
     "journey:experiment-results#results-api",
     "journey:experiment-results#ratio-results-api",
 ]
+
+[[unit]]
+text = "Conversion window"
+by = ["exempt:label"]
+
+[[unit]]
+text = "For each metric with a conversion window, a line below the sample ratio check says how many users had less than the full window."
+by = [
+    "test:frontend/src/tests/pages/results-conversion-window.test.tsx::active: the count, the time the results were computed, and each variant’s share, below the sample ratio line",
+    "test:frontend/src/tests/pages/results-conversion-window.test.tsx::one line per metric with a window, in the results’ order",
+    "test:frontend/src/tests/pages/results-conversion-window.test.tsx::no window anywhere: no notice, no summary line, no tag",
+]
+
+[[unit]]
+text = "While the experiment runs, it gives the users still inside their window when the results were computed, that time in UTC, and each variant's share."
+by = [
+    "test:frontend/src/tests/pages/results-conversion-window.test.tsx::active: the count, the time the results were computed, and each variant’s share, below the sample ratio line",
+    "test:frontend/src/tests/pages/results-conversion-window.test.tsx::reads the time from computed_at, never the browser’s clock",
+    "test:frontend/src/tests/pages/results-conversion-window.test.tsx::%s: exactly these lines, and none for the metric with no window",
+]
+
+[[unit]]
+text = "Once the experiment is completed, or archived with an end, it gives the users who had less than the window before it ended, and says a pause may have left more users short."
+by = [
+    "test:frontend/src/tests/pages/results-conversion-window.test.tsx::completed: who had less than the window before it ended, and the pause sentence",
+    "test:frontend/src/tests/pages/results-conversion-window.test.tsx::archived with an end at or before the results were computed: the completed line",
+    "test:frontend/src/tests/pages/results-conversion-window.test.tsx::completed with 0: the line is still shown, with the pause sentence",
+    "test:frontend/src/tests/pages/results-conversion-window.test.tsx::%s: exactly these lines, and none for the metric with no window",
+]
+
+[[unit]]
+text = "While it is paused, or archived with no end, it gives no count, and says that events sent while the experiment is paused or archived are not counted."
+by = [
+    "test:frontend/src/tests/pages/results-conversion-window.test.tsx::paused: no count, and nothing says the numbers can change",
+    "test:frontend/src/tests/pages/results-conversion-window.test.tsx::archived with no end, or with an end after the results were computed: the paused sentence",
+    "test:frontend/src/tests/pages/results-conversion-window.test.tsx::%s: exactly these lines, and none for the metric with no window",
+]
+
+[[unit]]
+text = "The summary card names the primary metric's window, for example Conversion window: events in the 7 days (168 hours) from each user's assignment count., and the metric's rows in the table are tagged within 7 days."
+by = ["test:frontend/src/tests/pages/results-conversion-window.test.tsx::the summary card names the primary metric’s window, and its table rows carry the tag"]
 
 [[unit]]
 text = "Bayesian Analysis"

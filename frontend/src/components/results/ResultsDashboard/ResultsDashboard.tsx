@@ -39,6 +39,7 @@ import {
 import { SequentialTestingResponse } from '@/types/sequential';
 import { ExperimentSummary } from './ExperimentSummary';
 import { SrmNotice } from './SrmNotice';
+import { ConversionWindowNotices } from './ConversionWindowNotice';
 import { BayesianPanel } from '@/components/results/Bayesian/BayesianPanel';
 import { SampleSizeMeter } from './SampleSizeMeter';
 import { ConversionChart } from '@/components/results/Visualizations/ConversionChart';
@@ -694,6 +695,7 @@ export function ResultsDashboard({ experimentId, initialTab }: ResultsDashboardP
             plannedSample={plannedSample}
           />
           <SrmNotice srm={results.srm} metrics={results.metrics} />
+          <ConversionWindowNotices results={results} />
         </>
       )}
 
@@ -760,6 +762,8 @@ export function ResultsDashboard({ experimentId, initialTab }: ResultsDashboardP
             allUsersMetrics={results.metrics}
             segment={segmentCounted}
           />
+          {/* The members' own counts. */}
+          <ConversionWindowNotices results={segmentCounted} />
         </>
       )}
 

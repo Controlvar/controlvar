@@ -129,6 +129,7 @@ const FULL: Experiment = {
       expected_effect: 0.1,
       event_value_path: 'amount',
       lower_is_better: true,
+      conversion_window_hours: 168,
       ...STAMPS,
     },
     {
@@ -143,6 +144,7 @@ const FULL: Experiment = {
       expected_effect: 0.03,
       event_value_path: 'count',
       lower_is_better: true,
+      conversion_window_hours: 36,
       ...STAMPS,
     },
   ],

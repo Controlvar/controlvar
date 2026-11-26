@@ -82,6 +82,11 @@ count, duration or custom metric's report its mean per assigned user.
 
 The metric's **event name** must match exactly what your engineers track in code (e.g., `checkout_complete`).
 
+Each metric has an optional **Conversion window in hours (beta, optional)**. Blank sends none; a
+whole number from 1 to 8,760 is sent as the metric's `conversion_window_hours`, and the help under
+the box says it in days too, so 168 reads *7 days (168 hours)*. Anything else is refused, naming the
+metric, and the box takes focus.
+
 **Step 3: Variants**
 
 Every experiment needs a control; mark one variant as it:
@@ -309,6 +314,18 @@ When the split matches, one line below the summary card says so, with the check'
 Nothing is shown for a bandit, which moves traffic on purpose, for an experiment with no users
 yet, or when the check could not be run; that is not a pass. The API returns the check as `srm`
 in `GET /api/v1/results/{experiment_id}`.
+
+#### Conversion window
+
+For each metric with a conversion window, a line below the sample ratio check says how many users
+had less than the full window. While the experiment runs, it gives the users still inside their
+window when the results were computed, that time in UTC, and each variant's share. Once the
+experiment is completed, or archived with an end, it gives the users who had less than the window
+before it ended, and says a pause may have left more users short. While it is paused, or archived
+with no end, it gives no count, and says that events sent while the experiment is paused or archived
+are not counted. The summary card names the primary metric's window, for example *Conversion
+window: events in the 7 days (168 hours) from each user's assignment count.*, and the metric's rows
+in the table are tagged *within 7 days*.
 
 #### Bayesian Analysis
 

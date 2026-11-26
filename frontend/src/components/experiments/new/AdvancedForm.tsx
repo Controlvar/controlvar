@@ -1,7 +1,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { TargetingRuleBuilder } from '@/components/targeting';
-import { ExperimentFormAction, ExperimentFormState } from './formState';
+import { ExperimentFormAction, ExperimentFormState, metricWindowProblem } from './formState';
 import { BasicInfoFields } from './BasicInfoFields';
 import { BANDIT_ALLOCATION_LINE, ExperimentTypeField } from './ExperimentTypeField';
 import { VariantsEditor } from './VariantsEditor';
@@ -33,6 +33,9 @@ function PlannedEffectLine({ plannedEffectPct }: { plannedEffectPct: string }) {
   );
 }
 
+/** The refusal's element, which a refused conversion window box is described by. */
+const FORM_ERROR_ID = 'new-experiment-error';
+
 interface AdvancedFormProps {
   state: ExperimentFormState;
   dispatch: React.Dispatch<ExperimentFormAction>;
@@ -61,6 +64,12 @@ export function AdvancedForm({
   // The key field is on this page: take the user straight to it.
   // A targeting problem is shown at the rules; anything else the error says goes here.
   const foot = footMessage(error);
+  // The window box the refusal below is about, while it is shown.
+  const windowProblem = metricWindowProblem(state.metrics);
+  const windowInvalid =
+    windowProblem && foot && error?.message === windowProblem.message
+      ? { index: windowProblem.index, field: 'conversion_window_hours' as const }
+      : null;
 
   const focusKey = () => {
     const key = document.getElementById('experiment-key');
@@ -109,7 +118,12 @@ export function AdvancedForm({
 
       {/* Metrics */}
       <section className="bg-white rounded-lg border border-slate-200 p-6 space-y-4" data-testid="metrics-section">
-        <MetricsEditor metrics={state.metrics} dispatch={dispatch} />
+        <MetricsEditor
+          metrics={state.metrics}
+          dispatch={dispatch}
+          invalid={windowInvalid}
+          invalidDescribedBy={FORM_ERROR_ID}
+        />
         <PlannedEffectLine plannedEffectPct={state.plannedEffectPct} />
       </section>
 
@@ -148,6 +162,7 @@ export function AdvancedForm({
       {/* Error message (a targeting problem is shown at the rules; the rest here) */}
       {error && foot && (
         <div
+          id={FORM_ERROR_ID}
           role="alert"
           className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700"
           data-testid="form-error"
