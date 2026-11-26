@@ -1,0 +1,80 @@
+# U-SDK: a small web page running this checkout's JavaScript SDK (sdk/js, as
+# its build leaves it), the way a shop's site would. It has no dashboard
+# account: before the day starts, dev@demo.com makes it an API key, a running
+# experiment and a feature flag through the API.
+#
+# Every step is decided by what the API holds or answers, read back with the
+# page's own key, or by the bucketing written from its documented rule: never
+# by what the page shows alone.
+id: U-SDK
+role: SDK
+account: setup:sdk-page-key
+goals:
+  - Show each visitor the variant the API assigns, and see the visit counted in the results.
+  - Show each visitor the flag's answer the API gives for their country.
+  - Record a purchase from the page against the experiment.
+day:
+  - n: 1
+    intent: open the page as 20 visitors, each shown a variant and a flag answer by the JavaScript SDK
+    layer: A
+    writes: true
+    oracles:
+      - id: u-sdk.1.variant-stored
+        kind: api_state
+        expect: >-
+          each visitor's variant on the page is the one GET
+          /api/v1/tracking/assignments/{user_id} holds for the experiment,
+          and the SDK reported one exposure and no error on each visit
+        source:
+          path: docs/sdk/javascript.md
+          anchor: "cache: the moment the server records the exposure."
+      - id: u-sdk.1.variant-hash
+        kind: hash_vector
+        expect: >-
+          each visitor's variant is the one whose share of the allocation
+          holds their bucket of the experiment's key, the bucketing first
+          reproducing every golden hash vector
+        source:
+          path: docs/architecture/technical-guide.md
+          anchor: "**Traffic split**: hash the user with the experiment's `key` (the first four bytes of"
+      - id: u-sdk.1.flag-equals-evaluate
+        kind: api_state
+        expect: >-
+          each visitor's flag answer on the page, on or off and why, equals
+          GET /api/v1/feature-flags/evaluate/{key} for that visitor and country
+        source:
+          path: docs/sdk/javascript.md
+          anchor: "| `evaluateFlag`, `isFeatureEnabled` | `GET /api/v1/feature-flags/evaluate/{flag_key}"
+      - id: u-sdk.1.flag-hash
+        kind: hash_vector
+        expect: >-
+          a visitor outside the flag's US rule has it on exactly when
+          md5-mod100-v1 puts them below its 30%, the bucketing first
+          reproducing every golden rollout vector
+        source:
+          path: docs/sdk/local-evaluation.md
+          anchor: "Rollout percentages bucket users exactly as the server does (`md5-mod100-v1`"
+  - n: 2
+    intent: read the experiment's results after the visits
+    layer: A
+    numeric: true
+    oracles:
+      - id: u-sdk.2.visits-in-results
+        kind: count_delta
+        expect: >-
+          GET /api/v1/results/{id} counts, per variant, exactly the visitors
+          the page showed that variant to
+  - n: 3
+    intent: buy from the page as 5 of those visitors
+    layer: A
+    writes: true
+    oracles:
+      - id: u-sdk.3.purchases-in-results
+        kind: count_delta
+        expect: >-
+          a second visit shows each buyer the same variant, and GET
+          /api/v1/results/{id} then counts, per variant, the page's buyers as
+          conversions and its visitors, once each, as users
+        source:
+          path: docs/sdk/javascript.md
+          anchor: "Track a conversion for one experiment (POST /api/v1/tracking/track)"
