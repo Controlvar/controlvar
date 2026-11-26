@@ -1,0 +1,85 @@
+# U-ADMIN: an account with the Admin role that is not a superuser, the admin's
+# normal day. The admin manages every experiment and feature flag, whoever
+# made it, and not people: the pages only a superuser may open are closed to
+# the role, and say so.
+#
+# No seed makes such an account (docs/rbac/README.md: "The Admin role is not a
+# superuser."), so the day makes its own, stamped, through POST
+# /api/v1/users/ as the superuser (frontend/tests/e2e/personas/accounts.ts).
+# Before the day, dev@demo.com makes a feature flag and a running experiment
+# through the API; the admin's day changes what the developer owns.
+id: U-ADMIN
+role: ADMIN
+account: setup:persona-admin
+goals:
+  - Change any feature flag or experiment, whoever made it.
+  - Find the admin area closed to the role, with the reason shown.
+day:
+  - n: 1
+    intent: change the rollout of a feature flag the developer owns
+    layer: A
+    writes: true
+    oracles:
+      - id: u-admin.1.flag-changed
+        kind: api_state
+        expect: >-
+          the flag page offers the switch, an editable rollout and Save, and
+          no role note; Save sends PUT /api/v1/feature-flags/{id}, answered
+          200, and the flag reads back with the new rollout and the developer
+          still its owner
+        source:
+          path: docs/rbac/README.md
+          anchor: "ADMIN and DEVELOPER may change any flag"
+      - id: u-admin.1.change-audited
+        kind: audit_entry
+        expect: >-
+          the audit log holds one feature_flag_update entry for the flag, by
+          the admin's account
+        source:
+          path: docs/api/audit-logging.md
+          anchor: "`PUT /feature-flags/{id}`; `/unarchive`"
+  - n: 2
+    intent: pause the developer's running experiment
+    layer: A
+    writes: true
+    oracles:
+      - id: u-admin.2.experiment-paused
+        kind: api_state
+        expect: >-
+          the experiment page names the developer as its owner and offers
+          Pause; Pause sends POST /api/v1/experiments/{id}/pause, answered
+          200, and the experiment reads back paused with the developer still
+          its owner
+        source:
+          path: docs/rbac/README.md
+          anchor: "needs READ and UPDATE on experiments"
+      - id: u-admin.2.pause-audited
+        kind: audit_entry
+        expect: >-
+          the audit log holds one experiment_pause entry for the experiment,
+          by the admin's account
+        source:
+          path: docs/api/audit-logging.md
+          anchor: "`/start` (also a resume), `/pause`, `/complete`"
+  - n: 3
+    intent: look for the admin area
+    layer: A
+    oracles:
+      - id: u-admin.3.admin-area-refused
+        kind: api_refused
+        expect: >-
+          the header offers no Admin link; /admin by its address sends no
+          request under /api/v1/admin, and GET /api/v1/admin/stats, what the
+          page reads, answers the admin 403
+        source:
+          path: docs/rbac/README.md
+          anchor: "**The Admin role is not a superuser.**"
+      - id: u-admin.3.refusal-words
+        kind: text_exact
+        expect: >-
+          /admin shows the 403 view, which names the account and its role,
+          says the page requires a superuser account and links back to the
+          experiments
+        source:
+          path: frontend/src/components/RequireAuth.tsx
+          anchor: "forbidden('a superuser account')"

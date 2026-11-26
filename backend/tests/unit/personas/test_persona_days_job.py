@@ -196,6 +196,7 @@ def test_the_job_keeps_every_title_off_the_log_and_leaves_the_verdict_to_the_che
             "the run step does not set PERSONAS=1",
         ),
         (lambda j: j.update({"timeout-minutes": 60}), "timeout-minutes is 60"),
+        (lambda j: j.update({"timeout-minutes": 46}), "timeout-minutes is 46"),
         (lambda j: _plant_run(j, lambda r: r.replace("set +e\n", "")), "set +e"),
     ],
 )

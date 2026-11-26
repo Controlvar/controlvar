@@ -657,11 +657,11 @@ jobs:
   # prints one line of counts, here and in the run summary. e2e-tests' steps
   # up to its first Playwright run took 3.4 minutes on 2026-11-25 (run
   # 45651635175) and the developer's day about 10 seconds off the runner;
-  # 30 minutes is meant to leave room for the other days.
+  # 45 minutes is meant to leave room for the other days.
   persona-days:
     name: Persona days
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       PLAYWRIGHT_API_URL: http://localhost:8000
       PLAYWRIGHT_PORT: '3100'
