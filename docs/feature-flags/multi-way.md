@@ -1,6 +1,6 @@
 ---
 title: Multi-way flags, a split and a rule's own value
-description: "Serve one of 3 to 10 values to the users a string, number or json flag is on for, by whole-number weights, or give a targeting rule a value of its own, with the REST API."
+description: "Serve one of 3 to 10 values to the users a string, number or json flag is on for, by whole-number weights, or give a targeting rule a value of its own, in the dashboard or with the REST API."
 ---
 
 # Multi-way Flags
@@ -190,6 +190,30 @@ above.
 - A rule with no value serves the split, or the on value when there is no split.
 - A user who matches a rule but falls outside that rule's own `rollout_percentage` gets the off
   value.
+
+## In the dashboard
+
+A string, number or json flag's page has a **Split** section in each environment; in Staging it
+reads **Split in Staging**. A boolean flag's page has none.
+
+- **Add a split** starts three empty values at weights 34, 33 and 33, so nothing is served until
+  each is typed. Each row has a **Value** and a **Weight (%)**.
+- **Add value** adds a value at the end, at weight 0, up to 10 values, and **Remove** takes one
+  out, down to 3. **Spread evenly** shares the 100 between them, the extra to the first rows.
+- The total reads `Total 100%`, or for example `Total 90%: 10% more needed`. A split whose weights
+  do not add up to 100 is not sent, and the page says `Weights must add up to 100; they add up to 90.`
+- When you change the weights of a split, the page says, before you save, about how many in every
+  100 users the flag is on for move, and from which value to which.
+- **Remove the split** removes it when you save: the users the flag is on for then get the on
+  value.
+- **Users these rules match get**, under the targeting rules, offers
+  `A value of the split (the default)` (or `The on value (the default)` with no split) and
+  `A value of their own`.
+- Someone who may not change flags reads `Serving 3 values` and the table without inputs. The flag
+  list marks a flag that has a split in the environment it shows with **Split**.
+
+The section ends with a note that links to the experiments page:
+`A split does not measure anything. To compare values on a metric, create an experiment.`
 
 ## Limits
 

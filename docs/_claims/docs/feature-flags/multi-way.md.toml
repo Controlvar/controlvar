@@ -317,6 +317,94 @@ text = "A user who matches a rule but falls outside that rule's own rollout_perc
 by = ["test:backend/tests/unit/services/test_flag_split_serving.py::test_the_exact_answer_for_each_way_a_rule_decides"]
 
 [[unit]]
+text = "In the dashboard"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A string, number or json flag's page has a Split section in each environment; in Staging it reads Split in Staging."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-split.test.tsx::in Production: the table, its caption, a labelled input per value and weight, the notes",
+    "test:frontend/src/tests/pages/feature-flag-split.test.tsx::in Staging the heading names it, and the rows are Staging’s own split",
+]
+
+[[unit]]
+text = "A boolean flag's page has none."
+by = ["test:frontend/src/tests/pages/feature-flag-split.test.tsx::in %s: absent, not disabled"]
+
+[[unit]]
+text = "Add a split starts three empty values at weights 34, 33 and 33, so nothing is served until each is typed."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-split.test.tsx::without a split: \"Add a split\" starts three empty values at 34/33/33, focus on the first",
+    "test:frontend/src/tests/utils/flagSplit.test.ts::a new split of empty strings is refused, so nothing is served until each is typed",
+]
+
+[[unit]]
+text = "Each row has a Value and a Weight (%)."
+by = ["test:frontend/src/tests/pages/feature-flag-split.test.tsx::in Production: the table, its caption, a labelled input per value and weight, the notes"]
+
+[[unit]]
+text = "Add value adds a value at the end, at weight 0, up to 10 values, and Remove takes one out, down to 3."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-split.test.tsx::Add value appends an empty row at weight 0 and moves focus to it; at ten it is explained",
+    "test:frontend/src/tests/pages/feature-flag-split.test.tsx::Remove is labelled per row, moves focus to the row before, and at three is explained",
+]
+
+[[unit]]
+text = "Spread evenly shares the 100 between them, the extra to the first rows."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-split.test.tsx::Spread evenly gives 34/33/33 and then the save goes",
+    "test:frontend/src/tests/utils/flagSplit.test.ts::a new split is three empty values at 34/33/33",
+]
+
+[[unit]]
+text = "The total reads Total 100%, or for example Total 90%: 10% more needed."
+by = [
+    "test:frontend/src/tests/utils/flagSplit.test.ts::the Total says what is missing or over",
+    "test:frontend/src/tests/pages/feature-flag-split.test.tsx::in %s, 90 is refused at the Total in words, nothing is sent, the first weight takes focus",
+]
+
+[[unit]]
+text = "A split whose weights do not add up to 100 is not sent, and the page says Weights must add up to 100; they add up to 90."
+by = ["test:frontend/src/tests/pages/feature-flag-split.test.tsx::in %s, 90 is refused at the Total in words, nothing is sent, the first weight takes focus"]
+
+[[unit]]
+text = "When you change the weights of a split, the page says, before you save, about how many in every 100 users the flag is on for move, and from which value to which."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-split.test.tsx::the impact line names every move, read off the running totals",
+    "test:frontend/src/tests/utils/flagSplit.test.ts::reads the server's eight weight changes",
+]
+
+[[unit]]
+text = "Remove the split removes it when you save: the users the flag is on for then get the on value."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-split.test.tsx::in %s, removing the split sends null, and only then",
+    "test:backend/tests/integration/api/test_flag_split_write_api.py::test_null_clears_the_split_and_leaving_it_out_keeps_it",
+]
+
+[[unit]]
+text = "Users these rules match get, under the targeting rules, offers A value of the split (the default) (or The on value (the default) with no split) and A value of their own."
+by = ["test:frontend/src/tests/pages/feature-flag-split.test.tsx::a %s flag sends the value typed as its type"]
+
+[[unit]]
+text = "Someone who may not change flags reads Serving 3 values and the table without inputs."
+by = ["test:frontend/src/tests/pages/feature-flag-split.test.tsx::%s in %s: the bar, the table, \"Serving 3 values\", the note, no input"]
+
+[[unit]]
+text = "The flag list marks a flag that has a split in the environment it shows with Split."
+by = [
+    "test:frontend/src/tests/pages/feature-flags-index-split.test.tsx::Production: \"Split\" in text for the flag with a split there, none without, none on a boolean flag",
+    "test:frontend/src/tests/pages/feature-flags-index-split.test.tsx::Staging: the badge follows Staging's own split, not Production's",
+]
+
+[[unit]]
+text = "The section ends with a note that links to the experiments page: A split does not measure anything."
+by = ["test:frontend/src/tests/pages/feature-flag-split.test.tsx::%s in %s: the bar, the table, \"Serving 3 values\", the note, no input"]
+
+[[unit]]
+text = "To compare values on a metric, create an experiment."
+by = ["exempt:advice"]
+
+[[unit]]
 text = "Limits"
 by = ["exempt:label"]
 

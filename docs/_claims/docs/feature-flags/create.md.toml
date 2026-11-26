@@ -1100,8 +1100,10 @@ by = [
 ]
 
 [[unit]]
-text = "Through the API, a split or a targeting rule's own value can give the users it is on for other values of its type instead: see Multi-way flags."
+text = "Through the API or on the flag's page, a split or a targeting rule's own value can give the users it is on for other values of its type instead: see Multi-way flags."
 by = [
+    "test:frontend/src/tests/pages/feature-flag-split.test.tsx::without a split: \"Add a split\" starts three empty values at 34/33/33, focus on the first",
+    "test:frontend/src/tests/pages/feature-flag-split.test.tsx::a %s flag sends the value typed as its type",
     "test:backend/tests/integration/api/test_flag_split_write_api.py::test_a_split_set_through_the_api_is_served_by_the_hash",
     "test:backend/tests/integration/api/test_flag_split_write_api.py::test_a_rule_set_through_the_api_serves_its_own_value",
     "test:backend/tests/integration/api/test_flag_split_write_api.py::test_every_write_path_stores_what_it_accepts_as_sent",

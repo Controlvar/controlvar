@@ -181,7 +181,7 @@ reason = "how long a flag turned off takes to reach each client; no steps to fol
 
 [pages."feature-flags/multi-way.md"]
 class = "exec"
-reason = "a string flag given a split of three values and a rule with a value of its own, three users evaluated, a lower rollout percentage and a refused split, through the API in Doc Examples"
+reason = "a string flag given a split of three values and a rule with a value of its own, three users evaluated, a lower rollout percentage and a refused split, through the API in Doc Examples; the dashboard's Split section is held by its jest tests"
 
 [pages."feature-flags/environments.md"]
 class = "exec"

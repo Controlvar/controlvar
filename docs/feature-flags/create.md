@@ -469,9 +469,9 @@ KEY=$(curl -s -X POST localhost:8000/api/v1/api-keys \
 
 A flag can serve a string, a number or a JSON value instead of on or off. Its `value_type`
 is set when it is created, and it has an `on_value`, what the users it is on for get, and an
-`off_value`, what everyone else gets, and everyone while the flag is off. Through the API, a
-`split` or a targeting rule's own `value` can give the users it is on for other values of its
-type instead: see [Multi-way flags](multi-way.md). This
+`off_value`, what everyone else gets, and everyone while the flag is off. Through the API or on
+the flag's page, a `split` or a targeting rule's own `value` can give the users it is on for other
+values of its type instead: see [Multi-way flags](multi-way.md). This
 creates a string flag for a checkout button's label, on for enterprise-plan users, and
 turns it on:
 
