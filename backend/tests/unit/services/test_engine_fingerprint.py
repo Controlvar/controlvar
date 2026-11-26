@@ -106,6 +106,9 @@ ENGINE_FINGERPRINTS: Dict[str, str] = {
     # 1.13.0 (#2041) changes a mean metric's p-value only; this dataset has
     # no mean metric: 1.12.0's.
     "1.13.0": "99d7a3cc572e1181cf24400c893b7fbe6889425247dc2f1a759171ca5db39f84",
+    # 1.14.0 (#1934): a metric's conversion window; no fixture here has one,
+    # so 1.13.0's entries.
+    "1.14.0": "99d7a3cc572e1181cf24400c893b7fbe6889425247dc2f1a759171ca5db39f84",
 }
 
 # Two ids where the control sorts AFTER the treatment, so an engine that

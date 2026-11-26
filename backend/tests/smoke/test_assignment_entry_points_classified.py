@@ -80,6 +80,8 @@ INVENTORY: Dict[str, str] = {
     "backend/app/api/v1/endpoints/tracking.py::_variant_at_receipt": READS,
     "backend/app/core/bandit_scheduler.py::BanditScheduler._count_assignments_by_variant": READS,
     "backend/app/core/bandit_scheduler.py::BanditScheduler._stats_from_postgres": READS,
+    # The count of users with less than a whole window (#1934).
+    "backend/app/services/analysis_service.py::open_window_counts": READS,
     "backend/app/services/analysis_service.py::AnalysisService._assignment_count": READS,
     "backend/app/services/analysis_service.py::AnalysisService._bayesian_observations": READS,
     "backend/app/services/analysis_service.py::AnalysisService._experiment_totals": READS,
@@ -97,6 +99,8 @@ INVENTORY: Dict[str, str] = {
     "backend/app/services/assignment_service.py::AssignmentService.get_person_assignments": READS,
     "backend/app/services/identity_aliases.py::holder_of": READS,
     "backend/app/services/event_matching.py::_assigned_pairs": READS,
+    # A windowed read's senders' starts (#1934).
+    "backend/app/services/event_matching.py::_assignment_starts": READS,
     "backend/app/services/event_matching.py::assignment_times": READS,
     "backend/app/services/event_service.py::EventService.track_conversion": READS,
     "backend/app/services/export_service.py::ExportService._count_assignments": READS,

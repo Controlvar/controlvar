@@ -517,6 +517,7 @@ def _counter_capability(provider):
 def _mock_metric(event_name: str, is_primary: bool):
     metric = MagicMock()
     metric.event_name = event_name
+    metric.conversion_window_hours = None
     metric.is_primary = is_primary
     return metric
 

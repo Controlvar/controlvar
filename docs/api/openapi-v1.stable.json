@@ -1447,7 +1447,7 @@
             "type": "string"
           },
           "engine_version": {
-            "default": "1.13.0",
+            "default": "1.14.0",
             "description": "Statistics engine version that produced these results.",
             "title": "Engine Version",
             "type": "string"
@@ -1573,7 +1573,7 @@
             "type": "array"
           },
           "engine_version": {
-            "default": "1.13.0",
+            "default": "1.14.0",
             "description": "Statistics engine version that computed the current weights",
             "title": "Engine Version",
             "type": "string"
@@ -1959,7 +1959,7 @@
             ]
           },
           "engine_version": {
-            "default": "1.13.0",
+            "default": "1.14.0",
             "description": "Statistics engine version that produced these results.",
             "title": "Engine Version",
             "type": "string"
@@ -3416,7 +3416,7 @@
             "title": "Covariate Lookback Days"
           },
           "engine_version": {
-            "default": "1.13.0",
+            "default": "1.14.0",
             "description": "Statistics engine version that produced these results.",
             "title": "Engine Version",
             "type": "string"
@@ -9833,6 +9833,18 @@
             "title": "Analysis",
             "type": "string"
           },
+          "conversion_window_hours": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Beta.  The metric's conversion window, in hours (1 to 8760): only events within this many hours of each user's assignment are counted, for conversions and values alike.  None when the metric has no window, and every event the metric matches is counted.",
+            "title": "Conversion Window Hours"
+          },
           "has_significant_result": {
             "description": "True when at least one non-control variant has is_significant=True for this metric.",
             "title": "Has Significant Result",
@@ -15535,6 +15547,18 @@
             "description": "When the metric's analysis is 'proportion': the share of the variant's users who converted, in [0, 1].  When it is 'mean' (a revenue, count, duration or custom metric): the mean per assigned user of each user's value, 0 for a user with none: for a count metric the number of the metric's events they sent, otherwise the total of those events' value.",
             "title": "Mean",
             "type": "number"
+          },
+          "open_window_users": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Beta.  When the metric has a conversion window: how many of this variant's assigned users had less than the full window, counted when the experiment's counting stopped (its end_date once it is completed, or archived with an end_date no later than computed_at) or at computed_at while it is a draft or active.  Their conversions so far are counted.  None when the metric has no window, and when the experiment is paused or archived without such an end_date: events sent then are not counted, and when counting stopped is not recorded.",
+            "title": "Open Window Users"
           },
           "p_value": {
             "anyOf": [

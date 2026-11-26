@@ -54,9 +54,18 @@ def test_metric_events_carries_the_name_and_no_window():
     assert {events: 1}[metric_events(SimpleNamespace(event_name="purchase"))] == 1
 
 
-@pytest.mark.parametrize("hours", [1, 168, 0])
-def test_a_window_is_refused_until_it_is_read(hours):
-    with pytest.raises(NotImplementedError):
+@pytest.mark.parametrize("hours", [1, 168, 8760])
+def test_a_window_of_1_to_8760_hours_is_carried(hours):
+    events = metric_events(
+        SimpleNamespace(event_name="purchase", conversion_window_hours=hours)
+    )
+    assert (events.event_name, events.window_hours) == ("purchase", hours)
+    assert events != PURCHASE
+
+
+@pytest.mark.parametrize("hours", [0, -1, 8761, 1.5, True, "24"])
+def test_any_other_window_is_refused(hours):
+    with pytest.raises(ValueError):
         MetricEvents("purchase", hours)
 
 
@@ -118,3 +127,38 @@ def test_a_reader_handed_a_bare_name_raises_before_reading(read):
     with pytest.raises(TypeError):
         read(db)
     db.query.return_value.filter.return_value.group_by.return_value.all.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "stored",
+    [
+        "2026-11-01T05:00:00+00:00",
+        "2026-11-01T05:00:00.000001+00:00",
+        "2026-11-01T05:00:00.5+00:00",
+        "2026-11-01T22:00:00-08:00",
+        "2026-11-01T05:00:00Z",
+        "2026-11-01T05:00:00",
+        " 2026-11-01T05:00:00+00:00",
+        "2026-11-01T05:00:00+00:00 ",
+        "2026-11-01 05:00:00+00:00",
+        "2026-11-01+00:00",
+        "2026-13-01T05:00:00+00:00",
+        "2026-11-01T05:00:00-05:00+00:00",
+        "1234567890T234567890+00:00",
+        "not a time",
+        "",
+    ],
+)
+def test_the_quick_parse_reads_what_the_long_one_does(stored):
+    """A windowed read parses each event's time with ``_event_instant``: the
+    same answer as ``_naive_utc`` for every value, or the same refusal."""
+    from backend.app.services.event_matching import _event_instant, _naive_utc
+
+    try:
+        expected = _naive_utc(stored)
+    except (TypeError, ValueError) as exc:
+        with pytest.raises(type(exc)):
+            _event_instant(stored)
+    else:
+        assert _event_instant(stored) == expected
+        assert _event_instant(stored).tzinfo is None

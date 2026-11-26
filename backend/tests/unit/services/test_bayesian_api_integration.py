@@ -57,6 +57,7 @@ def _make_mock_metric(
     m.id = uuid.UUID(metric_id) if metric_id else uuid.uuid4()
     m.name = name
     m.event_name = event_name
+    m.conversion_window_hours = None
     m.is_primary = is_primary
     m.metric_type = "conversion"
     return m

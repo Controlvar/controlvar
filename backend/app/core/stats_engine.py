@@ -86,6 +86,13 @@ import numpy as np
 #: recommendation can change; a mean's ``is_significant`` no longer follows
 #: its ``absolute_difference_ci``, which is still Welch's.  A mean computed
 #: from sums alone (a warehouse run) keeps Welch's t-test.
+#: 1.14.0 (#1934): a metric with a conversion window
+#: (``Metric.conversion_window_hours``) counts only the events within that many
+#: hours of each user's assignment (``event_matching.windowed_users``), in every
+#: result that reads the metric, and results carry
+#: ``metrics[].conversion_window_hours`` and
+#: ``metrics[].variants[].open_window_users``.  A metric without a window gives
+#: 1.13.0's numbers.
 #:
 #: The rule: an engine-changing PR bumps ``ENGINE_VERSION`` to the next minor
 #: and appends it to ``RELEASED_ENGINE_VERSIONS`` ("frozen on main", in
@@ -97,7 +104,7 @@ import numpy as np
 #: path stamping ``engine_version`` returns, caches or persists: results and
 #: its snapshots, Bayesian, CUPED, sequential, and the bandit's state, history
 #: and status.  A revert of an engine-changing PR bumps again.
-ENGINE_VERSION: str = "1.13.0"
+ENGINE_VERSION: str = "1.14.0"
 
 #: Mask that keeps the derived seed inside the signed 64-bit range.
 _SEED_MASK = (1 << 63) - 1

@@ -189,7 +189,9 @@ def test_proportion_results_equal_results_on_restricted_fixture(wh, lower):
     """On the counts /results also computes, the warehouse result is /results'
     result: every variant's numbers, significance and winner (only the metric's
     id differs -- a warehouse source is not a platform metric), in either
-    direction, the source and the platform metric marked alike (#1386)."""
+    direction, the source and the platform metric marked alike (#1386).
+    /results also carries a metric's conversion window and each variant's
+    open_window_users (#1934), null here; a warehouse result carries neither."""
     import json
 
     experiment = wh.experiment(end=ts(10))
@@ -214,6 +216,9 @@ def test_proportion_results_equal_results_on_restricted_fixture(wh, lower):
     results = json.loads(json.dumps(results, default=str))
     assert warehouse.pop("metric_id") == ids["metric_source_id"]
     results.pop("metric_id")
+    assert results.pop("conversion_window_hours") is None
+    for variant in results["variants"]:
+        assert variant.pop("open_window_users") is None
     assert warehouse == results
 
 
