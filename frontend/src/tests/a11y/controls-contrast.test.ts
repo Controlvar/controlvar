@@ -43,6 +43,11 @@ function linesMatching(files: string[], pattern: RegExp): string[] {
   return hits;
 }
 
+/** Every whole whitespace-separated token in the file, so a class is matched exactly, not as a prefix. */
+function classTokens(text: string): string[] {
+  return text.split(/[\s'"`]+/);
+}
+
 describe('controls: contrast and link rules', () => {
   it('has files to scan', () => {
     expect(FILES.length).toBeGreaterThan(100);
@@ -60,7 +65,7 @@ describe('controls: contrast and link rules', () => {
       'pages/feature-flags/new.tsx',
     ]) {
       const text = fs.readFileSync(path.join(SRC, file), 'utf8');
-      expect(text).toContain('focus:ring-blue-600');
+      expect(classTokens(text)).toContain('focus:ring-blue-600');
     }
   });
 
@@ -73,10 +78,14 @@ describe('controls: contrast and link rules', () => {
     const page = fs.readFileSync(path.join(SRC, 'pages/experiments/[id].tsx'), 'utf8');
     const adminLink = /className="([^"]*)"\s+data-testid="sdk-hint-admin-api-keys"/.exec(page);
     expect(adminLink).not.toBeNull();
-    expect(adminLink![1].split(' ')).toContain('underline');
+    expect(adminLink![1].split(/\s+/)).toContain('underline');
 
     const hint = path.join(SRC, 'components/experiments/ApiKeyRouteHint.tsx');
     expect(linesMatching([hint], /text-blue-600 hover:underline/)).toEqual([]);
-    expect(linesMatching([hint], /text-blue-600 underline/)).toHaveLength(2);
+    const links = fs.readFileSync(hint, 'utf8').match(/<(?:Link|a)\b[^>]*className="[^"]*"/g) ?? [];
+    expect(links).toHaveLength(2);
+    for (const link of links) {
+      expect(/className="([^"]*)"/.exec(link)![1].split(/\s+/)).toContain('underline');
+    }
   });
 });
