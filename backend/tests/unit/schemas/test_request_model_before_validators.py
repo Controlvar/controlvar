@@ -69,9 +69,20 @@ FULL_MODEL_COUNT = 146
 #: APIKeyCreate's description (1: its name and scopes had one, as had
 #: FeatureFlagSafetyConfigUpdate's metrics), then 3 more: SplitUrlConfig's
 #: cookie_name and canonical_url and VarianceReductionConfig's
-#: covariate_metric_id.
-CORE_BEFORE_COUNT = 74
-FULL_BEFORE_COUNT = 75
+#: covariate_metric_id. #2181 added 26 to both: name and description on
+#: GlobalHoldoutCreate, GlobalHoldoutUpdate, MutualExclusionGroupCreate and
+#: MutualExclusionGroupUpdate (8); username and full_name on UserCreate and
+#: UserUpdate (4); NotificationPreferenceUpdate's slack_channel and
+#: email_override (2); description on FeatureFlagCreate and FeatureFlagUpdate
+#: (2: their name had one); name, description and config_data on
+#: RolloutScheduleCreate (3), and name, description and trigger_configuration
+#: on RolloutStageCreate (3); description and config_data on
+#: RolloutScheduleUpdate, and description and trigger_configuration on
+#: RolloutStageUpdate (4: their name had one). And 6 more to the full profile:
+#: name and description on CreateWorkspaceRequest and UpdateWorkspaceRequest
+#: (4), and description on CustomRoleCreate and CustomRoleUpdate (2).
+CORE_BEFORE_COUNT = 100
+FULL_BEFORE_COUNT = 107
 
 PROBES = ({}, [], False, None)
 

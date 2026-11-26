@@ -7,12 +7,26 @@ all experiments.
 """
 
 from datetime import datetime
-from typing import List, Literal, Optional
+from typing import Any, List, Literal, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
 
 from backend.app.core.analysis_status import AnalysisStatusValue
+from backend.app.schemas.storable_text import (
+    contains_unstorable_text,
+    unstorable_text_message,
+)
+
+
+def _refuse_unstorable_text(value: Any, info: ValidationInfo) -> Any:
+    """Refuse NUL and unpaired surrogates in a holdout's name or description:
+    the database cannot store them, and a NUL answered 500 (#2181). A
+    ``mode="before"`` validator, so the field's own checks do not read the
+    value first; the message names the field, never the value."""
+    if contains_unstorable_text(value):
+        raise ValueError(unstorable_text_message(info.field_name))
+    return value
 
 
 class GlobalHoldoutCreate(BaseModel):
@@ -46,6 +60,12 @@ class GlobalHoldoutCreate(BaseModel):
             "and deactivates the one that was active."
         ),
     )
+
+    @field_validator("name", "description", mode="before")
+    @classmethod
+    def refuse_unstorable_text(cls, value: Any, info: ValidationInfo) -> Any:
+        """Text the database cannot store answers 422 at the field."""
+        return _refuse_unstorable_text(value, info)
 
     @field_validator("holdout_percentage", mode="after")
     @classmethod
@@ -89,6 +109,12 @@ class GlobalHoldoutUpdate(BaseModel):
             "holdout that has ended cannot restart."
         ),
     )
+
+    @field_validator("name", "description", mode="before")
+    @classmethod
+    def refuse_unstorable_text(cls, value: Any, info: ValidationInfo) -> Any:
+        """As on create."""
+        return _refuse_unstorable_text(value, info)
 
     @field_validator("holdout_percentage", mode="after")
     @classmethod

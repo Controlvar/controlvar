@@ -4,15 +4,31 @@ Pydantic schemas for EP-057: Multi-Tenant Team Workspaces.
 
 import re
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
+
+from backend.app.schemas.storable_text import (
+    contains_unstorable_text,
+    unstorable_text_message,
+)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Workspace
 # ─────────────────────────────────────────────────────────────────────────────
 
 _SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9\-]{1,48}[a-z0-9]$")
+
+
+def _refuse_unstorable_text(value: Any, info: ValidationInfo) -> Any:
+    """Refuse NUL and unpaired surrogates in a workspace's name or
+    description: the database cannot store them, and the save answered 500
+    (#2181). A ``mode="before"`` validator, so the field's own checks do not
+    read the value first; the message names the field, never the value.
+    ``slug`` refuses both already."""
+    if contains_unstorable_text(value):
+        raise ValueError(unstorable_text_message(info.field_name))
+    return value
 
 
 class CreateWorkspaceRequest(BaseModel):
@@ -27,6 +43,12 @@ class CreateWorkspaceRequest(BaseModel):
     name: str
     slug: str
     description: str = ""
+
+    @field_validator("name", "description", mode="before")
+    @classmethod
+    def refuse_unstorable_text(cls, value: Any, info: ValidationInfo) -> Any:
+        """Text the database cannot store answers 422 at the field."""
+        return _refuse_unstorable_text(value, info)
 
     @field_validator("slug")
     @classmethod
@@ -60,6 +82,12 @@ class UpdateWorkspaceRequest(BaseModel):
 
     name: Optional[str] = None
     description: Optional[str] = None
+
+    @field_validator("name", "description", mode="before")
+    @classmethod
+    def refuse_unstorable_text(cls, value: Any, info: ValidationInfo) -> Any:
+        """As on create."""
+        return _refuse_unstorable_text(value, info)
 
 
 class WorkspaceResponse(BaseModel):

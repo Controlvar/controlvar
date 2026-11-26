@@ -1115,6 +1115,50 @@ by = [
 ]
 
 [[unit]]
+text = "POST /api/v1/holdout, PUT /api/v1/holdout/{holdout_id}, POST /api/v1/mutual-exclusion-groups, PUT /api/v1/mutual-exclusion-groups/{group_id}, POST /api/v1/users/, PUT /api/v1/users/{user_id}, PUT /api/v1/notifications/preferences, POST /api/v1/feature-flags/, PUT /api/v1/feature-flags/{flag_id}, POST /api/v1/rollout-schedules/, PUT /api/v1/rollout-schedules/{schedule_id}, POST /api/v1/rollout-schedules/{schedule_id}/stages, PUT /api/v1/rollout-schedules/stages/{stage_id}; POST /api/v1/workspaces/, PUT /api/v1/workspaces/{workspace_id}, POST /api/v1/rbac/roles, PUT /api/v1/rbac/roles/{role_name} (full profile) | #2181 | Text holding NUL (U+0000) or an unpaired surrogate anywhere, in a key or a value, nested or not, answers 422 at its field with the msg Value error, name must not contain NUL or unpaired surrogate characters (or the field's own name); nothing is saved and no audit entry is made. The fields are a holdout's and a mutual exclusion group's name and description; a user's username and full_name; the notification settings' slack_channel and email_override; a flag's name and description; a rollout schedule's name, description and config_data, and a stage's name, description and trigger_configuration, a stage in a schedule create answered at its place in the list, such as [\"body\", \"stages\", 0, \"name\"]; a workspace's name and description; and a custom role's description. A NUL answered 500 for a holdout, a group, a user, the notification settings and a workspace, and 400 with the database driver's sentence for a flag's, a schedule's or a stage's name or description and for a role's description on an update, 409 on a create. A schedule's config_data and a stage's trigger_configuration answered 500 for either character, a workspace's name and description 500 for an unpaired surrogate too, and a schedule's or a stage's description 400 for it. Where another check refused an unpaired surrogate first, in each of the other fields, it answered that check's 422 and now answers this one. A user's email, a workspace's slug and a role's name answer their own 422 as before. The message does not repeat the value sent. Authentication still answers 401 first, and a flag create by a role that may not create a flag still answers 403 first; the 422 now comes before the 403 for a role the operation refuses, and the 404 for an unknown holdout, group, user, flag, schedule, stage, workspace or role, as every other body 422 on these operations does. A valid surrogate pair, such as an emoji, is saved as before, and every other body answers as before. The OpenAPI document does not change."
+by = [
+    "test:backend/tests/integration/api/test_names_text_refused.py::test_a_holdout_or_group_create_refuses_the_character",
+    "test:backend/tests/integration/api/test_names_text_refused.py::test_a_holdout_or_group_update_refuses_the_character",
+    "test:backend/tests/integration/api/test_names_text_refused.py::test_a_user_create_refuses_the_character",
+    "test:backend/tests/integration/api/test_names_text_refused.py::test_a_user_update_refuses_the_character",
+    "test:backend/tests/integration/api/test_names_text_refused.py::test_a_user_changing_their_own_name_is_refused_the_character",
+    "test:backend/tests/integration/api/test_names_text_refused.py::test_notification_settings_refuse_the_character",
+    "test:backend/tests/integration/api/test_names_text_refused.py::test_a_flag_create_refuses_the_character",
+    "test:backend/tests/integration/api/test_names_text_refused.py::test_a_flag_update_refuses_the_character",
+    "test:backend/tests/integration/api/test_names_text_refused.py::test_a_rollout_schedule_create_refuses_the_character",
+    "test:backend/tests/integration/api/test_names_text_refused.py::test_a_rollout_schedule_update_refuses_the_character",
+    "test:backend/tests/integration/api/test_names_text_refused.py::test_a_rollout_stage_refuses_the_character",
+    "test:modules/backend/tests/integration/api/test_workspace_role_text_refused.py::test_a_workspace_create_refuses_the_character",
+    "test:modules/backend/tests/integration/api/test_workspace_role_text_refused.py::test_a_workspace_update_refuses_the_character",
+    "test:modules/backend/tests/integration/api/test_workspace_role_text_refused.py::test_a_role_create_refuses_the_character",
+    "test:modules/backend/tests/integration/api/test_workspace_role_text_refused.py::test_a_role_update_refuses_the_character",
+    "test:backend/tests/unit/schemas/test_names_text_refused.py::test_the_text_is_refused_at_its_field",
+    "test:modules/backend/tests/unit/schemas/test_workspace_role_text_refused.py::test_the_text_is_refused_at_its_field",
+    "test:backend/tests/unit/schemas/test_names_text_refused.py::test_a_password_and_an_email_answer_as_before",
+    "test:modules/backend/tests/unit/schemas/test_workspace_role_text_refused.py::test_a_slug_and_a_role_name_answer_their_own_422",
+    "test:backend/tests/integration/api/test_names_text_refused.py::test_authentication_still_answers_401_first",
+    "test:modules/backend/tests/integration/api/test_workspace_role_text_refused.py::test_authentication_still_answers_401_first",
+    "test:backend/tests/integration/api/test_names_text_refused.py::test_on_a_flag_create_the_403_still_comes_first",
+    "test:backend/tests/integration/api/test_names_text_refused.py::test_the_422_comes_before_the_403",
+    "test:modules/backend/tests/integration/api/test_workspace_role_text_refused.py::test_the_422_comes_before_the_403",
+    "test:backend/tests/integration/api/test_names_text_refused.py::test_the_422_comes_before_the_404",
+    "test:modules/backend/tests/integration/api/test_workspace_role_text_refused.py::test_the_422_comes_before_the_404",
+    "test:backend/tests/integration/api/test_names_text_refused.py::test_an_emoji_in_a_holdout_or_group_is_still_saved",
+    "test:backend/tests/integration/api/test_names_text_refused.py::test_an_emoji_in_a_user_is_still_saved",
+    "test:backend/tests/integration/api/test_names_text_refused.py::test_an_emoji_in_notification_settings_is_still_saved",
+    "test:backend/tests/integration/api/test_names_text_refused.py::test_an_emoji_in_a_flag_is_still_saved",
+    "test:backend/tests/integration/api/test_names_text_refused.py::test_an_emoji_in_a_rollout_schedule_is_still_saved",
+    "test:modules/backend/tests/integration/api/test_workspace_role_text_refused.py::test_an_emoji_in_a_workspace_is_still_saved",
+    "test:modules/backend/tests/integration/api/test_workspace_role_text_refused.py::test_an_emoji_in_a_role_description_is_still_saved",
+    "test:backend/tests/unit/schemas/test_names_text_refused.py::test_an_emoji_is_accepted_as_sent",
+    "test:backend/tests/unit/schemas/test_names_text_refused.py::test_the_same_body_without_the_character_is_accepted",
+    "test:backend/tests/unit/schemas/test_names_text_refused.py::test_a_null_is_answered_as_before",
+    "test:modules/backend/tests/unit/schemas/test_workspace_role_text_refused.py::test_a_null_is_answered_as_before",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
 text = "POST /api/v1/feature-flags/, PUT /api/v1/feature-flags/{flag_id}, PUT /api/v1/feature-flags/{flag_id}/environments/{environment} (beta) | #2163 | A targeting_rules or tags holding NUL (U+0000) or an unpaired surrogate anywhere, in a key or a value, nested or not, answers 422 at [\"body\", \"targeting_rules\"] or [\"body\", \"tags\"] with the msg Value error, targeting_rules must not contain NUL or unpaired surrogate characters (or tags); nothing is saved and no audit entry is made. Where another check refused such a body first, as for the character in a condition's attribute, operator or semantic version, it answered that check's 422 and now answers this one; otherwise it answered 500, because the database cannot store such text. The message does not repeat the value sent. Authentication still answers 401 first, and a create by a role that may not create a flag still answers 403 first; on both PUTs the 422 now comes before the 403 for a role that may not change the flag and the 404 for an unknown flag. A valid surrogate pair, such as an emoji, is saved as before, and every other body answers as before. The OpenAPI document does not change."
 by = [
     "test:backend/tests/integration/api/test_flag_text_refused.py::test_a_create_refuses_the_character_in_targeting_rules",
