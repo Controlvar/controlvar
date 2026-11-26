@@ -146,7 +146,9 @@ cached, so the next call retries.
 
 A flag serves its on value to the users it is on for, and its off value to everyone else, and
 to everyone while it is turned off; a string, number or json flag with a split, or a matched
-rule with a value of its own, serves those users that value instead. For a string, number or
+rule with a value of its own, serves those users that value instead. Who the flag is on for, and
+the `reason` the server gives (`targeting_rule` or `rollout`), are decided as for any flag: see
+[Multi-way flags](../feature-flags/multi-way.md). For a string, number or
 json flag, read the value with the getter of its type: `GetStringValueAsync`,
 `GetNumberValueAsync` or `GetJsonValueAsync`.
 

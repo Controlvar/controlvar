@@ -983,6 +983,13 @@ text = "Flag values"
 by = ["exempt:label"]
 
 [[unit]]
+text = "Who the flag is on for, and the reason the server gives (targeting_rule or rollout), are decided as for any flag: see Multi-way flags."
+by = [
+    "test:backend/tests/unit/services/test_flag_split_serving.py::test_every_answer_has_exactly_the_keys_it_had",
+    "test:backend/tests/unit/services/test_flag_split_serving.py::test_the_exact_answer_for_each_way_a_rule_decides",
+]
+
+[[unit]]
 text = "A flag serves its on value to the users it is on for, and its off value to everyone else, and to everyone while it is turned off; a string, number or json flag with a split, or a matched rule with a value of its own, serves those users that value instead."
 by = [
     "test:sdk/js/__tests__/client.test.ts::returns the off value the server sends when the flag is off for the user (reason %s)",
@@ -1373,10 +1380,19 @@ by = [
 ]
 
 [[unit]]
-text = "A value flag's value is answered locally too: its on value when the flag is on for the user, its off value otherwise, and its off value to everyone while it is turned off."
+text = "A value flag's value is answered locally too, unless it has a split or a rule with a value of its own: its on value when the flag is on for the user, its off value otherwise, and its off value to everyone while it is turned off."
 by = [
     "test:sdk/js/__tests__/local.test.ts::the typed getters answer value flags from the ruleset, with no request",
     "test:sdk/js/__tests__/local.test.ts::turning a value flag off reaches the client at the next refresh: everyone gets the off value",
+    "test:sdk/js/__tests__/evaluator.test.ts::every value flag's must_local case is answered locally with the server's value and type",
+    "test:backend/tests/unit/services/test_sdk_ruleset_vectors.py::test_a_flag_with_a_split_or_a_rule_value_is_remote_while_it_is_active",
+]
+
+[[unit]]
+text = "A flag with a split or a rule's own value is evaluated by the server while it is on, and answered locally, its off value to everyone, once it is turned off (see Local evaluation)."
+by = [
+    "test:backend/tests/unit/services/test_sdk_ruleset_vectors.py::test_a_flag_with_a_split_or_a_rule_value_is_remote_while_it_is_active",
+    "test:sdk/js/__tests__/local.test.ts::an unknown key and a remote flag are evaluated by the server",
     "test:sdk/js/__tests__/evaluator.test.ts::every value flag's must_local case is answered locally with the server's value and type",
 ]
 
@@ -1426,6 +1442,14 @@ by = [
     "test:sdk/js/__tests__/local.test.ts::polls send the ETag, and a 304 keeps the ruleset",
     "test:sdk/js/__tests__/local.test.ts::5xx after a load keeps serving the last ruleset and reports each failure",
     "test:sdk/js/__tests__/local.test.ts::a new ruleset that %s: a pair answered locally goes to the server",
+]
+
+[[unit]]
+text = "For a flag with a split or a rule's own value, a change other than turning it off reaches a user the client has already cached once that answer expires, cacheTtlMs (5 minutes by default)."
+by = [
+    "test:backend/tests/unit/services/test_sdk_ruleset_vectors.py::test_a_flag_with_a_split_or_a_rule_value_is_remote_while_it_is_active",
+    "test:sdk/js/__tests__/local.test.ts::an unknown key and a remote flag are evaluated by the server",
+    "test:sdk/js/__tests__/client.test.ts::caches a success for 300000 ms by default",
 ]
 
 [[unit]]

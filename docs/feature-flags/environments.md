@@ -141,7 +141,8 @@ error is shown; if the revoke fails, the error says which key is left.
 `GET /api/v1/feature-flags/{flag_id}/environments` lists the flag's settings in each environment,
 and `PUT /api/v1/feature-flags/{flag_id}/environments/{environment}` changes them in one. The body
 takes `is_active`, `rollout_percentage` and `targeting_rules`, each optional: only the fields sent
-change, and `"targeting_rules": null` clears the rules. Anyone signed in can read; changing needs
+change, and `"targeting_rules": null` clears the rules. A string, number or json flag's body also
+takes `split` ([Multi-way flags](multi-way.md)), and `"split": null` removes it. Anyone signed in can read; changing needs
 the permission to change flags: the ADMIN and DEVELOPER roles, and in the full profile anyone whose
 custom role or direct grant gives `feature_flag (update)`. A `PUT` to `production` is the change
 `PUT /api/v1/feature-flags/{flag_id}` makes.

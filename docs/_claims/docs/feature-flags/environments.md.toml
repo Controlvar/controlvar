@@ -260,6 +260,13 @@ text = "The body takes is_active, rollout_percentage and targeting_rules, each o
 by = ["test:backend/tests/integration/api/test_flag_environments_api.py::test_only_the_fields_sent_change_and_null_clears_the_rules"]
 
 [[unit]]
+text = "A string, number or json flag's body also takes split (Multi-way flags), and \"split\": null removes it."
+by = [
+    "test:backend/tests/integration/api/test_flag_environments_api.py::test_a_put_keeps_the_split_and_sets_it_in_its_environment_alone",
+    "test:backend/tests/integration/api/test_flag_split_write_api.py::test_a_staging_split_set_through_the_api_is_served_by_staging_alone",
+]
+
+[[unit]]
 text = "Anyone signed in can read; changing needs the permission to change flags: the ADMIN and DEVELOPER roles, and in the full profile anyone whose custom role or direct grant gives feature_flag (update)."
 by = [
     "test:backend/tests/integration/api/test_flag_environments_api.py::test_the_environments_are_listed_for_every_role",

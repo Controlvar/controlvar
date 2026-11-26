@@ -301,6 +301,13 @@ text = "Flag values"
 by = ["exempt:label"]
 
 [[unit]]
+text = "Who the flag is on for, and the reason the server gives (targeting_rule or rollout), are decided as for any flag: see Multi-way flags."
+by = [
+    "test:backend/tests/unit/services/test_flag_split_serving.py::test_every_answer_has_exactly_the_keys_it_had",
+    "test:backend/tests/unit/services/test_flag_split_serving.py::test_the_exact_answer_for_each_way_a_rule_decides",
+]
+
+[[unit]]
 text = "EvalResult.Value is what the flag serves this user: its off value when Enabled is false, and otherwise its on value, or the value its split or a matched rule's own value gives them (true or false for a boolean flag)."
 by = [
     "test:sdk/go/value_test.go::TestEvalResult_StringValue_ReadsAStringFlag",

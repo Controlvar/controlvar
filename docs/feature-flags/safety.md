@@ -369,7 +369,8 @@ A rollback, automatic or manual, does one of two things, depending on its target
 - **A rollback to 1–100% lowers only the global `rollout_percentage`.** A user who matches no
   targeting rule is bucketed by the new percentage. A user who matches a rule is bucketed by that
   rule's own `rollout_percentage` (100 unless the rule sets one), so the rollback does not change
-  whether that user gets the flag.
+  whether that user gets the flag. Every user the flag stays on for keeps the value they had,
+  from a [split](multi-way.md) or from a rule's own value.
 
 Either way, the flag's active rollout schedules are paused, so a later stage cannot raise the
 percentage again; they stay paused until you resume them.
@@ -377,6 +378,11 @@ percentage again; they stay paused until you resume them.
 So the flag's off value is served to every user after a rollback to `0%`, and after a partial
 rollback to the users it removes, while users matched by a targeting rule keep their rule's
 percentage.
+
+An SDK evaluating locally asks the server about a flag with a split or a rule's own value. A
+rollback of such a flag to `0%` reaches every release at its next ruleset refresh; a rollback to
+1–99% reaches a user it has already cached once that answer expires, 300 s by default, in every
+release (see [Turning a Flag Off](kill-switch.md#local-evaluation-javascript-and-python-beta)).
 
 A partial rollback does not help when the harm is only among users matched by a targeting rule,
 and a flag that serves only rule-matched users (global `0%`) is never rolled back to a partial

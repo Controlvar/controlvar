@@ -269,6 +269,33 @@ by = [
 ]
 
 [[unit]]
+text = "A flag with a split or a rule's own value is one the SDK sends to the server, in every release."
+by = [
+    "test:backend/tests/unit/services/test_sdk_ruleset_vectors.py::test_a_flag_with_a_split_or_a_rule_value_is_remote_while_it_is_active",
+    "test:backend/tests/integration/api/test_ruleset_published_sdk_compat.py::test_the_published_wheel_reads_the_route_and_obeys_both_kill_switches",
+    "test:sdk/js/__tests__/local.test.ts::an unknown key and a remote flag are evaluated by the server",
+    "test:sdk/python/tests/test_local.py::test_an_unknown_key_and_a_remote_flag_go_to_the_server",
+]
+
+[[unit]]
+text = "Turning it off (the switch, or a safety rollback to 0%) makes it a flag the SDK answers locally, so it reaches every release at the next refresh."
+by = [
+    "test:backend/tests/integration/api/test_ruleset_published_sdk_compat.py::test_the_published_wheel_reads_the_route_and_obeys_both_kill_switches",
+    "test:tests/sdk-contract/test_published_ruleset.py::test_the_published_evaluator_meets_its_expectation",
+    "test:sdk/js/__tests__/local.test.ts::turning a value flag off reaches the client at the next refresh: everyone gets the off value",
+    "test:sdk/python/tests/test_local.py::test_turning_a_value_flag_off_reaches_the_client_at_the_next_refresh",
+]
+
+[[unit]]
+text = "Any other change to it (its weights, the rollout percentage, a safety rollback to 1–99%, its rules) reaches a user the SDK has already cached once that answer expires, in every release."
+by = [
+    "test:backend/tests/unit/services/test_sdk_ruleset_vectors.py::test_a_flag_with_a_split_or_a_rule_value_is_remote_while_it_is_active",
+    "test:sdk/js/__tests__/client.test.ts::caches a success for 300000 ms by default",
+    "test:sdk/python/tests/test_client.py::TestGetFeatureFlag::test_cache_expires_after_ttl",
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_every_sdk_but_the_edge_sdk_keeps_an_answer_five_minutes_and_the_edge_sdk_one",
+]
+
+[[unit]]
 text = "A flag it sends to the server (see what the server still evaluates) follows the cache lifetime above."
 by = [
     "test:sdk/js/__tests__/local.test.ts::an unknown key and a remote flag are evaluated by the server",
@@ -375,6 +402,20 @@ text = "A safety rollback changes the flag on the server like any other change, 
 by = [
     "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p8_p9_the_monitor_turns_the_flag_off_once",
     "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_every_sdk_but_the_edge_sdk_keeps_an_answer_five_minutes_and_the_edge_sdk_one",
+]
+
+[[unit]]
+text = "A rollback to 0% turns the flag off, and everyone gets the off value."
+by = [
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_a_rollback_to_0_gives_every_user_of_a_split_the_off_value",
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_a_safety_rollback_serves_the_off_value",
+]
+
+[[unit]]
+text = "A rollback to 1–100% lowers only the global rollout percentage: a user it takes away gets the off value, and a user the flag stays on for keeps the value they had, a split's included."
+by = [
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_a_partial_rollback_lowers_only_the_percentage_of_a_split",
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p4_a_partial_rollback_lowers_only_the_global_rollout",
 ]
 
 [[unit]]

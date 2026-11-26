@@ -294,7 +294,9 @@ created = server.alias(visitor_id, customer_id)  # False: the link was already s
 
 A flag serves its on value to the users it is on for, and its off value to everyone else, and
 to everyone while it is turned off; a string, number or json flag with a split, or a matched
-rule with a value of its own, serves those users that value instead. For a string, number or json flag, read the value
+rule with a value of its own, serves those users that value instead. Who the flag is on for, and
+the `reason` the server gives (`targeting_rule` or `rollout`), are decided as for any flag: see
+[Multi-way flags](../feature-flags/multi-way.md). For a string, number or json flag, read the value
 with the getter of its type: `get_string_value`, `get_number_value` or `get_json_value`.
 
 ```python
@@ -449,8 +451,8 @@ Every request carries `X-API-Key: <key>`, `Content-Type: application/json` and
 | local mode: evaluation counts | `POST /api/v1/tracking/evaluations` (beta) | `{evaluations: [{flag_key, count, enabled_count, window_start, window_end}]}` | `{accepted, errors}` |
 | `report_error` | `POST /api/v1/tracking/errors` | `{error_type, message, feature_flag_key?, experiment_key?, user_id?, stack_trace?, metadata?, timestamp?}` | 201 and the stored report (only the status is read) |
 
-These SDK paths share a per-IP rate-limit ceiling of `SDK_RATE_LIMIT_PER_MINUTE` requests
-(default 6000) on the backend; the SDK honours `Retry-After` on `429` as described above.
+These SDK paths share a rate-limit ceiling per IP address and path of `SDK_RATE_LIMIT_PER_MINUTE`
+requests (default 6000) on the backend; the SDK honours `Retry-After` on `429` as described above.
 
 ---
 
@@ -472,8 +474,11 @@ with ExperimentationClient(api_url, server_key, evaluation="local") as client:
     print(flag.enabled, flag.reason, flag.source)         # source: "local" or "server"
 ```
 
-A value flag's value is answered locally too: its on value when the flag is on for the user, its
-off value otherwise, and its off value to everyone while it is turned off. A flag entry this SDK
+A value flag's value is answered locally too, unless it has a split or a rule with a value of its
+own: its on value when the flag is on for the user, its off value otherwise, and its off value to
+everyone while it is turned off. A flag with a split or a rule's own value is evaluated by the
+server while it is on, and answered locally, its off value to everyone, once it is turned off
+(see [Local evaluation](local-evaluation.md#what-is-evaluated-locally)). A flag entry this SDK
 cannot read (an `evaluation` or `value_type` from a newer server, or a value of the wrong type) is
 evaluated by the server, the rest of the ruleset is still answered locally, and, while the flag is
 active, `status().server_evaluated_flags` lists it.
@@ -485,7 +490,9 @@ ruleset. So a local client of any version keeps the server's answer it cached fo
 flag for up to `cache_ttl_seconds` (5 minutes by default) before it sees the flag off, and while
 the flag exists `get_all_flags` asks the server on every call.
 
-A change made in the dashboard reaches the process at its next successful refresh. While the API
+A change made in the dashboard reaches the process at its next successful refresh. For a flag
+with a split or a rule's own value, a change other than turning it off reaches a user the client
+has already cached once that answer expires, `cache_ttl_seconds` (5 minutes by default). While the API
 is unreachable the last ruleset keeps being served (set `max_stale_seconds` to bound that); a 401
 or 403 on refresh discards it. A client created before `os.fork()` (gunicorn `--preload`) keeps
 working in each child, which starts its own refresh thread and reports only its own evaluations.

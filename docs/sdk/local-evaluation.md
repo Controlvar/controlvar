@@ -171,6 +171,25 @@ Anything else is evaluated by the server, for the flag or for that one evaluatio
   space;
 - a flag key the ruleset does not have yet (a flag created since the last refresh).
 
+**A flag with a split or a rule's own value** ([Multi-way flags](../feature-flags/multi-way.md)).
+Every SDK asks the server about such a flag: no release of either SDK evaluates it locally. Its
+answer from the server has the fields any flag's has, and a `reason` of `targeting_rule` or
+`rollout` for a user it is on for.
+
+- Turning one off (the switch, or a safety rollback to 0%) reaches every release within one
+  refresh: an inactive flag is an entry the SDK answers locally, before any answer it has cached.
+- Any other change (its weights, the rollout percentage, a safety rollback to 1–99%, its rules)
+  reaches a user an SDK has already cached only after the cache lifetime, 300 s by default
+  (`cacheTtlMs` / `cache_ttl_seconds`), in every release.
+- Each user's first evaluation of such a flag in a cache lifetime is a request.
+- A single evaluation is counted once per IP address and flag key, because the user ID is in the
+  query and not in the path, so above about 100 new users a second for one multi-way flag from one
+  IP address the server answers `429`; after one retry the getters return the caller's default.
+- While any such flag is active, a local `getAllFlags` / `get_all_flags` call goes from 0
+  requests to 1. The bulk route of each user ID is a path of its own under the SDK rate limit,
+  6000 requests a minute per IP address and path by default (`SDK_RATE_LIMIT_PER_MINUTE`), so
+  above about 100 bulk calls a second for one user from one IP address the server answers `429`.
+
 Rollout percentages bucket users exactly as the server does (`md5-mod100-v1`: the whole MD5 digest
 of `"{userId}:{flagKey}"` read as a big-endian integer, mod 100). This is **not** the
 `consistentHash` / `consistent_hash` utility the SDKs export.
@@ -179,7 +198,9 @@ of `"{userId}:{flagKey}"` read as a big-endian integer, mod 100). This is **not*
 
 A change made in the dashboard (turning a flag off, a rollout step, a safety rollback) reaches a
 process evaluating locally at its next successful refresh: by default within 33 seconds (the
-30-second interval plus up to 10%) while the API is reachable. How long each client takes, in local evaluation and out of
+30-second interval plus up to 10%) while the API is reachable. For a flag with a split or a
+rule's own value, which the SDK asks the server about, a change other than turning it off follows
+the cache lifetime instead (above). How long each client takes, in local evaluation and out of
 it: [Turning a Flag Off](../feature-flags/kill-switch.md).
 
 While the API is unreachable (errors, timeouts), the SDK keeps serving the last ruleset it received,

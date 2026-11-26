@@ -185,7 +185,9 @@ if _, err := client.GetAssignment(ctx, "exp", user); errors.As(err, &apiErr) && 
 
 `EvalResult.Value` is what the flag serves this user: its off value when `Enabled` is false,
 and otherwise its on value, or the value its split or a matched rule's own value gives them
-(`true` or `false` for a boolean flag). `EvalResult.ValueType` is the flag's
+(`true` or `false` for a boolean flag). Who the flag is on for, and the `reason` the server gives
+(`targeting_rule` or `rollout`), are decided as for any flag: see
+[Multi-way flags](../feature-flags/multi-way.md). `EvalResult.ValueType` is the flag's
 type. Read the value with the method for its type:
 
 ```go
