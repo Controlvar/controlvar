@@ -9,7 +9,8 @@ request with a 500.
 :class:`StorableTextModel` refuses them in every field of a request schema --
 a string, or any string inside a dict or list, keys included -- with a
 validation error, i.e. 422. The message names the field and never the value.
-:func:`storable_text_param` does the same for a path or query parameter.
+:func:`storable_text_param` does the same for a path or query parameter, and
+:func:`storable_text_fields` for named fields of a route's body.
 """
 
 from __future__ import annotations
@@ -17,7 +18,15 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from pydantic import AfterValidator, BaseModel, ValidationInfo, field_validator
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    BeforeValidator,
+    ValidationError,
+    ValidationInfo,
+    field_validator,
+)
+from pydantic_core import InitErrorDetails
 from pydantic_core.core_schema import ValidatorFunctionWrapHandler
 
 #: One character class, so the search is linear and cannot backtrack.
@@ -68,6 +77,47 @@ def storable_text_param(name: str) -> AfterValidator:
         return value
 
     return AfterValidator(_refuse_unstorable)
+
+
+def storable_text_fields(*fields: str) -> BeforeValidator:
+    """A validator refusing NUL and lone surrogates in the named *fields* of a
+    route's body (#2175).
+
+    For a body model that another route shares and must accept unchanged, so
+    the check cannot sit on the model itself; it goes on the parameter of the
+    routes that store the text::
+
+        data: Annotated[SegmentCreate, storable_text_fields("name", "rules")]
+
+    It runs before the model reads the body, so no check of the model sees
+    the text, and it adds nothing to the JSON schema. Each refused field is
+    its own error, at ``["body", <field>]``, the one a field validator raising
+    ``ValueError(unstorable_text_message(field))`` gives; the value is never
+    included. A body that is not an object is left to the model.
+    """
+
+    def _refuse_unstorable(value: Any) -> Any:
+        if not isinstance(value, dict):
+            return value
+        refused = [
+            field for field in fields if contains_unstorable_text(value.get(field))
+        ]
+        if refused:
+            raise ValidationError.from_exception_data(
+                "body",
+                [
+                    InitErrorDetails(
+                        type="value_error",
+                        loc=(field,),
+                        input=None,
+                        ctx={"error": ValueError(unstorable_text_message(field))},
+                    )
+                    for field in refused
+                ],
+            )
+        return value
+
+    return BeforeValidator(_refuse_unstorable)
 
 
 class StorableTextModel(BaseModel):

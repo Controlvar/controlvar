@@ -42,6 +42,7 @@ from backend.app.schemas.segment import (
     BulkSegmentMembershipRequest,
     BulkSegmentMembershipResponse,
     SegmentCreate,
+    SegmentCreateBody,
     SegmentExperimentResponse,
     SegmentMembersAdd,
     SegmentMembersAddResponse,
@@ -51,7 +52,7 @@ from backend.app.schemas.segment import (
     SegmentMembersRemoveResponse,
     SegmentResponse,
     SegmentStatus,
-    SegmentUpdate,
+    SegmentUpdateBody,
 )
 from backend.app.services.audience_service import (
     AudienceService,
@@ -153,7 +154,7 @@ def list_segments(
     tags=["Segments"],
 )
 def create_segment(
-    data: SegmentCreate,
+    data: SegmentCreateBody,
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_active_user),
 ) -> SegmentResponse:
@@ -294,7 +295,7 @@ def get_segment(
 )
 def update_segment(
     segment_id: UUID,
-    data: SegmentUpdate,
+    data: SegmentUpdateBody,
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_active_user),
 ) -> SegmentResponse:
