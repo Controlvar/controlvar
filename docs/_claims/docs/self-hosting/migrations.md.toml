@@ -1805,16 +1805,22 @@ by = [
 ]
 
 [[unit]]
-text = "Results count a metric's events only within its window; nothing sets a window yet."
+text = "Results count a metric's events only within its window, which create and a draft's PUT set (A metric's conversion window)."
 by = [
     "test:backend/tests/integration/api/test_metric_window_results.py::test_every_view_counts_the_window",
-    "test:backend/tests/unit/services/test_metric_window_has_no_writer.py::test_nothing_assigns_the_column",
-    "test:backend/tests/unit/services/test_metric_window_has_no_writer.py::test_no_metric_request_schema_takes_a_window",
+    "test:backend/tests/integration/api/test_metric_window_writes.py::test_create_put_get_list_clone_and_audit_carry_the_window",
 ]
 
 [[unit]]
-text = "The previous release, 0.48.0, runs against this schema unchanged: a metric it creates has no window, and a window stored beside it stays."
+text = "The previous release, 0.48.0, runs against this schema unchanged: a metric it creates has no window."
 by = ["test:backend/tests/integration/database/test_metric_window_migration.py::test_the_previous_release_writes_and_reads_metrics_on_this_schema"]
+
+[[unit]]
+text = "During the rolling upgrade, and after an API-only rollback, a draft saved in an older dashboard, or a PUT through an older API replica, clears the window: a PUT replaces the metrics, and the older release does not send or store the field."
+by = [
+    "test:backend/tests/integration/api/test_metric_window_writes.py::test_a_draft_put_without_the_window_stores_none",
+    "test:backend/tests/unit/services/test_metric_window_writes.py::test_a_put_that_leaves_the_window_out_writes_none",
+]
 
 [[unit]]
 text = "From 0.48.0, this upgrade waits at most 0.5 s for the lock it needs on metrics, behind any session that has read that table and not ended its transaction, a results request among them; t2011_flag_environments and t2012_flag_split, in the same run, have their locks on api_keys and feature_flags by then, so new SDK requests wait with it."

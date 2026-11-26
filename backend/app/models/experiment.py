@@ -439,7 +439,8 @@ class Metric(Base, BaseModel):
     lower_is_better = Column(Boolean, default=False)
     # How many hours after a user's assignment the metric counts that user's
     # events (#1934); NULL counts every event. The results read it
-    # (event_matching.windowed_users); no request can set it yet.
+    # (event_matching.windowed_users); create and a draft's PUT set it
+    # (MetricBase).
     conversion_window_hours = Column(Integer, nullable=True)
 
     # Relationships

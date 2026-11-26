@@ -86,6 +86,7 @@ SITES = {
     ("backend/app/api/deps.py", "get_redis_pool"),
     ("backend/app/api/v1/endpoints/results.py", "_get_cache_service"),
     ("backend/app/api/v1/endpoints/results.py", "invalidate_results_cache"),
+    ("backend/app/api/v1/endpoints/results.py", "_async_cache_client"),
 }
 
 #: Distinctive settings, so a site that ignores one is visible.
@@ -301,6 +302,13 @@ def _drive_results_invalidate() -> None:
     invalidate_results_cache(experiment_id=uuid4(), db=None, current_user=None)
 
 
+def _drive_results_clear() -> None:
+    from backend.app.api.v1.endpoints.results import clear_cached_results
+
+    # The stand-in client cannot scan; the clear is best-effort and says nothing.
+    assert asyncio.run(clear_cached_results(uuid4())) is None
+
+
 #: site -> (driver, which client class it builds)
 DRIVERS: dict[tuple[str, str], tuple[Callable[[], None], str]] = {
     ("backend/app/middleware/rate_limiter.py", "RedisRateLimiter._get_redis"): (
@@ -316,6 +324,10 @@ DRIVERS: dict[tuple[str, str], tuple[Callable[[], None], str]] = {
     ("backend/app/api/v1/endpoints/results.py", "invalidate_results_cache"): (
         _drive_results_invalidate,
         "sync",
+    ),
+    ("backend/app/api/v1/endpoints/results.py", "_async_cache_client"): (
+        _drive_results_clear,
+        "asyncio",
     ),
 }
 
@@ -577,6 +589,12 @@ RETRY_DECIDED_ELSEWHERE = {
         "unchanged (#810): an asyncio client, so a slow connect delays its "
         "own request without holding the event loop, and it is reached only "
         "through get_cache_control when CACHE_ENABLED is on (default off)"
+    ),
+    ("backend/app/api/v1/endpoints/results.py", "_async_cache_client"): (
+        "one attempt and 1 s timeouts, on the event loop (#1934): an asyncio "
+        "client, which the connects fixture here does not count; "
+        "test_the_results_cache_is_cleared_on_the_event_loop_at_most_a_second "
+        "in backend/tests/unit/services/test_metric_window_writes.py counts it"
     ),
 }
 

@@ -1334,6 +1334,7 @@ class ExperimentService:
                 expected_effect=metric.expected_effect,
                 event_value_path=metric.event_value_path,
                 lower_is_better=metric.lower_is_better,
+                conversion_window_hours=metric.conversion_window_hours,
                 experiment_id=new_experiment.id,
             )
             self.db.add(new_metric)
@@ -1668,6 +1669,7 @@ class ExperimentService:
                     "expected_effect": m.expected_effect,
                     "event_value_path": m.event_value_path,
                     "lower_is_better": m.lower_is_better,
+                    "conversion_window_hours": m.conversion_window_hours,
                     "experiment_id": str(m.experiment_id),
                     "created_at": (
                         m.created_at.isoformat()

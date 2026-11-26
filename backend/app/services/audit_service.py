@@ -169,6 +169,7 @@ AUDIT_NAME_ONLY_ROWS: Dict[EntityType, Dict[str, Tuple[str, Tuple[str, ...]]]] =
                 "expected_effect",
                 "event_value_path",
                 "lower_is_better",
+                "conversion_window_hours",
             ),
         ),
     },

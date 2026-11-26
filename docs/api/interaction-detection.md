@@ -20,7 +20,8 @@ The pair route is beta
 `"analysis_status": "beta"` and an `analysis_notice`, and the route is marked
 `x-stability: beta` in the OpenAPI document. Only each experiment's primary metric is
 tested, and only a conversion metric; pairs are tested one at a time, with no correction
-across pairs.
+across pairs. Each experiment's converting users are counted within its primary metric's
+conversion window, when it has one.
 
 An interaction does not mean either experiment is wrong. Each experiment's own result is
 still a valid average over the other's current split; it may change once the other
