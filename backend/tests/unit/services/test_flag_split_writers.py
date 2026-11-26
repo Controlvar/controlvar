@@ -8,12 +8,16 @@
   a promotion request takes neither (it copies them);
 * of what the scan sees, a split is written by a create (the model built from
   the request), by an update through ``FeatureFlagService.update_feature_flag``
-  (the request's field, or the split a promotion into production copies, which
-  only ``_save`` of ``flag_environments.py`` passes), and into staging or
-  development as one of ``flag_environment_service``'s ``SETTING_FIELDS``. What
-  a promotion copies comes from ``effective_settings``, which only the
-  promotion, the check of what an environment will serve and the audit entry
-  call; every writer checks it with ``flag_values.serving_errors`` first;
+  (the request's field, or the split the environment change of production and
+  a promotion into production write, which only ``_save`` of
+  ``flag_environments.py`` passes, and which the update's check counts the
+  rules sent with), and into staging or development as one of
+  ``flag_environment_service``'s ``SETTING_FIELDS``. What a promotion copies
+  comes from ``effective_settings``, which only the promotion, the check of
+  what an environment will serve and the audit entry call; every writer a
+  request reaches checks it with ``flag_values.serving_errors`` first. The
+  live SDK contract's seed writes its two flags through the model, as it
+  writes its other flags;
 * the attribute reads of one are the view of a flag in an environment,
   ``effective_settings``, an environment's response, the update's check, the
   column the ruleset's query loads and the stale-flag hint; ``flag_values``
@@ -209,8 +213,10 @@ ENVIRONMENT_SCHEMAS = "backend/app/schemas/flag_environment.py"
 #: A promotion copies it: ``SETTING_FIELDS``, ``NOT_CONFIGURED`` and
 #: ``effective_settings`` name it, the route passes it to the service beside
 #: the request (which leaves it out, ``_as_requested``), and the service takes
-#: the parameter and assigns it; ``flag_values.serving_errors`` checks a
-#: request's and a promotion's, by name.
+#: the parameter and assigns it, and its check (``_check_sent_values``) counts
+#: the rules sent with it; ``flag_values.serving_errors`` checks a request's
+#: and a promotion's, by name. The live SDK contract's seed builds its two
+#: flags with ``split`` and lists the field among those it puts back.
 #: ``audit_setting`` and ``AUDIT_NAME_ONLY_FIELDS`` name it in an entry, and
 #: ``JSON_FIELDS`` among the columns stored whenever their JSON changes.
 #: ``core/balanced_blocks.py``'s keyword fills a message about an experiment's
@@ -248,6 +254,10 @@ EXPECTED: Dict[str, Dict[str, List[str]]] = {
         "stored_flag": ["keyword argument", "string"],
         MODULE: ["string"] * 3,
     },
+    "backend/scripts/seed_sdk_contract.py": {
+        "seed_multiway_flags": ["keyword argument", "keyword argument"],
+        MODULE: ["string"],
+    },
     ENVIRONMENTS: {
         "FlagInEnvironment.__init__": ["string"],
         MODULE: ["string", "string"],
@@ -255,6 +265,7 @@ EXPECTED: Dict[str, Dict[str, List[str]]] = {
     "backend/app/models/feature_flag.py": {MODULE: ["name assigned"] * 2},
     "backend/app/services/audit_service.py": {MODULE: ["string"]},
     SERVICE: {
+        "_check_sent_values": ["parameter", "string"],
         "FeatureFlagService.update_feature_flag": ["attribute assigned", "parameter"],
         MODULE: ["string"],
     },

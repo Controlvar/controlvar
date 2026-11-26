@@ -35,7 +35,10 @@ from sqlalchemy.orm import Session
 from backend.app.api import deps
 from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.api.segment_rules import refuse_unusable_segments
-from backend.app.api.v1.endpoints.feature_flags import flag_update_record
+from backend.app.api.v1.endpoints.feature_flags import (
+    _values_refused,
+    flag_update_record,
+)
 from backend.app.core.flag_environments import (
     DEFAULT,
     DISPLAY_NAMES,
@@ -70,7 +73,11 @@ from backend.app.schemas.flag_environment import (
     FlagPromotion,
 )
 from backend.app.services.audit_service import AuditService, audit_changes
-from backend.app.services.feature_flag_service import KEEP_SPLIT, FeatureFlagService
+from backend.app.services.feature_flag_service import (
+    KEEP_SPLIT,
+    FeatureFlagService,
+    FlagValuesRefused,
+)
 from backend.app.services.flag_environment_service import (
     FlagEnvironmentService,
     audit_setting,
@@ -202,7 +209,9 @@ def _save(
 
     *flag* is the row :func:`lock_flag` returned, locked until the commit.
     The change and its audit entries are committed together: anything that
-    fails before that saves neither and answers 500.
+    fails before that saves neither and answers 500. A change to production
+    that the flag update refuses saves neither too, and answers the 422 of
+    ``PUT /feature-flags/{id}``.
 
     * Staging and development: one ``feature_flag_environment_update`` entry,
       or one ``feature_flag_promote``.
@@ -263,6 +272,9 @@ def _save(
         return FlagEnvironmentSettings.of(updated_row, None, PRODUCTION)
     except ArchivedFlagError:
         raise _archived_refusal() from None
+    except FlagValuesRefused as refused:
+        # The 422 of ``PUT /feature-flags/{id}``; nothing was written.
+        raise _values_refused(refused) from None
     except Exception as e:
         raise unexpected_failure(
             e,

@@ -83,6 +83,7 @@ by = ["test:backend/tests/unit/core/test_flag_environments.py::test_identity_and
 text = "A string, number or json flag's split, and the values its targeting rules serve, are each environment's, as its rules are."
 by = [
     "test:backend/tests/integration/api/test_flag_split_write_api.py::test_a_staging_split_set_through_the_api_is_served_by_staging_alone",
+    "test:backend/tests/integration/api/test_flag_split_write_api.py::test_a_staging_rule_value_set_through_the_api_is_served_by_staging_alone",
     "test:backend/tests/integration/api/test_flag_environments_api.py::test_a_put_keeps_the_split_and_sets_it_in_its_environment_alone",
 ]
 

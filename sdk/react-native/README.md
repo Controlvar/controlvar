@@ -72,7 +72,8 @@ function Home() {
 ## Flag values
 
 A string, number or json flag serves its on value to the users it is on for, and its off value to
-everyone else. Read the value with `useFlagValue` in a component, or with the client's
+everyone else; a flag with a split, or a matched rule with a value of its own, serves those users
+that value instead. Read the value with `useFlagValue` in a component, or with the client's
 `getStringValue`, `getNumberValue` or `getJsonValue` anywhere else:
 
 ```tsx

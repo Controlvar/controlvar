@@ -719,6 +719,13 @@ _ADDED = {
             r"(?m)^            if split is not KEEP_SPLIT:\n"
             r"                flag\.split = split\n"
         ),
+        # The update's check, which counts the rules with the split it writes.
+        re.compile(r"(?m), split: Any = KEEP_SPLIT$"),
+        re.compile(
+            r"(?m)^        if split is not KEEP_SPLIT:\n"
+            r'            stored\["split"\] = split\n'
+        ),
+        re.compile(r"(?<=_check_sent_values\(flag_data, flag), split(?=\))"),
     ),
     # A promotion's copy, and its audit entry's name for it.
     ("services", "flag_environment_service.py"): (
@@ -730,7 +737,7 @@ _ADDED = {
         ),
     ),
     ("api", "v1", "endpoints", "flag_environments.py"): (
-        re.compile(r"(?m)\bKEEP_SPLIT, (?=FeatureFlagService$)"),
+        re.compile(r"(?m)^    KEEP_SPLIT,\n"),
         re.compile(r'(?m)^            split=changes\.get\("split", KEEP_SPLIT\),\n'),
     ),
     ("services", "audit_service.py"): (re.compile(r'(?m)^        "split",\n'),),

@@ -137,7 +137,9 @@ class FlagValuesRefused(Exception):
         self.errors = errors
 
 
-def _check_sent_values(flag_data: FeatureFlagUpdate, flag: FeatureFlag) -> None:
+def _check_sent_values(
+    flag_data: FeatureFlagUpdate, flag: FeatureFlag, split: Any = KEEP_SPLIT
+) -> None:
     """Raise :class:`FlagValuesRefused` when an update's values do not fit.
 
     ``value_type`` is read-only: sent, it must equal the stored type, compared
@@ -153,9 +155,14 @@ def _check_sent_values(flag_data: FeatureFlagUpdate, flag: FeatureFlag) -> None:
 
     A sent ``split`` and sent ``targeting_rules`` are checked by
     ``flag_values.serving_errors`` against the stored type and the stored split
-    and rules; their places are tuples (``("split", 2, "weight")``). The split
-    a promotion passes beside the request is checked by its route first, with
-    the same function (``flag_environments._refuse_what_cannot_be_served``).
+    and rules; their places are tuples (``("split", 2, "weight")``). The update
+    route locks the row when either is sent, as for a value, and the
+    environment routes always do. *split* is
+    the split the update writes beside the request (``update_feature_flag``'s
+    ``split``): the environment PUT and a promotion into production pass it,
+    and their route checks it first, with the same function
+    (``flag_environments._refuse_what_cannot_be_served``). Sent rules are
+    counted with that split, not the one it replaces.
     """
     fields_set = flag_data.model_fields_set
     stored_type = flag_value_type(flag)
@@ -182,6 +189,8 @@ def _check_sent_values(flag_data: FeatureFlagUpdate, flag: FeatureFlag) -> None:
     }
     if serving:
         stored = {field: getattr(flag, field, None) for field in SERVING_FIELDS}
+        if split is not KEEP_SPLIT:
+            stored["split"] = split
         errors += serving_errors(stored_type, serving, stored)
     if errors:
         raise FlagValuesRefused(errors)
@@ -431,9 +440,9 @@ class FeatureFlagService:
         ``split``, when given, is stored as the flag's split in the same
         transaction, and ``None`` clears it; left out, the stored split is
         kept. A request sets it as ``flag_data.split``, checked by
-        :func:`_check_sent_values`; a promotion into production passes the
-        split it copies here, checked by its route (``flag_environments.py``,
-        #2012).
+        :func:`_check_sent_values`; the environment PUT and a promotion into
+        production pass the split they write here, checked by their route
+        (``flag_environments.py``, #2012), and sent rules are checked with it.
 
         A JSON column is written whenever its JSON changes, even where
         Python's ``==`` holds the two equal (:data:`JSON_FIELDS`).
@@ -454,7 +463,7 @@ class FeatureFlagService:
 
         stored = FeatureFlagStatus(_status_value(flag.status))
         _check_sent_status(flag_data, stored)
-        _check_sent_values(flag_data, flag)
+        _check_sent_values(flag_data, flag, split)
 
         update_data = flag_data.model_dump(
             exclude_unset=True, exclude=READ_ONLY_FIELDS | LIST_ITEM_FIELDS

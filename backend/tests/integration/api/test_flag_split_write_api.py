@@ -21,20 +21,30 @@ from __future__ import annotations
 
 import json
 import sys
+import threading
+import time
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List
 
 import pytest
+from fastapi.testclient import TestClient
+from pydantic_core import PydanticCustomError
 from sqlalchemy import text
 from sqlalchemy.orm import sessionmaker
 
 from backend.app.api import deps
-from backend.app.core.flag_values import SERVED_VALUES_TOO_LARGE
+from backend.app.core.flag_values import (
+    MAX_SERVED_VALUE_BYTES,
+    SERVED_VALUES_TOO_LARGE,
+    served_value_bytes,
+)
 from backend.app.main import app
 from backend.app.models.audit_log import AuditLog
 from backend.app.models.feature_flag import FeatureFlag, FlagEnvironmentSetting
 from backend.app.models.user import UserRole
+from backend.app.services import feature_flag_service
+from backend.app.services.feature_flag_service import FlagValuesRefused
 from backend.tests.integration.api.route_helpers import (
     api_client,
     auth,
@@ -306,7 +316,9 @@ def test_the_responses_carry_the_split_in_every_environment(client, developer):
         client.get(f"{FLAGS}/{flag['id']}", headers=auth(developer)).json()["split"]
         == SPLIT
     )
-    listed = client.get(f"{FLAGS}/", headers=auth(developer)).json()["items"]
+    listed = client.get(
+        f"{FLAGS}/", params={"search": flag["key"]}, headers=auth(developer)
+    ).json()["items"]
     assert [i["split"] for i in listed if i["id"] == flag["id"]] == [SPLIT]
     staging = [
         {**SPLIT[0], "weight": 50},
@@ -378,6 +390,193 @@ def test_a_put_counts_the_stored_split_with_the_rules_values_it_sends(
     assert _stored(fresh, uuid.UUID(flag["id"]))["production"][1] is None
 
 
+#: Ten values of 8000 characters: with a rule value of 5000 they take more than
+#: the 81920 bytes a split and the rules' own values may take together.
+LARGE_SPLIT = [{"value": f"{n}".ljust(8000, "x"), "weight": 10} for n in range(10)]
+LARGE_RULE = {**RULE, "value": "r" * 5000}
+
+
+ENVIRONMENTS = ("production", "staging", "development")
+
+
+def _set_in(client, user, flag_id, environment, body):
+    if environment == "production":
+        response = _put(client, user, flag_id, body)
+    else:
+        response = _put_in(client, user, flag_id, environment, body)
+    assert response.status_code == 200, response.text
+
+
+def _fits(response, fresh, flag_id, environment):
+    """*response* answered 200, and *environment* stores no split and the
+    large rule's value."""
+    assert response.status_code == 200, response.text
+    assert response.json()["split"] is None
+    assert response.json()["targeting_rules"]["value"] == LARGE_RULE["value"]
+    split, rules = _stored(fresh, uuid.UUID(flag_id))[environment]
+    assert (split, rules["value"]) == (None, LARGE_RULE["value"])
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "route", ["put", "environment-put-production", "environment-put-staging"]
+)
+def test_a_change_counts_the_split_it_writes_with_the_rules(
+    client, fresh, developer, route
+):
+    """Clearing a large split while sending rules with a large value of their
+    own fits on every route. The environment PUT to production hands the split
+    to the flag update beside the request; the update counted the rules with
+    the split it was replacing, refused what the route had accepted, and
+    answered 500."""
+    environment = "staging" if route.endswith("staging") else "production"
+    flag = _create(client, developer)
+    _set_in(client, developer, flag["id"], environment, {"split": LARGE_SPLIT})
+    body = {"split": None, "targeting_rules": LARGE_RULE}
+    if route == "put":
+        response = _put(client, developer, flag["id"], body)
+    else:
+        response = _put_in(client, developer, flag["id"], environment, body)
+    _fits(response, fresh, flag["id"], environment)
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "source,target",
+    [(s, t) for s in ENVIRONMENTS for t in ENVIRONMENTS if s != t],
+)
+def test_a_promotion_counts_the_split_it_copies_with_the_rules(
+    client, fresh, developer, source, target
+):
+    """A promotion from an environment with no split and rules with a large
+    value of their own, into one with a large split, fits, from and into every
+    environment. Into production it answered 500, as the environment PUT did."""
+    flag = _create(client, developer)
+    _set_in(client, developer, flag["id"], target, {"split": LARGE_SPLIT})
+    _set_in(client, developer, flag["id"], source, {"targeting_rules": LARGE_RULE})
+    response = _promote(client, developer, flag["id"], source, target)
+    _fits(response, fresh, flag["id"], target)
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("route", ["environment-put", "promote"])
+def test_a_refusal_by_the_update_is_the_422_of_a_flag_put_on_production(
+    client, fresh, developer, monkeypatch, route
+):
+    """Should the update refuse a change to production that the route let
+    through, the answer is the 422 ``PUT /feature-flags/{id}`` gives, and
+    nothing is stored; it was a 500."""
+    flag = _create(client, developer)
+    rules = {**RULE, "value": "pro"}
+    if route == "promote":
+        staged = _put_in(
+            client, developer, flag["id"], "staging", {"targeting_rules": rules}
+        )
+        assert staged.status_code == 200, staged.text
+    refusal = FlagValuesRefused(
+        [
+            (
+                "targeting_rules",
+                PydanticCustomError("served_values_too_large", SERVED_VALUES_TOO_LARGE),
+            )
+        ]
+    )
+
+    def refuse(*args, **kwargs):
+        raise refusal
+
+    monkeypatch.setattr(feature_flag_service, "_check_sent_values", refuse)
+    stable = _put(client, developer, flag["id"], {"targeting_rules": rules})
+    if route == "environment-put":
+        response = _put_in(
+            client, developer, flag["id"], "production", {"targeting_rules": rules}
+        )
+    else:
+        response = _promote(client, developer, flag["id"], "staging", "production")
+    assert _refusals(stable) == [
+        (
+            "served_values_too_large",
+            ["body", "targeting_rules"],
+            SERVED_VALUES_TOO_LARGE,
+        )
+    ]
+    assert (response.status_code, response.json()) == (422, stable.json())
+    assert _stored(fresh, uuid.UUID(flag["id"]))["production"] == (None, None)
+
+
+def _until_it_waits_for_a_lock_or_ends(engine, request, seconds=30.0):
+    """Block until some backend of this database waits on a lock, or the
+    *request* thread has ended, so the order is decided by PostgreSQL."""
+    deadline = time.monotonic() + seconds
+    with engine.connect() as probe:
+        while time.monotonic() < deadline and request.is_alive():
+            waiting = probe.execute(
+                text(
+                    "SELECT count(*) FROM pg_stat_activity "
+                    "WHERE datname = current_database() AND wait_event_type = 'Lock'"
+                )
+            ).scalar()
+            probe.commit()
+            if waiting:
+                return
+            time.sleep(0.05)
+    assert not request.is_alive(), "the PUT neither waited nor ended"
+
+
+@pytest.mark.regression
+def test_a_split_and_rules_sent_at_once_never_store_more_than_the_limit(
+    client, db_session, fresh, developer, monkeypatch
+):
+    """Two PUTs at once, one sending a large split and one rules with a large
+    value of their own: the second waits for the first, is counted with the
+    split it stored, and is refused; the flag never holds more than the two may
+    take together."""
+    flag = _create(client, developer)
+    checked, release = threading.Event(), threading.Event()
+    real_check = feature_flag_service._check_sent_values
+
+    def check_then_hold(flag_data, row, *split):
+        real_check(flag_data, row, *split)
+        if "split" in flag_data.model_fields_set:
+            checked.set()
+            assert release.wait(60)
+
+    monkeypatch.setattr(feature_flag_service, "_check_sent_values", check_then_hold)
+    answers: Dict[str, Any] = {}
+
+    def put(name, body):
+        # A client of its own per request: each runs on its own event loop.
+        answers[name] = TestClient(app, raise_server_exceptions=False).put(
+            f"{FLAGS}/{flag['id']}", json=body, headers=auth(developer)
+        )
+
+    first = threading.Thread(target=put, args=("split", {"split": LARGE_SPLIT}))
+    second = threading.Thread(
+        target=put, args=("rules", {"targeting_rules": LARGE_RULE})
+    )
+    first.start()
+    try:
+        assert checked.wait(60), "the split was never checked"
+        second.start()
+        _until_it_waits_for_a_lock_or_ends(db_session.get_bind(), second)
+    finally:
+        release.set()
+        first.join(60)
+        if second.ident is not None:
+            second.join(60)
+    assert answers["split"].status_code == 200, answers["split"].text
+    assert _refusals(answers["rules"]) == [
+        (
+            "served_values_too_large",
+            ["body", "targeting_rules"],
+            SERVED_VALUES_TOO_LARGE,
+        )
+    ]
+    split, rules = _stored(fresh, uuid.UUID(flag["id"]))["production"]
+    assert (split, rules) == (LARGE_SPLIT, None)
+    assert served_value_bytes(split, rules) <= MAX_SERVED_VALUE_BYTES
+
+
 # ---------------------------------------------------------------------------
 # What is stored is served
 # ---------------------------------------------------------------------------
@@ -440,6 +639,39 @@ def test_a_staging_split_set_through_the_api_is_served_by_staging_alone(
     }
     assert _served(client, keys["production"], flag["key"]) == {
         u: hashing.split_value(u, flag["key"], SPLIT) for u in USERS
+    }
+
+
+def test_a_staging_rule_value_set_through_the_api_is_served_by_staging_alone(
+    client, developer, keys
+):
+    """The values a flag's rules serve are each environment's: the same rule
+    serves its staging value in staging and its production value in
+    production, and a user it does not match gets the on value in both."""
+    flag = _create(
+        client,
+        developer,
+        targeting_rules={**RULE, "value": "production-pro", "rollout_percentage": 100},
+    )
+    body = {
+        "is_active": True,
+        "rollout_percentage": 100,
+        "targeting_rules": {**RULE, "value": "staging-pro", "rollout_percentage": 100},
+    }
+    assert _put_in(client, developer, flag["id"], "staging", body).status_code == 200
+    served = {
+        environment: {
+            plan: {
+                _evaluate(client, keys[environment], flag["key"], u, context)["value"]
+                for u in USERS[:40]
+            }
+            for plan, context in (("pro", PRO), ("free", {"plan": "free"}))
+        }
+        for environment in ("staging", "production")
+    }
+    assert served == {
+        "staging": {"pro": {"staging-pro"}, "free": {"on"}},
+        "production": {"pro": {"production-pro"}, "free": {"on"}},
     }
 
 

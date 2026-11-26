@@ -43,7 +43,12 @@ from backend.app.core.context_limits import (
     check_context_text,
 )
 from backend.app.core.flag_environments import PRODUCTION
-from backend.app.core.flag_values import flag_value_type, serve
+from backend.app.core.flag_values import (
+    SERVING_FIELDS,
+    VALUE_FIELDS,
+    flag_value_type,
+    serve,
+)
 from backend.app.core.logger import unexpected_failure
 from backend.app.core.metrics import record_flag_evaluation
 from backend.app.core.permissions import (
@@ -694,9 +699,11 @@ async def update_feature_flag(
     # Get feature flag. An update that sends a value locks the row until it
     # commits: its values are checked against the stored pair (EMF-5), so the
     # stored pair must be the committed one, and a concurrent update of the
-    # same flag waits instead of storing an equal pair (#1514 review R2).
+    # same flag waits instead of storing an equal pair (#1514 review R2). A
+    # split and rules lock it too: they are counted with the stored split and
+    # rules (#2012), which must likewise be the committed ones.
     query = db.query(FeatureFlag).filter(FeatureFlag.id == flag_id)
-    if feature_flag_in.model_fields_set & {"on_value", "off_value"}:
+    if feature_flag_in.model_fields_set & {*VALUE_FIELDS, *SERVING_FIELDS}:
         query = query.with_for_update()
     flag = query.first()
     if not flag:
