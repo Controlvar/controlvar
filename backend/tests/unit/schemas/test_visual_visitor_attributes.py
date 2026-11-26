@@ -30,6 +30,7 @@ import pytest
 from backend.app.core import targeting_adapter
 from backend.app.core.context_limits import MAX_CONTEXT_BYTES, compact_size
 from backend.app.schemas import visual_tracking
+from backend.app.schemas.targeting_rule import OperatorType, TargetingRules
 from backend.scripts.generate_visual_visitor_vectors import server_matches
 
 pytestmark = pytest.mark.unit
@@ -120,7 +121,7 @@ def test_the_check_names_a_detail_the_server_drops():
     assert dropped == ["web_device", "web_country"]
 
 
-def _negative_operators():
+def _dashboard_negative_operators():
     """The dashboard's operators that match when a value is not something.
     Segment membership is not an attribute condition, so it is not one."""
     segment = {"in_segment", "not_in_segment"}
@@ -131,7 +132,17 @@ def _negative_operators():
     )
 
 
-def _rule(key, operator, value):
+def _native_negative_operators():
+    """The same operators in the native rules shape: the engine's own names."""
+    return sorted(
+        op.value
+        for op in OperatorType
+        if op.name.startswith("NOT_") and op is not OperatorType.NOT_IN_SEGMENT
+    )
+
+
+def _dashboard_rule(key, operator, value):
+    """One condition, as the dashboard's builder stores it."""
     return {
         "logical_operator": "AND",
         "groups": [
@@ -145,36 +156,65 @@ def _rule(key, operator, value):
     }
 
 
-def test_a_detail_left_out_matches_no_negative_operator():
-    operators = _negative_operators()
+def _native_rule(key, operator, value):
+    """One condition in the native ``TargetingRules`` shape."""
+    rule = {
+        "id": f"native-{key}-{operator}",
+        "rule": {
+            "operator": "and",
+            "conditions": [{"attribute": key, "operator": operator, "value": value}],
+        },
+        "rollout_percentage": 100,
+    }
+    TargetingRules(rules=[rule])  # a malformed rule fails here, not as "no match"
+    return {"version": "1.0", "rules": [rule]}
+
+
+#: shape -> (its negative operators, how it writes one condition).
+SHAPES = {
+    "dashboard": (_dashboard_negative_operators, _dashboard_rule),
+    "native": (_native_negative_operators, _native_rule),
+}
+
+
+def test_each_shape_has_the_three_negative_operators():
     vectors = json.loads(
         (CONTRACT / "visual-visitor-vectors.json").read_text(encoding="utf-8")
     )
-    assert set(vectors["negative_operators"]) <= set(operators)
+    assert _dashboard_negative_operators() == sorted(vectors["negative_operators"])
+    assert _native_negative_operators() == ["neq", "not_contains", "not_in"]
+
+
+def _value(operator):
+    return ["zzz"] if operator == "not_in" else "zzz"
+
+
+@pytest.mark.parametrize("shape", sorted(SHAPES))
+def test_a_detail_left_out_matches_no_negative_operator(shape):
+    operators, rule = SHAPES[shape]
     matched = []
     for key in visual_tracking.WEB_DETAIL_RULES:
-        for operator in operators:
-            value = ["zzz"] if operator == "not_in" else "zzz"
-            if server_matches(
-                {}, _rule(key, operator, value), f"absent-{key}-{operator}"
-            ):
-                matched.append(f"absent {key} matched {operator}")
+        for operator in operators():
+            case = f"absent-{shape}-{key}-{operator}"
+            if server_matches({}, rule(key, operator, _value(operator)), case):
+                matched.append(f"{shape}: absent {key} matched {operator}")
     assert matched == []
 
 
-def test_the_same_rules_match_a_detail_that_is_sent():
+@pytest.mark.parametrize("shape", sorted(SHAPES))
+def test_the_same_rules_match_a_detail_that_is_sent(shape):
     """The positive control: each rule above is one the server evaluates."""
+    operators, rule = SHAPES[shape]
     examples = {d["key"]: d["example"] for d in _vocabulary()["details"]}
     missed = []
     for key in visual_tracking.WEB_DETAIL_RULES:
-        for operator in _negative_operators():
-            value = ["zzz"] if operator == "not_in" else "zzz"
-            if not server_matches(
-                {key: examples[key]},
-                _rule(key, operator, value),
-                f"sent-{key}-{operator}",
-            ):
-                missed.append(f"{key}={examples[key]} did not match {operator}")
+        for operator in operators():
+            case = f"sent-{shape}-{key}-{operator}"
+            context = {key: examples[key]}
+            if not server_matches(context, rule(key, operator, _value(operator)), case):
+                missed.append(
+                    f"{shape}: {key}={examples[key]} did not match {operator}"
+                )
     assert missed == []
 
 

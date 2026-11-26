@@ -114,6 +114,8 @@ test.describe("consent()", () => {
     await clearSite(page, context);
     await page.goto(`${SITE}/a/b/editor#controlvar-editor=${newTicket()}`, { waitUntil: "load" });
     expect(await controlvarKeys(page, context), "editor link: before consent").toEqual(["session:controlvar_editor_open"]);
+    await visual(page, "consent");
+    expect(await controlvarKeys(page, context), "editor link: after consent").toEqual(["session:controlvar_editor_open"]);
     (await controlvarKeys(page, context)).forEach((key) => seen.add(key));
 
     expect(Array.from(seen).sort(), "every key seen").toEqual(WRITTEN);
