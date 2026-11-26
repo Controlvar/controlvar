@@ -671,20 +671,22 @@ function FlagInEnvironment({
     // The split (#2012) is sent only when it was changed from what was loaded,
     // as the rules are below, and never to an API that answered none. The
     // rule's own value is part of the rules: an untouched stored one is sent
-    // back exactly as stored, a typed one as the flag's type.
+    // back exactly as stored, a typed one as the flag's type. The stored one
+    // is kept on a page whose API answered no split too (no Serve control is
+    // shown there): the rules' baseline holds it, so leaving it out would send
+    // the rules without it.
     let split: SplitToSend = { kind: 'leave' };
-    let ruleServe: RuleServe = { own: false };
+    let ruleServe: RuleServe =
+      serve.own && !serveTouched && rules && rules.groups.length > 0
+        ? { own: true, value: storedRuleValue(stored) }
+        : { own: false };
     if (canChange && isValueFlagType(type) && loadedSplit !== undefined) {
       split = splitToSend(type, splitRows, loadedSplit, splitTouched);
       let ruleValueError: string | null = null;
-      if (serve.own && rules && rules.groups.length > 0) {
-        if (!serveTouched) {
-          ruleServe = { own: true, value: storedRuleValue(stored) };
-        } else {
-          const parsed = parseValue(type, 'value', serve.text);
-          if (parsed.ok) ruleServe = { own: true, value: parsed.value };
-          else ruleValueError = parsed.message;
-        }
+      if (serve.own && serveTouched && rules && rules.groups.length > 0) {
+        const parsed = parseValue(type, 'value', serve.text);
+        if (parsed.ok) ruleServe = { own: true, value: parsed.value };
+        else ruleValueError = parsed.message;
       }
       const splitErrorsNow = split.kind === 'refused' ? split.errors : { rows: {} };
       if (hasSplitErrors(splitErrorsNow) || ruleValueError) {

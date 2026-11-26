@@ -13,15 +13,20 @@
  *   - a save sends `split` only when the split was changed: never for a save
  *     of the rollout, the rules or a value, never from a page whose API
  *     answered no `split`, and `null` only after the user removed it;
+ *   - a split's values are sent as the flag's type;
  *   - the rule's Serve control sends its value as the flag's type, and keeps a
- *     stored value, sending no rules when the rule was not touched;
+ *     stored value, sending no rules when the rule was not touched, also on a
+ *     page whose API answered no `split`;
  *   - a long value shows in a bounded, labelled preview;
  *   - axe finds nothing on the editor empty, refused and valid, and on the
  *     read-only view.
  *
  * The mocked API keeps the flag in a `world` that a PUT changes, and every
- * environment test reads it back: the environment on screen changed, and the
- * other two did not.
+ * test whose save reaches the API reads it back (`expectOnlyChanged`,
+ * `expectRefusedAt`): each PUT went to the route of the environment on
+ * screen, that environment changed (or, when refused, nothing did), and the
+ * other two did not. A save the page refuses itself sends nothing (`puts` is
+ * empty).
  */
 import React from 'react';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
@@ -238,6 +243,29 @@ async function saved() {
 const lastPut = () => puts[puts.length - 1];
 const refusal = (detail: unknown[]) => new ApiError({ status: 422, detail, requestId: 'r-9' });
 
+const ENVS: Env[] = ['production', 'staging', 'development'];
+/** The one route a save in each environment takes. */
+const SAVE_ROUTE: Record<Env, string> = {
+  production: 'PUT /api/v1/feature-flags/flag-1',
+  staging: 'PUT /api/v1/feature-flags/flag-1/environments/staging',
+  development: 'PUT /api/v1/feature-flags/flag-1/environments/development',
+};
+/** The three environments as the mocked API holds them (a PUT replaces an entry, never changes it). */
+const held = (): Record<Env, Json> => ({ production: world.flag, staging: world.staging, development: world.development });
+
+/**
+ * The read-back after a test's saves: every PUT went to the route of `env`,
+ * `env` now holds `changed`, and the other two environments are exactly as
+ * they were `before`.
+ */
+function expectOnlyChanged(env: Env, before: Record<Env, Json>, changed: Json) {
+  expect(puts.length).toBeGreaterThan(0);
+  expect(puts.map((p) => p.route)).toEqual(puts.map(() => SAVE_ROUTE[env]));
+  const now = held();
+  expect(now[env]).toMatchObject(changed);
+  for (const other of ENVS.filter((e) => e !== env)) expect(now[other]).toEqual(before[other]);
+}
+
 /** axe over the page's root, as the other flag page tests run it (contrast is not computed in jsdom). */
 async function axeViolations(): Promise<string[]> {
   const root = document.getElementById('__next') as HTMLElement;
@@ -254,6 +282,7 @@ beforeEach(() => {
 
 it("the mocks are the API's shapes, and so are the bodies the page sends", async () => {
   install();
+  const before = held();
   expect(shapeErrors('FeatureFlagRead', flagRead())).toEqual([]);
   expect(shapeErrors('FlagEnvironmentSettings', settings('staging'))).toEqual([]);
   expect(shapeErrors('FlagEnvironmentSettings', productionSettings(flagRead()))).toEqual([]);
@@ -264,6 +293,13 @@ it("the mocks are the API's shapes, and so are the bodies the page sends", async
   await save();
   await saved();
   expect(shapeErrors('FlagEnvironmentUpdate', lastPut().body)).toEqual([]);
+  expectOnlyChanged('staging', before, {
+    split: [
+      { value: 'red', weight: 60 },
+      { value: 'green', weight: 20 },
+      { value: 'blue', weight: 20 },
+    ],
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -383,30 +419,36 @@ describe('weights must add up to 100 to save', () => {
 describe('a save sends the split only when it was changed', () => {
   it.each(['production', 'staging', 'development'] as const)('in %s, a save of the rollout alone carries no split', async (env) => {
     install({ development: settings('development') });
+    const before = held();
     await openIn(env);
     await setSlider(61);
     await save();
     await saved();
     expect(lastPut().body).toEqual({ rollout_percentage: 61 });
     expect('split' in lastPut().body).toBe(false);
+    expectOnlyChanged(env, before, { rollout_percentage: 61 });
   });
 
   it.each(['production', 'staging', 'development'] as const)('in %s, a save of the rules alone carries no split', async (env) => {
     install({ development: settings('development') });
+    const before = held();
     await openIn(env);
     fireEvent.change(screen.getByDisplayValue('pro'), { target: { value: 'team' } });
     await save();
     await saved();
     expect(Object.keys(lastPut().body).sort()).toEqual(['rollout_percentage', 'targeting_rules']);
+    expectOnlyChanged(env, before, { targeting_rules: { groups: [{ conditions: [{ value: 'team' }] }] } });
   });
 
   it('in Production, a save of the on value carries no split', async () => {
     install();
+    const before = held();
     await openIn('production');
     type(screen.getByRole('textbox', { name: 'On value' }), 'Buy');
     await save();
     await saved();
     expect(Object.keys(lastPut().body).sort()).toEqual(['on_value', 'rollout_percentage']);
+    expectOnlyChanged('production', before, { on_value: 'Buy', split: SPLIT });
   });
 
   it.each(['production', 'staging'] as const)(
@@ -415,6 +457,7 @@ describe('a save sends the split only when it was changed', () => {
       const { split: _p, ...oldFlag } = flagRead();
       const { split: _s, ...oldStaging } = settings('staging');
       install({ flag: oldFlag, staging: oldStaging });
+      const before = held();
       await openIn(env);
       expect(screen.queryByTestId('flag-split-section')).toBeNull();
       expect(screen.queryByTestId('rule-serve')).toBeNull();
@@ -422,6 +465,37 @@ describe('a save sends the split only when it was changed', () => {
       await save();
       await saved();
       expect(lastPut().body).toEqual({ rollout_percentage: 62 });
+      expectOnlyChanged(env, before, { rollout_percentage: 62 });
+    },
+  );
+
+  // An API older than the split answers none, and shows no Serve control, but
+  // it may hold rules with a value of their own (written by a newer one, then
+  // rolled back). A save of anything else must not erase it.
+  it.each(['production', 'staging'] as const)(
+    'in %s, a page whose API answered no split keeps a stored rule value',
+    async (env) => {
+      const stored = { ...RULES, value: 'pro-copy' };
+      const { split: _p, ...oldFlag } = flagRead({ targeting_rules: stored });
+      const { split: _s, ...oldStaging } = settings('staging', { targeting_rules: stored });
+      install({ flag: oldFlag, staging: oldStaging });
+      const before = held();
+      await openIn(env);
+      expect(screen.queryByTestId('rule-serve')).toBeNull();
+      await setSlider(63);
+      await save();
+      await saved();
+      expect(lastPut().body).toEqual({ rollout_percentage: 63 });
+      // A change of a condition sends the rules with the stored value.
+      fireEvent.change(screen.getByDisplayValue('pro'), { target: { value: 'team' } });
+      await save();
+      await waitFor(() => expect(puts).toHaveLength(2));
+      expect((lastPut().body.targeting_rules as Json).value).toBe('pro-copy');
+      expect('split' in lastPut().body).toBe(false);
+      expectOnlyChanged(env, before, {
+        rollout_percentage: 63,
+        targeting_rules: { value: 'pro-copy', groups: [{ conditions: [{ value: 'team' }] }] },
+      });
     },
   );
 
@@ -429,6 +503,7 @@ describe('a save sends the split only when it was changed', () => {
     'in %s, removing the split sends null, and only then',
     async (env) => {
       install({ development: settings('development') });
+      const before = held();
       await openIn(env);
       fireEvent.click(screen.getByRole('button', { name: 'Remove the split' }));
       expect(screen.getByRole('button', { name: 'Add a split' })).toHaveFocus();
@@ -436,21 +511,25 @@ describe('a save sends the split only when it was changed', () => {
       await save();
       await saved();
       expect(lastPut().body).toEqual({ rollout_percentage: env === 'production' ? 50 : 40, split: null });
+      expectOnlyChanged(env, before, { split: null });
     },
   );
 
   it('a weight changed and changed back sends no split', async () => {
     install();
+    const before = held();
     await openIn('production');
     type(weightInput(1), '50');
     type(weightInput(1), '34');
     await save();
     await saved();
     expect(lastPut().body).toEqual({ rollout_percentage: 50 });
+    expectOnlyChanged('production', before, { rollout_percentage: 50, split: SPLIT });
   });
 
   it('"Keep the stored split" after removing it sends nothing of the split', async () => {
     install();
+    const before = held();
     await openIn('production');
     fireEvent.click(screen.getByRole('button', { name: 'Remove the split' }));
     fireEvent.click(screen.getByRole('button', { name: 'Keep the stored split' }));
@@ -458,7 +537,72 @@ describe('a save sends the split only when it was changed', () => {
     await save();
     await saved();
     expect(lastPut().body).toEqual({ rollout_percentage: 50 });
+    expectOnlyChanged('production', before, { rollout_percentage: 50, split: SPLIT });
   });
+});
+
+// ---------------------------------------------------------------------------
+// A split's values are sent as the flag's type
+// ---------------------------------------------------------------------------
+
+describe("a split's values are sent as the flag's type", () => {
+  it.each(['production', 'staging'] as const)(
+    'in %s, a number flag sends numbers, and 1 and 1.0 are one value, refused at the later',
+    async (env) => {
+      install({
+        flag: flagRead({ value_type: 'number', on_value: 1, off_value: 0, split: null }),
+        staging: settings('staging', { split: null }),
+      });
+      const before = held();
+      await openIn(env);
+      fireEvent.click(screen.getByRole('button', { name: 'Add a split' }));
+      type(valueInput(1), '1');
+      type(valueInput(2), '1.0');
+      type(valueInput(3), '3');
+      await save();
+      expect(screen.getByTestId('split-value-1-error')).toHaveTextContent(VALUES_EQUAL_MESSAGE);
+      expect(puts).toEqual([]);
+      type(valueInput(2), '2');
+      await save();
+      await saved();
+      const sent = [
+        { value: 1, weight: 34 },
+        { value: 2, weight: 33 },
+        { value: 3, weight: 33 },
+      ];
+      expect(lastPut().body.split).toEqual(sent);
+      expectOnlyChanged(env, before, { split: sent });
+    },
+  );
+
+  it.each(['production', 'staging'] as const)(
+    'in %s, a json flag sends JSON, never its text, and {"n": 1} and {"n": 1.0} are one value',
+    async (env) => {
+      install({
+        flag: flagRead({ value_type: 'json', on_value: { a: 1 }, off_value: { a: 0 }, split: null }),
+        staging: settings('staging', { split: null }),
+      });
+      const before = held();
+      await openIn(env);
+      fireEvent.click(screen.getByRole('button', { name: 'Add a split' }));
+      type(valueInput(1), '{"n": 1}');
+      type(valueInput(2), '{"n": 1.0}');
+      type(valueInput(3), '{"n": 3}');
+      await save();
+      expect(screen.getByTestId('split-value-1-error')).toHaveTextContent(VALUES_EQUAL_MESSAGE);
+      expect(puts).toEqual([]);
+      type(valueInput(2), '["gold", true]');
+      await save();
+      await saved();
+      const sent = [
+        { value: { n: 1 }, weight: 34 },
+        { value: ['gold', true], weight: 33 },
+        { value: { n: 3 }, weight: 33 },
+      ];
+      expect(lastPut().body.split).toEqual(sent);
+      expectOnlyChanged(env, before, { split: sent });
+    },
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -518,6 +662,7 @@ describe('editing the table', () => {
 
   it('a save of new weights sends the whole split, in order, and shows what the API answered', async () => {
     install();
+    const before = held();
     await openIn('production');
     type(weightInput(1), '50');
     type(weightInput(2), '25');
@@ -534,6 +679,13 @@ describe('editing the table', () => {
     });
     expect(weightInput(1)).toHaveValue('50');
     expect(screen.queryByTestId('split-impact')).toBeNull();
+    expectOnlyChanged('production', before, {
+      split: [
+        { value: 'red', weight: 50 },
+        { value: 'green', weight: 25 },
+        { value: 'blue', weight: 25 },
+      ],
+    });
   });
 });
 
@@ -543,7 +695,8 @@ describe('editing the table', () => {
 
 describe("the API's refusals, each at its field", () => {
   function refuseWith(detail: unknown[]): Route[] {
-    const handler = () => {
+    const handler = (p: string, opts: ApiFetchOptions) => {
+      puts.push({ route: `PUT ${p}`, body: opts.json as Json });
       throw refusal(detail);
     };
     return [
@@ -557,10 +710,16 @@ describe("the API's refusals, each at its field", () => {
     type(weightInput(3), '20');
     await save();
   }
+  /** The refused save went to the route of `env` alone, and no environment changed. */
+  function expectRefusedAt(env: Env, before: Record<Env, Json>) {
+    expect(puts.map((p) => p.route)).toEqual([SAVE_ROUTE[env]]);
+    expect(held()).toEqual(before);
+  }
 
   it.each(['production', 'staging'] as const)('in %s, ["body","split"] is at the Total and the first weight takes focus', async (env) => {
     const msg = "A split's values and the rules' own values can be at most 81920 bytes together in one environment.";
     install({}, refuseWith([{ loc: ['body', 'split'], msg, type: 'served_values_too_large' }]));
+    const before = held();
     await openIn(env);
     await changeAndSave();
     expect(await screen.findByTestId('split-total-error')).toHaveTextContent(msg);
@@ -568,6 +727,7 @@ describe("the API's refusals, each at its field", () => {
     const summary = screen.getByTestId('split-error-summary');
     expect(within(summary).getByRole('link')).toHaveTextContent(msg);
     expect(valueInput(1)).toHaveFocus();
+    expectRefusedAt(env, before);
   });
 
   it.each(['production', 'staging'] as const)('in %s, a weight and a value are at their rows, aria-invalid and described', async (env) => {
@@ -578,6 +738,7 @@ describe("the API's refusals, each at its field", () => {
         { loc: ['body', 'split', 2, 'value'], msg: VALUES_EQUAL_MESSAGE, type: 'split_values_equal' },
       ]),
     );
+    const before = held();
     await openIn(env);
     await changeAndSave();
     await waitFor(() => expect(weightInput(2)).toHaveAttribute('aria-invalid', 'true'));
@@ -590,11 +751,13 @@ describe("the API's refusals, each at its field", () => {
     expect(weightInput(2)).toHaveFocus();
     fireEvent.click(links[1]);
     expect(valueInput(3)).toHaveFocus();
+    expectRefusedAt(env, before);
   });
 
   it("a refusal of the rule's own value is at the Serve control", async () => {
     const msg = 'Value error, value larger than 8192 bytes';
     install({}, refuseWith([{ loc: ['body', 'targeting_rules'], msg, type: 'value_error' }]));
+    const before = held();
     await openIn('production');
     fireEvent.change(screen.getByLabelText('Users these rules match get'), { target: { value: 'own' } });
     type(screen.getByLabelText('Their value'), 'pro copy');
@@ -605,7 +768,31 @@ describe("the API's refusals, each at its field", () => {
     expect(input).toHaveFocus();
     expect(screen.queryByTestId('targeting-save-error')).toBeNull();
     expect(within(screen.getByTestId('split-error-summary')).getByRole('link')).toHaveAttribute('href', '#rule-serve-value');
+    expectRefusedAt('production', before);
   });
+
+  it.each(['production', 'staging'] as const)(
+    "in %s, an API that answered no split and refuses the rule's value as an unknown key: shown at the rules, nothing erased",
+    async (env) => {
+      const stored = { ...RULES, value: 'pro-copy' };
+      const { split: _p, ...oldFlag } = flagRead({ targeting_rules: stored });
+      const { split: _s, ...oldStaging } = settings('staging', { targeting_rules: stored });
+      const msg = 'Value error, targeting rules: unknown key';
+      install(
+        { flag: oldFlag, staging: oldStaging },
+        refuseWith([{ loc: ['body', 'targeting_rules'], msg, type: 'value_error' }]),
+      );
+      const before = held();
+      await openIn(env);
+      fireEvent.change(screen.getByDisplayValue('pro'), { target: { value: 'team' } });
+      await save();
+      const alert = await screen.findByTestId('targeting-save-error');
+      expect(alert).toHaveTextContent('The rules were not accepted:');
+      expect(alert).toHaveTextContent('unknown key');
+      expect((lastPut().body.targeting_rules as Json).value).toBe('pro-copy');
+      expectRefusedAt(env, before);
+    },
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -619,6 +806,7 @@ describe("the rule's Serve control", () => {
     ['json', { on_value: { a: 1 }, off_value: { a: 0 }, split: null }, '{"tier": "gold"}', { tier: 'gold' }],
   ])('a %s flag sends the value typed as its type', async (valueType, overrides, text, sent) => {
     install({ flag: flagRead({ value_type: valueType, ...overrides }) });
+    const before = held();
     await openIn('production');
     const select = screen.getByLabelText('Users these rules match get') as HTMLSelectElement;
     expect(select.tagName).toBe('SELECT');
@@ -635,6 +823,7 @@ describe("the rule's Serve control", () => {
     expect(typeof rules.value).toBe(typeof sent);
     expect(rules.groups).toEqual(RULES.groups);
     expect('split' in lastPut().body).toBe(false);
+    expectOnlyChanged('production', before, { targeting_rules: { value: sent } });
   });
 
   it('a number that is not one is refused at the field, and nothing is sent', async () => {
@@ -660,6 +849,7 @@ describe("the rule's Serve control", () => {
     async (env) => {
       const stored = { ...RULES, value: 'pro-copy' };
       install({ flag: flagRead({ targeting_rules: stored }), staging: settings('staging', { targeting_rules: stored }) });
+      const before = held();
       await openIn(env);
       expect(screen.getByLabelText('Users these rules match get')).toHaveValue('own');
       expect(screen.getByLabelText('Their value')).toHaveValue('pro-copy');
@@ -672,16 +862,22 @@ describe("the rule's Serve control", () => {
       await save();
       await waitFor(() => expect(puts).toHaveLength(2));
       expect((lastPut().body.targeting_rules as Json).value).toBe('pro-copy');
+      expectOnlyChanged(env, before, {
+        rollout_percentage: 70,
+        targeting_rules: { value: 'pro-copy', groups: [{ conditions: [{ value: 'team' }] }] },
+      });
     },
   );
 
   it('choosing the default sends the rules without the value', async () => {
     install({ flag: flagRead({ targeting_rules: { ...RULES, value: 'pro-copy' } }) });
+    const before = held();
     await openIn('production');
     fireEvent.change(screen.getByLabelText('Users these rules match get'), { target: { value: 'default' } });
     await save();
     await saved();
     expect(lastPut().body.targeting_rules).toEqual(RULES);
+    expectOnlyChanged('production', before, { targeting_rules: RULES });
   });
 
   it('a stored value of another type leaves the rules read-only', async () => {

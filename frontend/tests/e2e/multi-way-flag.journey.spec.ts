@@ -47,6 +47,22 @@ async function focused(page: Page): Promise<string> {
   });
 }
 
+/**
+ * Press Tab until `testId` has focus, at most `most` times, and answer the
+ * stops passed on the way. Focus never falls back to the page on the way.
+ */
+async function tabTo(page: Page, testId: string, most = 30): Promise<string[]> {
+  const passed: string[] = [];
+  for (let n = 1; n <= most; n += 1) {
+    await page.keyboard.press("Tab");
+    const now = await focused(page);
+    if (now === testId) return passed;
+    expect(now, `Tab ${n} on the way to ${testId}`).not.toBe("body");
+    passed.push(now);
+  }
+  throw new Error(`${testId} not reached in ${most} presses of Tab; passed: ${passed.join(", ")}`);
+}
+
 test.describe("Journey: a flag with a split of three values", () => {
   test.describe.configure({ mode: "serial" });
 
@@ -226,7 +242,13 @@ test.describe("Journey: a flag with a split of three values", () => {
     }
     await expect(page.getByTestId("split-total-status")).toHaveText("Total 90%: 10% more needed");
 
-    await page.getByTestId("save-flag").focus();
+    // On to Save by Tab: the table's own buttons, then the rest of the page.
+    expect(await focused(page)).toBe("split-add-value");
+    const toSave = await tabTo(page, "save-flag");
+    expect(toSave.slice(0, 2), "after Add value: Spread evenly, Remove the split").toEqual([
+      "split-spread",
+      "split-remove-split",
+    ]);
     await page.keyboard.press("Enter");
     await expect(page.getByTestId("split-total-error")).toHaveText("Weights must add up to 100; they add up to 90.");
     expect(await focused(page), "the refusal moves focus to the first weight").toBe("split-weight-0");
@@ -243,7 +265,11 @@ test.describe("Journey: a flag with a split of three values", () => {
     await page.keyboard.press("Tab");
     await expect(page.getByTestId("split-total-status")).toHaveText("Total 100%");
 
-    await page.getByTestId("save-flag").focus();
+    expect(await focused(page)).toBe("split-remove-2");
+    expect(await tabTo(page, "save-flag"), "the same stops to Save as before").toEqual([
+      "split-add-value",
+      ...toSave,
+    ]);
     await page.keyboard.press("Enter");
     await expect(page.getByTestId("save-success")).toBeVisible();
     expect(await storedSplit(page, id)).toEqual([

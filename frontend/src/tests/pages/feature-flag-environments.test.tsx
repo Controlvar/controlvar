@@ -579,9 +579,10 @@ describe('a save goes to the route of the environment on screen', () => {
     const body = bodyOf('PUT /api/v1/feature-flags/flag-1/environments/staging');
     expect(body).toEqual({ rollout_percentage: 40, split: SPLIT_AFTER });
     expect(shapeErrors('FlagEnvironmentUpdate', body)).toEqual([]);
-    // The target changed; Production was not written at all.
+    // The target changed; Production and Development were not written at all.
     expect(screen.getByLabelText('Weight of value 1 (%)')).toHaveValue('50');
     expect(callsTo('PUT /api/v1/feature-flags/flag-1')).toBe(0);
+    expect(callsTo('PUT /api/v1/feature-flags/flag-1/environments/development')).toBe(0);
     expect(calls().filter((c) => /\/(enable|disable)$/.test(c))).toEqual([]);
   });
 
