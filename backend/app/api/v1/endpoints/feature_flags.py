@@ -1206,12 +1206,22 @@ def _parse_context_param(context: Optional[str]) -> Optional[Dict[str, Any]]:
     return parsed
 
 
+#: Longest user id an evaluation accepts: raw_metrics.user_id is String(255).
+USER_ID_MAX_LENGTH = 255
+
+
 class FlagEvaluationRequest(BaseModel):
     """Body for ``POST /feature-flags/evaluate/{flag_key}``."""
 
-    user_id: str = Field(
-        ..., min_length=1, description="ID of the user to evaluate the flag for"
-    )
+    user_id: Annotated[
+        str,
+        Field(
+            min_length=1,
+            max_length=USER_ID_MAX_LENGTH,
+            description="ID of the user to evaluate the flag for",
+        ),
+        storable_text_param("user_id"),
+    ]
     context: Optional[Dict[str, Any]] = Field(
         None, description="Targeting context (user/device/app attributes)"
     )
@@ -1313,7 +1323,14 @@ async def evaluate_feature_flag(
         Path(description="The key of the feature flag to evaluate"),
         storable_text_param("flag_key"),
     ],
-    user_id: str = Query(..., description="ID of the user to evaluate the flag for"),
+    user_id: Annotated[
+        str,
+        Query(
+            max_length=USER_ID_MAX_LENGTH,
+            description="ID of the user to evaluate the flag for",
+        ),
+        storable_text_param("user_id"),
+    ],
     context: Optional[str] = Query(None, description=CONTEXT_QUERY_DESCRIPTION),
     db: Session = Depends(deps.get_db),
     api_key_info: Dict[str, Any] = Depends(deps.get_api_key),
@@ -1483,7 +1500,10 @@ async def get_user_flags(
     http_request: Request,
     user_id: Annotated[
         str,
-        Path(description="ID of the user to get flags for"),
+        Path(
+            max_length=USER_ID_MAX_LENGTH,
+            description="ID of the user to get flags for",
+        ),
         storable_text_param("user_id"),
     ],
     context: Optional[str] = Query(None, description=CONTEXT_QUERY_DESCRIPTION),

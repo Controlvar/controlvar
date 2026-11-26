@@ -22,6 +22,10 @@ from pydantic import (
 from pydantic_core import PydanticCustomError
 
 from backend.app.api.datetime_bounds import storable_offset
+from backend.app.schemas.storable_text import (
+    contains_unstorable_text,
+    unstorable_text_message,
+)
 
 #: The largest ``stage_order`` a request may set. A schedule has a handful of
 #: stages (the documented example has three, and their target percentages run
@@ -113,6 +117,19 @@ def _check_schedule_dates(
         return
     if _as_utc(end_date) <= _as_utc(start_date):
         raise ValueError(END_DATE_AFTER_START)
+
+
+def _refuse_unstorable_text(value: Any, info: ValidationInfo) -> Any:
+    """Refuse NUL and unpaired surrogates anywhere in a request field's value,
+    keys included: the database cannot store them (#2181). A name or a
+    description answered 400 with the database driver's words, and
+    ``config_data`` and ``trigger_configuration`` 500. Called from a
+    ``mode="before"`` validator of each request model below, so no other check
+    of the field reads the value first; the message names the field, never the
+    value. Not on the bases, which also describe the responses."""
+    if contains_unstorable_text(value):
+        raise ValueError(unstorable_text_message(info.field_name))
+    return value
 
 
 class TriggerType(str, Enum):
@@ -224,6 +241,12 @@ class RolloutStageCreate(RolloutStageBase):
         """``duration``, when present, is a number of hours from 0 to 8760."""
         return _check_duration(value)
 
+    @field_validator("name", "description", "trigger_configuration", mode="before")
+    @classmethod
+    def refuse_unstorable_text(cls, value: Any, info: ValidationInfo) -> Any:
+        """A stage's text the database cannot store answers 422 at the field."""
+        return _refuse_unstorable_text(value, info)
+
 
 def _refuse_null(value: Any, info: ValidationInfo) -> Any:
     """Refuse an explicit ``null`` for a field that has no "cleared" state.
@@ -280,6 +303,12 @@ class RolloutStageUpdate(BaseModel):
     ) -> Optional[Dict[str, Any]]:
         """``duration``, when present, is a number of hours from 0 to 8760."""
         return _check_duration(value)
+
+    @field_validator("name", "description", "trigger_configuration", mode="before")
+    @classmethod
+    def refuse_unstorable_text(cls, value: Any, info: ValidationInfo) -> Any:
+        """As on create."""
+        return _refuse_unstorable_text(value, info)
 
 
 class RolloutStageResponse(RolloutStageBase):
@@ -378,6 +407,13 @@ class RolloutScheduleCreate(RolloutScheduleBase):
         ..., min_length=1, description="Rollout stages"
     )
 
+    @field_validator("name", "description", "config_data", mode="before")
+    @classmethod
+    def refuse_unstorable_text(cls, value: Any, info: ValidationInfo) -> Any:
+        """Text the database cannot store answers 422 at the field; a stage's
+        is answered at its place in the list."""
+        return _refuse_unstorable_text(value, info)
+
     @field_validator("start_date", "end_date")
     @classmethod
     def take_unzoned_as_utc(cls, value: Optional[datetime]) -> Optional[datetime]:
@@ -468,6 +504,12 @@ class RolloutScheduleUpdate(BaseModel):
     _refuse_null_required = field_validator(
         "name", "max_percentage", "status", mode="before"
     )(_refuse_null)
+
+    @field_validator("name", "description", "config_data", mode="before")
+    @classmethod
+    def refuse_unstorable_text(cls, value: Any, info: ValidationInfo) -> Any:
+        """As on create."""
+        return _refuse_unstorable_text(value, info)
 
     @field_validator("start_date", "end_date")
     @classmethod
