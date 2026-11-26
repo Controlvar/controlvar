@@ -27,12 +27,19 @@ pytestmark = [pytest.mark.unit, pytest.mark.regression]
 
 REVISION = "t1934_metric_window"
 
-#: What answers ``500``, however the sentence around it goes.
-FAILING = "the experiment list, to reading, creating, changing, pausing or cloning an experiment, and to its results"
+#: What answers ``500``, however the sentence around it goes: computing the
+#: results, not reading an answer the results cache holds (``CACHED``).
+FAILING = "the experiment list, to reading, creating, changing, pausing or cloning an experiment, and to computing its results"
 #: The same list where the sentence says "... answer `500` too".
 FAILING_TOO = (
     "the experiment list, reading, creating, changing, pausing or cloning an "
-    "experiment, and its results answer `500` too"
+    "experiment, and computing its results answer `500` too"
+)
+#: What the results route still serves.
+CACHED = (
+    "`GET /api/v1/results/{experiment_id}` still serves an answer it cached "
+    "before the downgrade until it expires: 5 minutes for a running "
+    "experiment, 24 hours otherwise."
 )
 #: And what is still answered.
 STILL = "ssignment, event tracking, flag evaluation and the ruleset are still answered"
@@ -67,6 +74,7 @@ def _paragraph(path, anchor: str) -> str:
         "the release still serving answers `500` to " + FAILING,
         "until the API is rolled back",
         "A" + STILL,
+        CACHED,
         "waits at most 0.5 s for `metrics`",
     ],
 )
@@ -82,6 +90,7 @@ def test_the_runbooks_section_says_what_an_operator_must_know(said):
         "this release answers `500` to " + FAILING,
         "until the API is rolled back",
         "A" + STILL,
+        CACHED,
         "waits at most 0.5 s",
         "This revision's own `down_revision` is `t2012_flag_split`",
     ],

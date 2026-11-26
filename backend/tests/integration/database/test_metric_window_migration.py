@@ -864,7 +864,13 @@ def test_this_release_answers_500_where_it_reads_a_metric_on_the_downgraded_sche
     """Why the database-first rollback's paragraph names what fails: until
     every task of this release is replaced, every statement that loads a
     metric selects the column the downgrade dropped. The SDK routes read no
-    metric, and are answered."""
+    metric, and are answered.
+
+    Computing the results is what fails (``use_cache=false``). An answer the
+    results cache took before the downgrade is served from it until it
+    expires: with the cache reachable (CI's core build runs a Redis), the
+    request without ``use_cache`` answers 200 and the answer from before;
+    without one, it is computed, and answers 500."""
     tree = _at_this_revision(test_db, CORE, scratch_schema, tmp_path)
     user = _user(test_db, scratch_schema)
     signed_in = {"Authorization": f"Bearer {_token(user)}"}
@@ -883,7 +889,8 @@ def test_this_release_answers_500_where_it_reads_a_metric_on_the_downgraded_sche
     requests = {
         "the experiments": ["GET", "/api/v1/experiments/", signed_in, None],
         "one experiment": ["GET", experiment, signed_in, None],
-        "its results": ["GET", results, signed_in, None],
+        "its results": ["GET", f"{results}?use_cache=false", signed_in, None],
+        "its results, cached": ["GET", results, signed_in, None],
         "its daily results": ["GET", f"{results}/daily", signed_in, None],
         "assign": ["POST", "/api/v1/tracking/assign", sdk, assign],
         "track": ["POST", "/api/v1/tracking/track", sdk, track],
@@ -913,12 +920,25 @@ def test_this_release_answers_500_where_it_reads_a_metric_on_the_downgraded_sche
     assert down.returncode == 0, down.stderr[-3000:]
     after = answers({**requests, **once})
     measured = {name: answer[0] for name, answer in after.items()}
-    print(f"on the downgraded schema: {measured}")
+    cached = _results_cache_is_reachable()
+    print(f"on the downgraded schema (results cache reachable: {cached}): {measured}")
     sdk_routes = ("assign", "track", "evaluate", "ruleset")
     assert measured == {
         **dict.fromkeys([*requests, *once], 500),
         **dict.fromkeys(sdk_routes, 200),
+        "its results, cached": 200 if cached else 500,
     }
+    if cached:
+        # The answer from before the downgrade, as it was cached.
+        assert after["its results, cached"][1] == before["its results, cached"][1]
+
+
+def _results_cache_is_reachable() -> bool:
+    """Whether the results cache the client's API uses answers (the same
+    settings, from the same environment)."""
+    from backend.app.api.v1.endpoints.results import _get_cache_service
+
+    return _get_cache_service().enabled
 
 
 # ---------------------------------------------------------------------------

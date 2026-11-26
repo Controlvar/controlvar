@@ -1613,7 +1613,7 @@ text = "t2012_flag_split is undone first, so every flag read and flag change ans
 by = ["test:backend/tests/integration/database/test_flag_split_migration.py::test_this_release_answers_500_to_flag_evaluations_and_reads_on_the_downgraded_schema"]
 
 [[unit]]
-text = "t1934_metric_window is undone before it, so the experiment list, reading, creating, changing, pausing or cloning an experiment, and its results answer 500 too."
+text = "t1934_metric_window is undone before it, so the experiment list, reading, creating, changing, pausing or cloning an experiment, and computing its results answer 500 too."
 by = ["test:backend/tests/integration/database/test_metric_window_migration.py::test_this_release_answers_500_where_it_reads_a_metric_on_the_downgraded_schema"]
 
 [[unit]]
@@ -1777,7 +1777,7 @@ by = [
 ]
 
 [[unit]]
-text = "From a release that carries t1934_metric_window, the experiment list, reading, creating, changing, pausing or cloning an experiment, and its results answer 500 too."
+text = "From a release that carries t1934_metric_window, the experiment list, reading, creating, changing, pausing or cloning an experiment, and computing its results answer 500 too."
 by = ["test:backend/tests/integration/database/test_metric_window_migration.py::test_this_release_answers_500_where_it_reads_a_metric_on_the_downgraded_schema"]
 
 [[unit]]
@@ -1872,7 +1872,7 @@ text = "A downgrade that also undoes t2012_flag_split is one run: while that rev
 by = ["test:backend/tests/integration/database/test_metric_window_migration.py::test_a_run_past_t2012_with_a_split_in_use_refuses_and_keeps_the_windows"]
 
 [[unit]]
-text = "Once the downgrade has committed, this release answers 500 to the experiment list, to reading, creating, changing, pausing or cloning an experiment, and to its results, until the API is rolled back."
+text = "Once the downgrade has committed, this release answers 500 to the experiment list, to reading, creating, changing, pausing or cloning an experiment, and to computing its results, until the API is rolled back."
 by = ["test:backend/tests/integration/database/test_metric_window_migration.py::test_this_release_answers_500_where_it_reads_a_metric_on_the_downgraded_schema"]
 
 [[unit]]
@@ -2857,3 +2857,7 @@ by = [
 [[unit]]
 text = "Downgrading below this revision after that release drops every activation time: every assignment and grant is inactive again, and stays inactive after upgrading; assign the roles and make the grants again."
 by = ["test:backend/tests/integration/database/test_modules_0004_transitions.py"]
+
+[[unit]]
+text = "GET /api/v1/results/{experiment_id} still serves an answer it cached before the downgrade until it expires: 5 minutes for a running experiment, 24 hours otherwise."
+by = ["test:backend/tests/integration/database/test_metric_window_migration.py::test_this_release_answers_500_where_it_reads_a_metric_on_the_downgraded_schema"]

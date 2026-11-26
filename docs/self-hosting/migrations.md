@@ -1084,7 +1084,7 @@ included: the SDKs it serves get errors from evaluation
 read and flag change answers `500` too, the dashboard's flag list included, and a
 bulk toggle `200` with every flag failed. `t1934_metric_window` is undone before
 it, so the experiment list, reading, creating, changing, pausing or cloning an
-experiment, and its results answer `500` too. Archiving or deleting a segment
+experiment, and computing its results answer `500` too. Archiving or deleting a segment
 and listing a segment's experiments answer `500`, as do the signed-in API key
 list, create and delete. Start the previous release straight after the
 downgrade.
@@ -1153,7 +1153,7 @@ evaluation, flag read, flag change and ruleset request, until the API is rolled
 back. A bulk toggle answers `200` with every flag failed. If the run also undoes
 `t2011_flag_environments`, every request that presents an API key answers `500`.
 From a release that carries `t1934_metric_window`, the experiment list, reading,
-creating, changing, pausing or cloning an experiment, and its results answer
+creating, changing, pausing or cloning an experiment, and computing its results answer
 `500` too. Start the previous release straight after the downgrade.
 
 ### `t1934_metric_window` adds a conversion window to each metric
@@ -1197,9 +1197,11 @@ order under Docker Compose and Helm
 ([An Older Image Against a Newer Database](#an-older-image-against-a-newer-database)).
 Once the downgrade has committed, this release answers `500` to the experiment
 list, to reading, creating, changing, pausing or cloning an experiment, and to
-its results, until the API is rolled back. Assignment, event tracking, flag
-evaluation and the ruleset are still answered. Start the previous release
-straight after the downgrade.
+computing its results, until the API is rolled back. Assignment, event tracking, flag
+evaluation and the ruleset are still answered.
+`GET /api/v1/results/{experiment_id}` still serves an answer it cached before
+the downgrade until it expires: 5 minutes for a running experiment, 24 hours
+otherwise. Start the previous release straight after the downgrade.
 
 Roll back to a specific revision:
 
