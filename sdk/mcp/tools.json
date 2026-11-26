@@ -102,7 +102,7 @@
           "user_id": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 256,
+            "maxLength": 255,
             "description": "The user to evaluate the flag for, as your app identifies them."
           },
           "context": {
