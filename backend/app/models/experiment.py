@@ -409,6 +409,12 @@ class Variant(Base, BaseModel):
         return f"<Variant {self.name}>"
 
 
+#: The longest conversion window a metric can have, in hours (365 days): the
+#: bound of the warehouse analysis's ``conversion_window_hours`` (#1934).
+#: ``t1934_metric_window`` writes the same number into the check.
+MAX_CONVERSION_WINDOW_HOURS = 8760
+
+
 class Metric(Base, BaseModel):
     """Metric model for experiment measurements."""
 
@@ -431,6 +437,9 @@ class Metric(Base, BaseModel):
     expected_effect = Column(Float)
     event_value_path = Column(String(100))
     lower_is_better = Column(Boolean, default=False)
+    # How many hours after a user's assignment the metric counts that user's
+    # events (#1934); NULL counts every event. Nothing reads or writes it yet.
+    conversion_window_hours = Column(Integer, nullable=True)
 
     # Relationships
     experiment = relationship("Experiment", back_populates="metric_definitions")
@@ -442,6 +451,12 @@ class Metric(Base, BaseModel):
             # Composite index for experiment + event
             Index(
                 f"{schema_name}_metric_experiment_event", "experiment_id", "event_name"
+            ),
+            # NULL, or a whole number of hours from 1 to 8760
+            CheckConstraint(
+                "conversion_window_hours IS NULL OR conversion_window_hours "
+                f"BETWEEN 1 AND {MAX_CONVERSION_WINDOW_HOURS}",
+                name="check_metric_conversion_window",
             ),
             # Ensure unique metric names within an experiment
             Index(

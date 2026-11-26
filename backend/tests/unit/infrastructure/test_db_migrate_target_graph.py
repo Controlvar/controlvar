@@ -44,9 +44,11 @@ pytestmark = pytest.mark.skipif(
 #: still ``7b6b4b4fe246``, the down revision of ``c448_balance_within`` (#448),
 #: and from a release that carries ``4955571d232c`` (#1545),
 #: ``t1812_user_totp`` (#1812), ``t449_identity_aliases`` (#449),
-#: ``t2011_flag_environments`` (#2011) or ``t2012_flag_split`` (#2012) it undoes
-#: those too, as the documents now say; ``t2011_flag_environments`` (#2012, the
-#: self-hosting page's command for undoing ``t2012_flag_split`` alone),
+#: ``t2011_flag_environments`` (#2011), ``t2012_flag_split`` (#2012) or
+#: ``t1934_metric_window`` (#1934) it undoes those too, as the documents now
+#: say; ``t2012_flag_split`` (#1934, the self-hosting page's command for
+#: undoing ``t1934_metric_window`` alone), ``t2011_flag_environments`` (#2012,
+#: the same for ``t2012_flag_split``),
 #: ``t449_identity_aliases`` (#2011, the same for ``t2011_flag_environments``),
 #: ``t1812_user_totp`` (#449, the same for ``t449_identity_aliases``),
 #: ``4955571d232c`` (#1812, the same for ``t1812_user_totp``),
@@ -58,20 +60,28 @@ pytestmark = pytest.mark.skipif(
 #: name a target must say what the downgrades it runs drop
 #: (``test_documented_downgrade_targets.py``).
 NAMED_DOWNGRADES = {
-    "t2011_flag_environments": ["t2012_flag_split"],
-    "t449_identity_aliases": ["t2012_flag_split", "t2011_flag_environments"],
+    "t2012_flag_split": ["t1934_metric_window"],
+    "t2011_flag_environments": ["t1934_metric_window", "t2012_flag_split"],
+    "t449_identity_aliases": [
+        "t1934_metric_window",
+        "t2012_flag_split",
+        "t2011_flag_environments",
+    ],
     "t1812_user_totp": [
+        "t1934_metric_window",
         "t2012_flag_split",
         "t2011_flag_environments",
         "t449_identity_aliases",
     ],
     "4955571d232c": [
+        "t1934_metric_window",
         "t2012_flag_split",
         "t2011_flag_environments",
         "t449_identity_aliases",
         "t1812_user_totp",
     ],
     "c448_balance_within": [
+        "t1934_metric_window",
         "t2012_flag_split",
         "t2011_flag_environments",
         "t449_identity_aliases",
@@ -79,6 +89,7 @@ NAMED_DOWNGRADES = {
         "4955571d232c",
     ],
     "7b6b4b4fe246": [
+        "t1934_metric_window",
         "t2012_flag_split",
         "t2011_flag_environments",
         "t449_identity_aliases",
@@ -90,6 +101,7 @@ NAMED_DOWNGRADES = {
     # on", "Going one further", "Going further", "Going further still",
     # "Further again" and "Further still".
     "85dd4796bb8b": [
+        "t1934_metric_window",
         "t2012_flag_split",
         "t2011_flag_environments",
         "t449_identity_aliases",
@@ -99,6 +111,7 @@ NAMED_DOWNGRADES = {
         "7b6b4b4fe246",
     ],
     "607c51a59bf5": [
+        "t1934_metric_window",
         "t2012_flag_split",
         "t2011_flag_environments",
         "t449_identity_aliases",
@@ -109,6 +122,7 @@ NAMED_DOWNGRADES = {
         "85dd4796bb8b",
     ],
     "4c2c09a2b3e8": [
+        "t1934_metric_window",
         "t2012_flag_split",
         "t2011_flag_environments",
         "t449_identity_aliases",
@@ -120,6 +134,7 @@ NAMED_DOWNGRADES = {
         "607c51a59bf5",
     ],
     "37dcb2969766": [
+        "t1934_metric_window",
         "t2012_flag_split",
         "t2011_flag_environments",
         "t449_identity_aliases",
@@ -132,6 +147,7 @@ NAMED_DOWNGRADES = {
         "4c2c09a2b3e8",
     ],
     "d29a479daafe": [
+        "t1934_metric_window",
         "t2012_flag_split",
         "t2011_flag_environments",
         "t449_identity_aliases",
@@ -145,6 +161,7 @@ NAMED_DOWNGRADES = {
         "37dcb2969766",
     ],
     "806901fb7735": [
+        "t1934_metric_window",
         "t2012_flag_split",
         "t2011_flag_environments",
         "t449_identity_aliases",
@@ -159,6 +176,7 @@ NAMED_DOWNGRADES = {
         "d29a479daafe",
     ],
     "1ab99332f0ba": [
+        "t1934_metric_window",
         "t2012_flag_split",
         "t2011_flag_environments",
         "t449_identity_aliases",
@@ -284,9 +302,9 @@ def test_the_branch_point_also_unapplies_the_modules_branch():
     """Backs the help text: "a core id at or below a7b8c9d0e1f2 also unapplies
     the modules branch"."""
     plan = _downgrade_plan(_script(), BRANCH_POINT)
-    # The nineteen core revisions above it (through t2012_flag_split, #2012)
+    # The twenty core revisions above it (through t1934_metric_window, #1934)
     # and the modules branch's five (through modules_0005_redshift, #826).
-    assert len(plan) == 24, plan
+    assert len(plan) == 25, plan
     assert [r for r in plan if r.startswith(MODULES_PREFIX)] == [
         "modules_0005_redshift",
         "modules_0004_rbac_activation",

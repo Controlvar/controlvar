@@ -91,7 +91,8 @@ docker compose exec api python -m alembic -c backend/app/db/alembic.ini history
 Output, for example:
 
 ```text
-t2011_flag_environments -> t2012_flag_split (head), Flag split: a nullable split on each feature flag and each flag environment setting
+t2012_flag_split -> t1934_metric_window (head), Metric window: a nullable conversion window, in hours, on each metric
+t2011_flag_environments -> t2012_flag_split, Flag split: a nullable split on each feature flag and each flag environment setting
 t449_identity_aliases -> t2011_flag_environments, Flag environments: each flag's staging and development settings, and each key's environment
 t1812_user_totp -> t449_identity_aliases, Identity aliases: the table that links an anonymous id to a known id
 4955571d232c -> t1812_user_totp, Two-step sign-in: each local account's authenticator secret and recovery codes
@@ -122,7 +123,7 @@ docker compose exec api python -m alembic -c backend/app/db/alembic.ini current
 Output, for a full install (a core install prints the first line only):
 
 ```text
-t2012_flag_split (head)
+t1934_metric_window (head)
 modules_0005_redshift (head)
 ```
 
@@ -471,11 +472,15 @@ deactivates every staging and development API key and drops the column
 staging and development flag setting (see
 [`t2011_flag_environments`](#t2011_flag_environments-adds-each-flags-staging-and-development-settings)).
 
-Past `t2012_flag_split` it first runs that revision's downgrade, which drops
+Past `t2012_flag_split` it also runs that revision's downgrade, which drops
 `feature_flags.split` and `flag_environment_settings.split`. **So it also stops
 while any flag has a split or a rule value**: that downgrade refuses, names
 those flags, and changes nothing (see
 [`t2012_flag_split`](#t2012_flag_split-adds-a-split-to-each-flag-and-each-flag-environment-setting)).
+
+Past `t1934_metric_window` it first runs that revision's downgrade, which drops
+`metrics.conversion_window_hours`: every metric's conversion window (see
+[`t1934_metric_window`](#t1934_metric_window-adds-a-conversion-window-to-each-metric)).
 
 ### `d29a479daafe` records who each global holdout covers
 
@@ -579,6 +584,10 @@ downgrade, which drops `feature_flags.split` and
 `flag_environment_settings.split` and refuses while any flag has a split or a
 rule value (see
 [`t2012_flag_split`](#t2012_flag_split-adds-a-split-to-each-flag-and-each-flag-environment-setting)).
+From a release that carries `t1934_metric_window`, it first runs that
+revision's downgrade, which drops `metrics.conversion_window_hours`, every
+metric's conversion window (see
+[`t1934_metric_window`](#t1934_metric_window-adds-a-conversion-window-to-each-metric)).
 
 ### `4c2c09a2b3e8` keeps rollback records without a safety configuration
 
@@ -661,11 +670,15 @@ revision's downgrade, which deactivates every staging and development API key
 and drops `api_keys.environment` and the table `flag_environment_settings`,
 every staging and development flag setting (see
 [`t2011_flag_environments`](#t2011_flag_environments-adds-each-flags-staging-and-development-settings)).
-From a release that carries `t2012_flag_split`, it first runs that revision's
+From a release that carries `t2012_flag_split`, it also runs that revision's
 downgrade, which drops `feature_flags.split` and
 `flag_environment_settings.split` and refuses while any flag has a split or a
 rule value (see
 [`t2012_flag_split`](#t2012_flag_split-adds-a-split-to-each-flag-and-each-flag-environment-setting)).
+From a release that carries `t1934_metric_window`, it first runs that
+revision's downgrade, which drops `metrics.conversion_window_hours`, every
+metric's conversion window (see
+[`t1934_metric_window`](#t1934_metric_window-adds-a-conversion-window-to-each-metric)).
 
 ### `85dd4796bb8b` stores an event sent again with its event_id once
 
@@ -745,11 +758,15 @@ revision's downgrade, which deactivates every staging and development API key
 and drops `api_keys.environment` and the table `flag_environment_settings`,
 every staging and development flag setting (see
 [`t2011_flag_environments`](#t2011_flag_environments-adds-each-flags-staging-and-development-settings)).
-From a release that carries `t2012_flag_split`, it first runs that revision's
+From a release that carries `t2012_flag_split`, it also runs that revision's
 downgrade, which drops `feature_flags.split` and
 `flag_environment_settings.split` and refuses while any flag has a split or a
 rule value (see
 [`t2012_flag_split`](#t2012_flag_split-adds-a-split-to-each-flag-and-each-flag-environment-setting)).
+From a release that carries `t1934_metric_window`, it first runs that
+revision's downgrade, which drops `metrics.conversion_window_hours`, every
+metric's conversion window (see
+[`t1934_metric_window`](#t1934_metric_window-adds-a-conversion-window-to-each-metric)).
 
 On Helm, run the same command in an API pod with `kubectl exec`. Once the
 database is at the previous release's heads, start the previous release. The
@@ -815,11 +832,15 @@ revision's downgrade, which deactivates every staging and development API key
 and drops `api_keys.environment` and the table `flag_environment_settings`,
 every staging and development flag setting (see
 [`t2011_flag_environments`](#t2011_flag_environments-adds-each-flags-staging-and-development-settings)).
-From a release that carries `t2012_flag_split`, it first runs that revision's
+From a release that carries `t2012_flag_split`, it also runs that revision's
 downgrade, which drops `feature_flags.split` and
 `flag_environment_settings.split` and refuses while any flag has a split or a
 rule value (see
 [`t2012_flag_split`](#t2012_flag_split-adds-a-split-to-each-flag-and-each-flag-environment-setting)).
+From a release that carries `t1934_metric_window`, it first runs that
+revision's downgrade, which drops `metrics.conversion_window_hours`, every
+metric's conversion window (see
+[`t1934_metric_window`](#t1934_metric_window-adds-a-conversion-window-to-each-metric)).
 
 On Helm, run the same command in an API pod with `kubectl exec`. The upgrade
 cannot be emitted as SQL (`--sql`).
@@ -861,11 +882,15 @@ revision's downgrade, which deactivates every staging and development API key
 and drops `api_keys.environment` and the table `flag_environment_settings`,
 every staging and development flag setting (see
 [`t2011_flag_environments`](#t2011_flag_environments-adds-each-flags-staging-and-development-settings)).
-From a release that carries `t2012_flag_split`, it first runs that revision's
+From a release that carries `t2012_flag_split`, it also runs that revision's
 downgrade, which drops `feature_flags.split` and
 `flag_environment_settings.split` and refuses while any flag has a split or a
 rule value (see
 [`t2012_flag_split`](#t2012_flag_split-adds-a-split-to-each-flag-and-each-flag-environment-setting)).
+From a release that carries `t1934_metric_window`, it first runs that
+revision's downgrade, which drops `metrics.conversion_window_hours`, every
+metric's conversion window (see
+[`t1934_metric_window`](#t1934_metric_window-adds-a-conversion-window-to-each-metric)).
 
 On Helm, run the same command in an API pod with `kubectl exec`.
 
@@ -901,11 +926,15 @@ revision's downgrade, which deactivates every staging and development API key
 and drops `api_keys.environment` and the table `flag_environment_settings`,
 every staging and development flag setting (see
 [`t2011_flag_environments`](#t2011_flag_environments-adds-each-flags-staging-and-development-settings)).
-From a release that carries `t2012_flag_split`, it first runs that revision's
+From a release that carries `t2012_flag_split`, it also runs that revision's
 downgrade, which drops `feature_flags.split` and
 `flag_environment_settings.split` and refuses while any flag has a split or a
 rule value (see
 [`t2012_flag_split`](#t2012_flag_split-adds-a-split-to-each-flag-and-each-flag-environment-setting)).
+From a release that carries `t1934_metric_window`, it first runs that
+revision's downgrade, which drops `metrics.conversion_window_hours`, every
+metric's conversion window (see
+[`t1934_metric_window`](#t1934_metric_window-adds-a-conversion-window-to-each-metric)).
 
 On Helm, run the same command in an API pod with `kubectl exec`.
 
@@ -951,11 +980,15 @@ revision's downgrade, which deactivates every staging and development API key
 and drops `api_keys.environment` and the table `flag_environment_settings`,
 every staging and development flag setting (see
 [`t2011_flag_environments`](#t2011_flag_environments-adds-each-flags-staging-and-development-settings)).
-From a release that carries `t2012_flag_split`, it first runs that revision's
+From a release that carries `t2012_flag_split`, it also runs that revision's
 downgrade, which drops `feature_flags.split` and
 `flag_environment_settings.split` and refuses while any flag has a split or a
 rule value (see
 [`t2012_flag_split`](#t2012_flag_split-adds-a-split-to-each-flag-and-each-flag-environment-setting)).
+From a release that carries `t1934_metric_window`, it first runs that
+revision's downgrade, which drops `metrics.conversion_window_hours`, every
+metric's conversion window (see
+[`t1934_metric_window`](#t1934_metric_window-adds-a-conversion-window-to-each-metric)).
 
 On Helm, run the same command in an API pod with `kubectl exec`.
 
@@ -994,12 +1027,13 @@ applied, and it is simply run again.
 
 If the upgrade to 0.49.0 stops with a lock-timeout message, re-run it: every
 revision runs in one transaction, so nothing was applied. While it runs, an SDK
-request can wait up to 3 seconds at most: the upgrade waits at most 3 seconds in
-all for its locks, and SDK requests queue behind the `api_keys` lock, which
-`t2011_flag_environments` takes (at most 1.5 seconds to take) and the upgrade
-holds until it commits, through the wait of `t2012_flag_split` (at most 1
-second); a request that reads `feature_flags` during that wait queues behind it
-too, for at most 1 second. An SDK whose timeout is shorter answers its fallback meanwhile (the edge SDK's default is
+request can wait up to 3.5 seconds at most: the upgrade waits at most 3.5
+seconds in all for its locks, and SDK requests queue behind the `api_keys` lock,
+which `t2011_flag_environments` takes (at most 1.5 seconds to take) and the
+upgrade holds until it commits, through the waits of `t2012_flag_split` (at
+most 1 second) and `t1934_metric_window` (at most 0.5 seconds); a request that
+reads `feature_flags` during those waits queues behind them too, for at most
+1.5 seconds. An SDK whose timeout is shorter answers its fallback meanwhile (the edge SDK's default is
 500 ms, and it answers `enabled: false`).
 
 The downgrade can wait for more than one lock, and each wait has its own
@@ -1027,11 +1061,15 @@ later revision, this undoes this revision alone:
 docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrade t449_identity_aliases
 ```
 
-From a release that carries `t2012_flag_split`, it first runs that revision's
+From a release that carries `t2012_flag_split`, it also runs that revision's
 downgrade, which drops `feature_flags.split` and
 `flag_environment_settings.split` and refuses while any flag has a split or a
 rule value (see
 [`t2012_flag_split`](#t2012_flag_split-adds-a-split-to-each-flag-and-each-flag-environment-setting)).
+From a release that carries `t1934_metric_window`, it first runs that
+revision's downgrade, which drops `metrics.conversion_window_hours`, every
+metric's conversion window (see
+[`t1934_metric_window`](#t1934_metric_window-adds-a-conversion-window-to-each-metric)).
 
 On Helm, run the same command in an API pod with `kubectl exec`.
 
@@ -1044,9 +1082,12 @@ included: the SDKs it serves get errors from evaluation
 (`/api/v1/feature-flags/evaluate/{key}`) and from the ruleset
 (`/api/v1/sdk/ruleset`). `t2012_flag_split` is undone first, so every flag
 read and flag change answers `500` too, the dashboard's flag list included, and a
-bulk toggle `200` with every flag failed. Archiving or deleting a segment and
-listing a segment's experiments answer `500`, as do the signed-in API key list,
-create and delete. Start the previous release straight after the downgrade.
+bulk toggle `200` with every flag failed. `t1934_metric_window` is undone before
+it, so the experiment list, reading, creating, changing, pausing or cloning an
+experiment, and its results answer `500` too. Archiving or deleting a segment
+and listing a segment's experiments answer `500`, as do the signed-in API key
+list, create and delete. Start the previous release straight after the
+downgrade.
 
 ### `t2012_flag_split` adds a split to each flag and each flag environment setting
 
@@ -1085,11 +1126,17 @@ at most 1 s for each of `feature_flags` and `flag_environment_settings`; a lock
 that cannot be taken within its bound, or a deadlock, stops it with nothing
 changed, and it is run again. Neither its upgrade nor its downgrade can be
 emitted as SQL (`--sql`), with or without a flag to name. This revision's own
-`down_revision` is `t2011_flag_environments`; this undoes this revision alone:
+`down_revision` is `t2011_flag_environments`; from a release that carries no
+later revision, this undoes this revision alone:
 
 ```{.bash skip reason="destructive: drops feature_flags.split and flag_environment_settings.split"}
 docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrade t2011_flag_environments
 ```
+
+From a release that carries `t1934_metric_window`, it first runs that
+revision's downgrade, which drops `metrics.conversion_window_hours`, every
+metric's conversion window (see
+[`t1934_metric_window`](#t1934_metric_window-adds-a-conversion-window-to-each-metric)).
 
 A downgrade that also undoes `t2011_flag_environments` is one run. It holds
 `feature_flags` while it waits for `api_keys`, and an SDK request reads
@@ -1105,7 +1152,54 @@ Once the downgrade has committed, this release answers `500` to every flag
 evaluation, flag read, flag change and ruleset request, until the API is rolled
 back. A bulk toggle answers `200` with every flag failed. If the run also undoes
 `t2011_flag_environments`, every request that presents an API key answers `500`.
-Start the previous release straight after the downgrade.
+From a release that carries `t1934_metric_window`, the experiment list, reading,
+creating, changing, pausing or cloning an experiment, and its results answer
+`500` too. Start the previous release straight after the downgrade.
+
+### `t1934_metric_window` adds a conversion window to each metric
+
+This revision adds the column `conversion_window_hours` (`integer`) to
+`metrics`, with the check `check_metric_conversion_window`: empty, or a whole
+number of hours from 1 to 8760 (365 days). Every metric's window is empty
+after the upgrade. Nothing reads or sets a window yet.
+
+The previous release, 0.48.0, runs against this schema unchanged: a metric it
+creates has no window, and a window stored beside it stays.
+
+From 0.48.0, this upgrade waits at most 0.5 s for the lock it needs on
+`metrics`, behind any session that has read that table and not ended its
+transaction, a results request among them; `t2011_flag_environments` and
+`t2012_flag_split`, in the same run, have their locks on `api_keys` and
+`feature_flags` by then, so new SDK requests wait with it. If the lock cannot
+be taken in time, or a deadlock is detected, the upgrade stops with nothing
+applied, no other revision of the same run included, and is simply run again.
+
+**The downgrade drops every window.** `t1934_metric_window`'s downgrade drops
+`metrics.conversion_window_hours`, and the check with it: every metric's
+conversion window. It does not refuse, and nothing restores the windows: an
+upgrade afterwards adds the column empty. It waits at most 0.5 s for
+`metrics`; a lock that cannot be taken within its bound, or a deadlock, stops
+it with nothing changed, and it is run again. Neither direction can be
+emitted as SQL (`--sql`). This revision's own `down_revision` is
+`t2012_flag_split`; this undoes this revision alone:
+
+```{.bash skip reason="destructive: drops metrics.conversion_window_hours, every metric's conversion window"}
+docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrade t2012_flag_split
+```
+
+A downgrade that also undoes `t2012_flag_split` is one run: while that revision
+refuses, nothing of either is changed, and the windows stay.
+
+On Helm, run the same command in an API pod with `kubectl exec`.
+
+Downgrading the database first, with this release still running, is the only
+order under Docker Compose and Helm
+([An Older Image Against a Newer Database](#an-older-image-against-a-newer-database)).
+Once the downgrade has committed, this release answers `500` to the experiment
+list, to reading, creating, changing, pausing or cloning an experiment, and to
+its results, until the API is rolled back. Assignment, event tracking, flag
+evaluation and the ruleset are still answered. Start the previous release
+straight after the downgrade.
 
 Roll back to a specific revision:
 

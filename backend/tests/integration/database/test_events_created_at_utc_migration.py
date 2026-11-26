@@ -90,8 +90,9 @@ PARENT = "a89544fb1075"
 #: (#1497), ``85dd4796bb8b`` (#1543), ``7b6b4b4fe246`` (#1528),
 #: ``c448_balance_within`` (#448), ``4955571d232c`` (#1545),
 #: ``t1812_user_totp`` (#1812), ``t449_identity_aliases`` (#449) and
-#: ``t2011_flag_environments`` (#2011): ``t2012_flag_split`` (#2012).
-CORE_HEAD = "t2012_flag_split"
+#: ``t2011_flag_environments`` (#2011) and ``t2012_flag_split`` (#2012):
+#: ``t1934_metric_window`` (#1934).
+CORE_HEAD = "t1934_metric_window"
 #: The core head of the previous release (0.16.2), with ``d12cbd384bbe`` and
 #: ``a89544fb1075`` pending in front of this revision.
 RELEASED = "271f03a31742"

@@ -144,6 +144,12 @@ ROW_COLUMNS_NOT_COMPARED = {
     "updated_at": "every save re-creates the rows: a new time is no change",
     "experiment_id": "the entry's entity_id",
 }
+#: Columns of one of the two tables that no request can set yet, each with its
+#: reason: the change that lets a save set one compares it in
+#: ``AUDIT_NAME_ONLY_ROWS``, and the test then refuses it here.
+NOT_COMPARED_YET = {
+    Metric: {"conversion_window_hours": "nothing sets a metric's window yet (#1934)"},
+}
 
 
 def test_name_only_rows_read_relationships_of_the_entity():
@@ -173,7 +179,9 @@ def test_every_variant_and_metric_column_is_classified(model):
         for column in columns
     }
     columns = {c.name for c in model.__table__.columns}
-    unaudited = set(ROW_COLUMNS_NOT_COMPARED)
+    not_yet = set(NOT_COMPARED_YET.get(model, {}))
+    assert not (compared & not_yet), "a save compares it now: drop it here"
+    unaudited = set(ROW_COLUMNS_NOT_COMPARED) | not_yet
     assert not (compared & unaudited)
     assert columns == compared | unaudited, (
         f"unclassified {model.__tablename__} columns: "

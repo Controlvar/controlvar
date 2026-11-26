@@ -70,10 +70,13 @@ class Release:
 #: its new table's foreign key takes on ``feature_flags``, then ``'1500ms'``
 #: for ``api_keys``, 2 s in all; then ``t2012_flag_split``, which has two blocks
 #: of ``'1s'``, one for ``feature_flags`` and one for the table
-#: ``t2011_flag_environments`` created, 1 s in all. 0.49.0's sum is 3 s. From a
-#: database already at ``t2011_flag_environments`` (an install from ``main``,
-#: which no release left) both of ``t2012_flag_split``'s blocks can wait, 2 s in
-#: all. A tuple of records, not a dict keyed by release:
+#: ``t2011_flag_environments`` created, 1 s in all; then
+#: ``t1934_metric_window``, which has one block of ``'500ms'``, for
+#: ``metrics``, 0.5 s. 0.49.0's sum is 3.5 s (+0.5 s for
+#: ``t1934_metric_window``, from 3 s). From a database already at
+#: ``t2011_flag_environments`` (an install from ``main``, which no release
+#: left) both of ``t2012_flag_split``'s blocks can wait, 2 s in all. A tuple of
+#: records, not a dict keyed by release:
 #: ``test_engine_versions_frozen.py`` reads a dict keyed ``N.N.N`` as a table of
 #: stats-engine pins, and these are product releases.
 RELEASES: Tuple[Release, ...] = (
@@ -83,11 +86,15 @@ RELEASES: Tuple[Release, ...] = (
         declared={"t449_identity_aliases": 0.25},
     ),
     # t2011: 500 ms on feature_flags, then 1500 ms on api_keys. t2012: 1 s on
-    # feature_flags.
+    # feature_flags. t1934: 500 ms on metrics.
     Release(
         name="0.49.0",
         start_heads=("t449_identity_aliases", "modules_0005_redshift"),
-        declared={"t2011_flag_environments": 2, "t2012_flag_split": 1},
+        declared={
+            "t2011_flag_environments": 2,
+            "t2012_flag_split": 1,
+            "t1934_metric_window": 0.5,
+        },
     ),
 )
 
@@ -213,21 +220,27 @@ def test_0_48_0_runs_t449_alone_from_0_47_0_and_declares_a_quarter_second():
     assert entry.declared == {"t449_identity_aliases": 0.25}
 
 
-def test_0_49_0_starts_at_0_48_0s_released_heads_and_declares_three_seconds():
+def test_0_49_0_starts_at_0_48_0s_released_heads_and_declares_three_and_a_half_seconds():
     """0.48.0's walk now ends at 0.48.0's released heads, which shipped in
     v0.48.0 (``t449_identity_aliases`` and, where the modules branch exists,
     ``modules_0005_redshift``), and 0.49.0's starts there. In both profiles
-    0.49.0's upgrade runs ``t2011_flag_environments``, which declares 2 s, and
-    ``t2012_flag_split``, which declares 1 s."""
+    0.49.0's upgrade runs ``t2011_flag_environments``, which declares 2 s,
+    ``t2012_flag_split``, which declares 1 s, and ``t1934_metric_window``, which
+    declares 0.5 s: 3.5 s, 0.5 s more than the 3 s before it."""
     entry = release("0.49.0")
     assert entry.start_heads == ("t449_identity_aliases", "modules_0005_redshift")
     assert end_heads("0.48.0") == entry.start_heads
     assert walk(_script(), entry, end_heads("0.49.0")) == [
+        "t1934_metric_window",
         "t2011_flag_environments",
         "t2012_flag_split",
     ]
-    assert entry.declared == {"t2011_flag_environments": 2, "t2012_flag_split": 1}
-    assert sum(entry.declared.values()) == 3
+    assert entry.declared == {
+        "t2011_flag_environments": 2,
+        "t2012_flag_split": 1,
+        "t1934_metric_window": 0.5,
+    }
+    assert sum(entry.declared.values()) == 3.5
 
 
 def test_a_declared_bound_is_a_positive_number_or_zero():

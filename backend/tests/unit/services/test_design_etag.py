@@ -313,6 +313,12 @@ def test_the_balance_setting_is_hashed_only_when_set():
 
 # --- the classification ------------------------------------------------------
 
+#: Columns that no request can set yet, so no design holds one: the metric's
+#: conversion window (#1934). The change that lets a request set it adds it to
+#: the design (the schema test below then requires it), and this list then
+#: refuses it.
+NOT_A_DESIGN_COLUMN_YET = {Metric: {"conversion_window_hours"}}
+
 
 @pytest.mark.parametrize(
     "model,columns",
@@ -326,10 +332,12 @@ def test_every_row_column_is_classified_for_the_etag(model, columns):
     """A new variant or metric column fails here until it joins the etag or
     is named as one that is not part of a design."""
     table = {column.name for column in model.__table__.columns}
-    classified = set(columns) | visual.NOT_DESIGN_ROW_COLUMNS
+    not_yet = NOT_A_DESIGN_COLUMN_YET.get(model, set())
+    classified = set(columns) | visual.NOT_DESIGN_ROW_COLUMNS | not_yet
     assert table - classified == set(), "classify these columns for the etag"
     assert classified - table == set(), "these are not columns"
     assert set(columns) & visual.NOT_DESIGN_ROW_COLUMNS == set()
+    assert set(columns) & not_yet == set(), "part of the design now: drop it here"
 
 
 @pytest.mark.parametrize(

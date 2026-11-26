@@ -60,7 +60,8 @@ pytestmark = [pytest.mark.integration]
 #: This revision, and the core revision it extends.
 REVISION = "607c51a59bf5"
 PREVIOUS_CORE_HEAD = "4c2c09a2b3e8"
-#: The core head of this tree: ``t2012_flag_split`` (#2012), whose downgrade
+#: The core head of this tree: ``t1934_metric_window`` (#1934), whose downgrade
+#: drops ``metrics.conversion_window_hours``, after ``t2012_flag_split`` (#2012), whose downgrade
 #: drops ``feature_flags.split`` and ``flag_environment_settings.split``, after
 #: ``t2011_flag_environments`` (#2011), whose
 #: downgrade drops the table ``flag_environment_settings`` and
@@ -74,7 +75,7 @@ PREVIOUS_CORE_HEAD = "4c2c09a2b3e8"
 #: ``rollout_stages.started_at`` and refuses nothing, after ``85dd4796bb8b``
 #: (#1543), the revision after this one, whose downgrade drops the table
 #: ``event_dedup_keys``.
-CORE_HEAD = "t2012_flag_split"
+CORE_HEAD = "t1934_metric_window"
 #: Tables a later core revision's downgrade drops: a downgrade from the head to
 #: this test's target unapplies those revisions too.
 LATER_DOWNGRADE_TABLES = {

@@ -54,15 +54,16 @@ pytestmark = [pytest.mark.integration]
 #: This revision, and the core revision it extends (0.47.0's core head).
 REVISION = "t449_identity_aliases"
 PREVIOUS_CORE_HEAD = "t1812_user_totp"
-#: The core head of this tree: ``t2012_flag_split`` (#2012), whose downgrade
+#: The core head of this tree: ``t1934_metric_window`` (#1934), whose downgrade
+#: drops ``metrics.conversion_window_hours``, after ``t2012_flag_split`` (#2012), whose downgrade
 #: drops two columns and no table, after ``t2011_flag_environments`` (#2011),
 #: the revision after this one, whose downgrade drops
 #: ``flag_environment_settings`` and ``api_keys.environment``.
-CORE_HEAD = "t2012_flag_split"
+CORE_HEAD = "t1934_metric_window"
 MODULES_HEAD = "modules_0005_redshift"
 #: Tables a later core revision's downgrade drops: a downgrade from the head to
 #: this test's target unapplies ``t2011_flag_environments`` and
-#: ``t2012_flag_split`` too.
+#: ``t2012_flag_split`` and ``t1934_metric_window`` too.
 LATER_DOWNGRADE_TABLES = {"flag_environment_settings"}
 
 PREVIOUS_ROWS = {

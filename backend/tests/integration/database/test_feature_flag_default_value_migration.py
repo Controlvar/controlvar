@@ -57,9 +57,10 @@ PREVIOUS_CORE_HEAD = "d12cbd384bbe"
 #: (balance the split within groups), ``4955571d232c`` (visual experiments),
 #: ``t1812_user_totp`` (two-step sign-in), ``t449_identity_aliases``
 #: (identity aliases), ``t2011_flag_environments`` (flag environments) and
-#: ``t2012_flag_split`` (flag splits) find their objects already built by
+#: ``t2012_flag_split`` (flag splits) and ``t1934_metric_window`` (metric
+#: windows) find their objects already built by
 #: ``create_all`` and add none.
-CORE_HEAD = "t2012_flag_split"
+CORE_HEAD = "t1934_metric_window"
 #: Tables that a later core revision's downgrade drops: a downgrade from the
 #: head to this test's target unapplies those revisions too.  ``d29a479daafe``
 #: (#445) drops ``holdout_population``; ``37dcb2969766`` (#440) drops

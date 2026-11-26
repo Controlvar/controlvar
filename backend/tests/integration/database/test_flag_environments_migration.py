@@ -105,6 +105,9 @@ from backend.scripts.generate_ruleset_vectors import (
     VECTORS_PATH,
 )
 from backend.tests.integration.database import tree_profiles
+from backend.tests.integration.database.metric_window_column import (
+    without_the_metric_window,
+)
 from backend.tests.integration.database.split_read_path import without_the_read_path
 from backend.tests.integration.database.tree_profiles import CORE, FULL
 from backend.tests.unit.services.test_sdk_ruleset_vectors import (
@@ -116,10 +119,11 @@ pytestmark = [pytest.mark.integration]
 #: This revision, and the core revision it extends (0.48.0's core head).
 REVISION = "t2011_flag_environments"
 PREVIOUS_CORE_HEAD = "t449_identity_aliases"
-#: The core head of this tree: ``t2012_flag_split`` (#2012), the revision after
-#: this one, whose downgrade drops ``feature_flags.split`` and
-#: ``flag_environment_settings.split``.
-CORE_HEAD = "t2012_flag_split"
+#: The core head of this tree: ``t1934_metric_window`` (#1934), whose downgrade
+#: drops ``metrics.conversion_window_hours``, after ``t2012_flag_split``
+#: (#2012), the revision after this one, whose downgrade drops
+#: ``feature_flags.split`` and ``flag_environment_settings.split``.
+CORE_HEAD = "t1934_metric_window"
 MODULES_HEAD = "modules_0005_redshift"
 #: The core revisions after this one, which the previous release does not have
 #: either, and the side table's columns they add: this file compares what this
@@ -385,6 +389,12 @@ def _to_previous_release(engine, profile, schema) -> None:
         conn.execute(text(f'DROP TABLE IF EXISTS "{schema}".{TABLE}'))
         conn.execute(
             text(f'ALTER TABLE "{schema}".feature_flags DROP COLUMN IF EXISTS split')
+        )
+        conn.execute(
+            text(
+                f'ALTER TABLE "{schema}".metrics '
+                "DROP COLUMN IF EXISTS conversion_window_hours"
+            )
         )
         conn.execute(
             text(
@@ -1555,6 +1565,7 @@ def _previous_release(profile: str, tmp_path) -> Path:
     else:
         tree = tree_profiles.core_tree(destination)
     versions = tree / "backend" / "app" / "db" / "migrations" / "versions"
+    without_the_metric_window(tree)
     for revision in (REVISION, *LATER_REVISIONS):
         (revision_file,) = versions.glob(f"{revision}_*.py")
         revision_file.unlink()

@@ -27,8 +27,8 @@ ALEMBIC_INI = REPO_ROOT / "backend" / "app" / "db" / "alembic.ini"
 CORE_VERSIONS = REPO_ROOT / "backend" / "app" / "db" / "migrations" / "versions"
 ENV_PY = REPO_ROOT / "backend" / "app" / "db" / "migrations" / "env.py"
 
-#: The core chain's head (#2012).
-CORE_HEAD = "t2012_flag_split"
+#: The core chain's head (#1934).
+CORE_HEAD = "t1934_metric_window"
 #: The modules branch's head (#826).
 MODULES_HEAD = "modules_0005_redshift"
 #: The revision 1ab99332f0ba's re-run recipe downgrades to, and what lies past it.
@@ -204,8 +204,11 @@ def test_past_1ab99332f0ba_its_rerun_downgrade_also_undoes_the_later_revisions()
     # flag_environment_settings.
     assert "t2011_flag_environments" in from_head
     # And flag splits' (#2012), which drops feature_flags.split and
-    # flag_environment_settings.split, first of all.
-    assert from_head[0] == "t2012_flag_split", from_head
+    # flag_environment_settings.split.
+    assert "t2012_flag_split" in from_head
+    # And metric windows' (#1934), which drops
+    # metrics.conversion_window_hours, first of all.
+    assert from_head[0] == "t1934_metric_window", from_head
 
 
 def _bootstrap_url(env: dict[str, str]) -> str:
