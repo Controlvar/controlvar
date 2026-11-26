@@ -447,6 +447,19 @@ describe('the body', () => {
     expect(putBody(1).metrics.map((m) => m.name)).toEqual(['Revenue', 'Client errors']);
   });
 
+  it('a save that only renames a variant keeps each metric’s stored conversion window', async () => {
+    // A PUT whose metric leaves out conversion_window_hours clears the window
+    // with a 200, so the design edit sends every stored one back.
+    await openDesign();
+    type('variant-name-1', 'Blue button');
+    save();
+    await screen.findByTestId('design-saved');
+    expect(putBody().metrics.map((m) => [m.name, m.conversion_window_hours])).toEqual([
+      ['Revenue', 168],
+      ['Errors', 36],
+    ]);
+  });
+
   describe('every field of each item, against the OpenAPI snapshots (QA #6)', () => {
     const properties = (file: string, schema: string): string[] => {
       const doc = JSON.parse(
