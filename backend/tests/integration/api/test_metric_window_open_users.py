@@ -176,6 +176,28 @@ def test_open_window_time_follows_the_rule():
     assert open_window_time(Experiment(ExperimentStatus.COMPLETED, aware), at) == before
 
 
+def test_a_user_assigned_exactly_one_window_before_has_had_all_of_it(
+    db_session, admin_user, worlds
+):
+    """The boundary: at ``T`` a user assigned exactly 24 hours before has had
+    the whole window, and one assigned a microsecond later has not."""
+    one_window = NOW - mw.S - 24 * H
+    rows = (
+        mw.Row("u01", "control", (), False, "exactly 24 h", assigned=one_window),
+        mw.Row(
+            "u03",
+            "control",
+            (),
+            False,
+            "a microsecond less",
+            assigned=one_window + timedelta(microseconds=1),
+        ),
+        mw.Row("u02", "treatment", (), False, "an hour", assigned=NOW - mw.S - H),
+    )
+    world = _build(db_session, admin_user, worlds, rows=rows)
+    assert _open(_computed(db_session, world)) == {"control": 1, "treatment": 1}
+
+
 def test_one_aggregate_statement_per_windowed_metric(db_session, admin_user, worlds):
     """Two windowed metrics and one without: two counts of assignments, each
     grouped by variant."""
