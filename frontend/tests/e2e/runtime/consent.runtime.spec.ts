@@ -30,6 +30,8 @@ const HEADLINE = [{ op: "set_text", selector: "#t", text: "Changed" }];
 const TOKEN = "p".repeat(40) + "abc";
 /** A page_view goal on every page of the site. */
 const PAGE_GOAL = { event_name: "page_any", kind: "page_view", page: { match: "prefix", url: `${SITE}/` } };
+/** A click goal on the headline, on every page of the site. */
+const CLICK_GOAL = { event_name: "click_headline", kind: "click", selector: "#t", page: { match: "prefix", url: `${SITE}/` } };
 
 type Visual = { consent(): unknown; revokeConsent(): unknown; track(event: string, options?: unknown): unknown };
 
@@ -278,13 +280,18 @@ for (const mode of ["waits for consent", "does not wait"] as const) {
     if (waits) attributes["data-require-consent"] = true;
     const site: Site = await routeSite(page, visualPackage, {
       pages: { "/a/b/page": sitePage(BODY, attributes), "/a/b/other": sitePage(BODY, attributes) },
-      answer: answering({ experiments: [experiment("headline", HEADLINE)] }),
+      answer: answering({ experiments: [experiment("headline", HEADLINE, { goals: [CLICK_GOAL] })] }),
     });
     await page.goto(`${SITE}/a/b/page`, { waitUntil: "load" });
     if (waits) await visual(page, "consent");
     await expect(page.locator("#t")).toHaveText("Changed");
+    await page.click("#t");
     await visual(page, "track", "buy");
-    await expect.poll(() => site.api.length, { message: "the call and the event" }).toBe(2);
+    await expect.poll(() => site.api.length, { message: "the call, the goal's event and the tracked one" }).toBe(3);
+    expect(calls(site, BATCH_PATH).map((call) => (call.body as { events: { event_type: string }[] }).events[0].event_type).sort()).toEqual([
+      "buy",
+      "click_headline",
+    ]);
     expect((await context.cookies(SITE)).map((cookie) => cookie.name)).toContain("shop_visitor");
 
     expect(await visual(page, "revokeConsent"), "revokeConsent() returns nothing").toBeNull();
@@ -298,6 +305,7 @@ for (const mode of ["waits for consent", "does not wait"] as const) {
 
     const before = site.api.length;
     await visual(page, "track", "buy");
+    await page.click("#t");
     await page.evaluate(() => history.pushState(null, "", "/a/b/elsewhere"));
     await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pagehide")));
     await page.clock.runFor(60_000);
