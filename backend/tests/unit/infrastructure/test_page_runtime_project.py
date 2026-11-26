@@ -421,10 +421,14 @@ def test_the_sdk_contract_job_runs_the_visual_vector_test() -> None:
     assert step.get("working-directory") == "sdk/visual"
     assert _commands(step) == [
         "npm ci --no-audit --no-fund",
-        "npx jest --ci __tests__/validate.test.ts",
+        "npx jest --ci __tests__/validate.test.ts __tests__/contexts.test.ts",
     ]
     assert "if" not in step and not step.get("continue-on-error")
     assert "validate.test.ts" in {
+        p.name for p in (REPO_ROOT / "sdk" / "visual" / "__tests__").iterdir()
+    }
+    # jest reads each path as a pattern: a file that is gone fails no run.
+    assert "contexts.test.ts" in {
         p.name for p in (REPO_ROOT / "sdk" / "visual" / "__tests__").iterdir()
     }
 

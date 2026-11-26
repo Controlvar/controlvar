@@ -2074,6 +2074,39 @@ MECHANISMS: Dict[str, Mechanism] = {
             ),
         ),
     ),
+    # The visual script's table of what it reads about visitors: each row is
+    # a detail of tests/sdk-contract/visitor-attributes.json, with that file's
+    # label, key, source, example, sent and stored words, in its order.
+    "visual-details-table": Mechanism(
+        "backend/tests/unit/docs/test_visual_install_guide.py"
+        "::test_the_details_table_is_the_vocabulary",
+        holds=(
+            (
+                "docs/sdk/visual.md",
+                r"^[A-Z][A-Za-z ]{1,40} \(web_[a-z_]{1,30}\) \| [^|]{1,200}"
+                r" \| [^|]{1,40} \| [^|]{1,100} \| [^|]{1,100}$",
+            ),
+        ),
+    ),
+    # The words around that table that name the vocabulary's closed values and
+    # data-collect values and the server's limits on campaign values and paths.
+    "visual-details-words": Mechanism(
+        "backend/tests/unit/docs/test_visual_install_guide.py"
+        "::test_the_details_words_name_the_vocabulary_and_the_limits",
+        holds=_whole(
+            "docs/sdk/visual.md",
+            "The device type is phone, tablet or desktop; the browser is chrome, edge,"
+            " firefox, safari, samsung, opera or other; new or returning is new or"
+            " returning.",
+            "Campaign values are kept only if they are 1 to 100 of the letters A to Z"
+            " and a to z, the digits, and ., _, ~ and -; a longer value is left out,"
+            " never cut.",
+            "The landing page is a path of at most 255 characters, with no @, %40,"
+            " whitespace or control character; a longer path is left out, never cut.",
+            "data-collect names the details to send: device, browser, language,"
+            " visitor, referrer, utm and landing, separated by commas.",
+        ),
+    ),
     # While the visual editor is not offered: the page says so, is not in the
     # navigation, and nothing in the dashboard names the script.
     "visual-not-yet-available": Mechanism(

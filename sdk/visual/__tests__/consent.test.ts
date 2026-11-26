@@ -105,7 +105,12 @@ describe('consent()', () => {
     expect(paths(p.fetches)).toEqual(['/api/v1/tracking/visual']);
     expect(p.window.document.getElementById('t')!.textContent).toBe('Changed');
     expect(p.window.document.cookie).toMatch(/^controlvar_uid=/);
-    expect(storageKeys(p.window)).toEqual(['local:controlvar_assigned', 'local:controlvar_pages']);
+    expect(storageKeys(p.window)).toEqual([
+      'local:controlvar_assigned',
+      'local:controlvar_pages',
+      'local:controlvar_seen',
+      'local:controlvar_visit',
+    ]);
     visual(p.window).consent();
     await settle();
     // A second consent() asks nothing more.

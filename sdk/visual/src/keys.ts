@@ -30,4 +30,13 @@ export const KEYS = {
 export const PREFIX = "controlvar_";
 
 /** The keys this version of the script writes. */
-export const WRITTEN = [KEYS.uid, KEYS.assigned, KEYS.pages, KEYS.backoff, KEYS.preview, KEYS.editorOpen] as const;
+export const WRITTEN = [
+  KEYS.uid,
+  KEYS.visit,
+  KEYS.seen,
+  KEYS.assigned,
+  KEYS.pages,
+  KEYS.backoff,
+  KEYS.preview,
+  KEYS.editorOpen,
+] as const;

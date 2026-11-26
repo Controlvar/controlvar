@@ -21,14 +21,20 @@
  * banner (own-ui.ts) with [Exit preview]. Every other experiment is off, it
  * keeps no page rules or assignments, sets no cookie and track() sends nothing.
  *
- * Nothing is read from the visitor's cookie, stored or sent unless
- * `allowed()`: consent given (or not needed) and not revoked. An answer that
- * arrives after revokeConsent() is dropped.
+ * The call for the page also carries the website details data-collect turns
+ * on (details.ts, visit.ts), merged into its `context` after data-attributes.
+ * They are read on each page view the script follows, and never in a
+ * preview tab; no other call carries them.
+ *
+ * Nothing is read from the visitor's cookie or the browser, stored or sent
+ * unless `allowed()`: consent given (or not needed) and not revoked. An answer
+ * that arrives after revokeConsent() is dropped.
  */
 import { createApplier, type Applier } from "./apply";
 import { answerBound, type Bound } from "./bound";
 import type { Captures } from "./captures";
 import type { Config } from "./config";
+import { detailsFor, pageDetails, readPageSignals } from "./details";
 import { hidePage, type Hider } from "./hide";
 import { KEYS } from "./keys";
 import { createOwnUi, type OwnUi } from "./own-ui";
@@ -51,6 +57,7 @@ import { backoffActive, startBackoff, type Send } from "./send";
 import { normalizeHost } from "./url";
 import { validateChanges } from "./validate";
 import { visitorId } from "./visitor";
+import { touchVisit } from "./visit";
 
 export const VISUAL_PATH = "/api/v1/tracking/visual";
 export const BATCH_PATH = "/api/v1/tracking/batch";
@@ -128,6 +135,8 @@ export function createRuntime(env: RuntimeEnv): Runtime {
   /** The preview link's token while this tab shows one; the banner while it is on the page. */
   let preview: string | null = null;
   let banner: OwnUi | null = null;
+  /** The page load's own details (device, browser, language, referrer), read on the first page view. */
+  let loaded: Record<string, string> | null = null;
   const owns = (element: Element): boolean =>
     element === win.document.documentElement || (banner !== null && banner.owns(element));
 
@@ -204,7 +213,25 @@ export function createRuntime(env: RuntimeEnv): Runtime {
     apply(applier, hider, which);
   }
 
-  function ask(hider: Hider, path: string, which: number): void {
+  /**
+   * One page view of an ordinary page (never a preview): the website details
+   * for its call. The page load's own are read once; the visit is touched on
+   * every page view.
+   */
+  function viewDetails(): Record<string, string> {
+    const location = win.location;
+    if (loaded === null) loaded = pageDetails(readPageSignals(win, config.collect), config.collect, location.hostname);
+    const visit = touchVisit(
+      env.local(),
+      env.now(),
+      { search: location.search, pathname: location.pathname },
+      config.collect,
+      env.allowed,
+    );
+    return detailsFor(loaded, visit, config.collect);
+  }
+
+  function ask(hider: Hider, path: string, which: number, details: Record<string, string>): void {
     const location = win.location;
     const previewing = preview;
     let request: Promise<Response> | null;
@@ -217,7 +244,9 @@ export function createRuntime(env: RuntimeEnv): Runtime {
         path,
         format_version: FORMAT_VERSION,
       };
-      if (config.attributes !== null) body.context = config.attributes;
+      if (config.attributes !== null || Object.keys(details).length > 0) {
+        body.context = { ...(config.attributes || {}), ...details };
+      }
       request = send(VISUAL_PATH, body, { apiKey: true });
     }
     if (request === null) return hider.show();
@@ -263,10 +292,20 @@ export function createRuntime(env: RuntimeEnv): Runtime {
       current = null;
       leaving.stop();
     }
+    // A page view of the visit whether or not it makes a call, so a visit that
+    // starts on a page no experiment covers keeps that page's campaign.
+    let details: Record<string, string> = {};
+    if (preview === null) {
+      try {
+        details = viewDetails();
+      } catch {
+        details = {};
+      }
+    }
     if (skip || location.host.length > MAX_HOST_LENGTH || path.length > MAX_PATH_LENGTH) return;
     const hider = hide ? hidePage(win.document, captures, config.timeoutMs) : NO_HIDE;
     try {
-      ask(hider, path, which);
+      ask(hider, path, which, details);
     } catch {
       hider.show();
     }

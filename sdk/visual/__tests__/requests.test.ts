@@ -68,6 +68,7 @@ describe('the send function', () => {
     userId: null,
     cookieName: 'controlvar_uid',
     attributes: null,
+    collect: { device: true, browser: true, language: true, visitor: true, referrer: true, utm: true, landing: false },
     warnings: [],
   };
   const storage = (backoff: string | null) => ({ getItem: () => backoff }) as unknown as Storage;

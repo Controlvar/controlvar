@@ -1,7 +1,7 @@
 """False stories the docs told, or must never tell, refused in every in-scope document (#1142).
 
 Each of the first five was told on many pages at once, so it is swept
-everywhere rather than fixed page by page; the last three guard what the
+everywhere rather than fixed page by page; the last four guard what the
 docs say about the visual editor and its script (#1545):
 
 1. **inactive-404.** A flag that exists but is not ACTIVE does not answer 404
@@ -43,6 +43,11 @@ docs say about the visual editor and its script (#1545):
    criterion 2.2.1 (Timing Adjustable), as the limitations page says (#1545).
    No page may say that it meets, conforms to, or is compliant with WCAG 2.1
    AA.
+9. **details-anonymous.** The website details the visual script sends (the
+   device type, browser, language, new or returning, the referring site, the
+   campaign and the landing page) are stored with the visitor's id on each
+   exposure, and with the site's own ids and paths they can help single a
+   person out, so no page says they are anonymous or cannot identify anyone.
 
 Each rule is a pattern, why it is wrong, the path prefixes it is limited to
 (``None``: every in-scope document) and a sample of the removed text it must
@@ -126,6 +131,10 @@ _CONSENT = (
 _IP = (
     "the database stores no visitor IP address, but access logs, proxies and"
     " the rate limiter's counters see each request's address"
+)
+_DETAILS = (
+    "the website details are stored with the visitor's id and can help single"
+    " a person out; say what is sent and stored instead"
 )
 _EDITOR_WCAG = (
     "the visual editor's sign-in lasts 4 hours and cannot be extended, which"
@@ -359,6 +368,14 @@ RULES: Tuple[Rule, ...] = (
         None,
         "The visual editor is fully accessible (WCAG 2.1 AA).",
     ),
+    # 9. details-anonymous
+    (
+        "details-anonymous",
+        r"(?i)\b(?:website|visitor)\s+details?\b[^.|\n]{0,80}?\b(?:anonymous|anonymi[sz]ed|cannot\s+identify|can't\s+identify|identify\s+no\s*one|do(?:es)?\s+not\s+identify\s+(?:anyone|anybody|a\s+(?:person|visitor)))\b",
+        _DETAILS,
+        None,
+        "The website details are anonymous, so they cannot identify anyone.",
+    ),
 )
 
 #: (document, exact text, why the hit inside it stays for now).
@@ -467,6 +484,7 @@ def test_every_story_has_a_rule() -> None:
         "consent-compliant",
         "ip-stored-anywhere",
         "editor-wcag",
+        "details-anonymous",
     }
 
 
@@ -492,6 +510,10 @@ def test_every_story_has_a_rule() -> None:
         " Adjustable).",
         "The visual editor does not meet WCAG 2.1 AA.",
         "The visual editor is not yet available in the dashboard.",
+        "With the call for a page's changes, the script sends the website details"
+        " `data-collect` turns on, so that an experiment's audience can use them.",
+        "Use an id that does not identify a person, such as an account number,"
+        " not an email address.",
     ],
 )
 def test_a_true_sentence_is_not_a_hit(true_text: str) -> None:

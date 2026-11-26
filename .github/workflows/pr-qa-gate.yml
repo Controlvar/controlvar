@@ -518,12 +518,14 @@ jobs:
         run: python -m pytest tests/sdk-contract -v -o addopts=""
 
       # The visual script (sdk/visual) gives the server's answer on every page-change
-      # and page-rule vector in visual-changes-vectors.json, exact count.
+      # and page-rule vector in visual-changes-vectors.json, exact count, and sends
+      # exactly the website details of each visual-script-vectors.json entry, never in
+      # a form visual-visitor-vectors.json says the server drops.
       - name: Visual script page-change vectors (sdk/visual)
         working-directory: sdk/visual
         run: |
           npm ci --no-audit --no-fund
-          npx jest --ci __tests__/validate.test.ts
+          npx jest --ci __tests__/validate.test.ts __tests__/contexts.test.ts
 
       - name: Python SDK hash (sdk/python)
         run: python tests/sdk-contract/hash_contract.py python
