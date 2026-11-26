@@ -212,7 +212,14 @@ overrides the scoped key). Then, also once, that a key answers its own flag envi
 `ruleset (staging)` row, #2011): the seed configures `sdk_contract_flag` off and
 `sdk_contract_targeted` on in staging, the other way round from production, and its two staging
 keys must be answered that, by the evaluate route and by the ruleset, while the production key is
-answered production's by the evaluate route. The SDK rows use the production keys. After the SDKs,
+answered production's by the evaluate route. The SDK rows use the production keys. Then, also
+once, the seed's two multi-way flags (the `multiway (server)` row, #2012): the evaluate route must
+answer three users of `sdk_contract_multiway` (on at 100%, a split of `red`, `green` and `blue`
+weighted 34/33/33) three distinct values, each the one the seed picked the user for with the
+server's own split function, and a user with `{"plan": "pro"}` the value of
+`sdk_contract_rule_value`'s rule, `pro-copy`; `/feature-flags/user/{id}` must answer both flags
+with booleans. A server that serves the on value in place of the split's fails the row with
+`3 users got 1 distinct value; expected 3`. After the SDKs,
 each SDK with a local mode runs its local smoke with the seed's `sdk:ruleset` key (the
 `python (local)` and `js (local)` rows): the runner reads the database before and after, through the backend's own
 `SafetyService.get_error_metrics`, and requires no new per-user evaluation row (no evaluate call),
@@ -234,15 +241,30 @@ keys to the known id fails with `alias: 0 tagged events (experiment_id NULL)`, a
 does not follow the link when it receives the event with `alias: event variant NULL`. As with
 `EXPOSURE_SDKS`, an SDK not listed may not report it.
 
-Last come the published releases (`PUBLISHED_LOCAL`: the `js 0.2.0 (published, local)` and
-`python 0.2.0 (published, local)` rows, #1497). Each is downloaded and checked by digest as in
+The smokes of the SDKs in `MULTIWAY_SDKS` (`js`, `react`, `react-native`, `java` and `dotnet`, the
+SDKs with typed getters, #2012) read the two multi-way flags with their string getter:
+`sdk_contract_multiway` for each user the runner gives in `CONTRACT_MULTIWAY_USERS`
+(comma-separated, the seed's three), and `sdk_contract_rule_value` for one user with
+`{"plan": "pro"}`. They report `"multiway": {"users": {<user>: <value>, ...}, "rule": <value>}`,
+and the runner requires each user's value of the split and the rule's own value: a getter that
+falls back fails with `multiway.users['mw-user-1']='smoke-default' (expected 'green', the split's
+value for the user)`. As with `EXPOSURE_SDKS`, an SDK not listed may not report it.
+
+Last come the published releases (#1497 and #2012; `PUBLISHED_LOCAL`: the
+`js 0.2.0 (published, local)`, `python 0.2.0 (published, local)` and
+`python 0.3.0 (published, multi-way)` rows). Each is downloaded and checked by digest as in
 section 2, and its own client runs in local mode against this server
 (`harness/published_js_live.cjs`, `harness/published_python_live.py`): it must load the ruleset
 the server serves and answer the seed's three value flags (`sdk_contract_value_string`,
 `_number`, `_json`) locally as on. The runner then signs in as the seed's DEVELOPER and turns
 them off through the API; within one refresh (5 seconds, 0.2.0's shortest) each must answer
 `inactive`, still locally. The flags are turned back on afterwards, and the seed turns them back
-on if a run stopped in between. These rows need the network (npm and PyPI) and, for js, node.
+on if a run stopped in between. The 0.3.0 row reads `sdk_contract_multiway` instead, for the first
+of the seed's users: its ruleset entry is `remote`, so the release must answer it from the server
+(`source` `server`) with the server's value of the split, and, once the runner turns the flag off,
+`inactive` locally with the off value within one refresh. A ruleset that gave the flag a local
+entry would have the release serve every user the on value, locally, and fails the row. These rows
+need the network (npm and PyPI) and, for js, node.
 
 ```bash
 source venv/bin/activate
@@ -254,7 +276,7 @@ python tests/sdk-contract/live/run_live_contract.py
 python tests/sdk-contract/live/run_live_contract.py --sdk go --sdk python --strict
 ```
 
-- `python backend/scripts/seed_sdk_contract.py`: experiment sdk_contract_ab, flag sdk_contract_flag, a string, a number and a json flag, the targeted flag sdk_contract_targeted (0%, rule plan=pro at 100%), API keys -> live/.api_key, live/.api_key_local (sdk:ruleset), and the same two of the staging environment -> live/.api_key_staging, live/.api_key_local_staging, with staging's settings for the two flags; runs only with ENVIRONMENT development or test, like the demo seeds
+- `python backend/scripts/seed_sdk_contract.py`: experiment sdk_contract_ab, flag sdk_contract_flag, a string, a number and a json flag, the targeted flag sdk_contract_targeted (0%, rule plan=pro at 100%), the multi-way flags sdk_contract_multiway (100%, a split of three values) and sdk_contract_rule_value (0%, the same rule with a value of its own), API keys -> live/.api_key, live/.api_key_local (sdk:ruleset), and the same two of the staging environment -> live/.api_key_staging, live/.api_key_local_staging, with staging's settings for the two flags; runs only with ENVIRONMENT development or test, like the demo seeds
 - `uvicorn backend.app.main:app --port 8000 &`: or ./demo/setup-local.sh
 - `python tests/sdk-contract/live/run_live_contract.py`: all SDKs whose toolchain is installed
 

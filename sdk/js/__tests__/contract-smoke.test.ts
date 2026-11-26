@@ -61,6 +61,20 @@ globalThis.fetch = async (url, init = {}) => {
       const pro = context !== null && JSON.parse(context).plan === 'pro';
       return reply({ key, enabled: pro, config: null, reason: pro ? 'targeting_rule' : 'rollout' });
     }
+    // The seed's multi-way flags (#2012): a split, here each user's value by name; and a rule,
+    // plan equals pro, that serves a value of its own. FAKE_NO_VALUES drops their values too.
+    if (key === 'sdk_contract_multiway') {
+      const user = new URL(String(url)).searchParams.get('user_id');
+      const served = process.env.FAKE_NO_VALUES ? {} : { value: 'value-of-' + user, value_type: 'string' };
+      return reply({ key, enabled: true, ...served, config: null, reason: 'rollout' });
+    }
+    if (key === 'sdk_contract_rule_value') {
+      const context = new URL(String(url)).searchParams.get('context');
+      const pro = context !== null && JSON.parse(context).plan === 'pro';
+      const value = pro ? 'pro-copy' : 'off-copy';
+      const served = process.env.FAKE_NO_VALUES ? {} : { value, value_type: 'string' };
+      return reply({ key, enabled: pro, ...served, config: null, reason: pro ? 'targeting_rule' : 'rollout' });
+    }
     return reply({ key, enabled: true, config: null });
   }
   if (path === '/api/v1/tracking/batch') {
@@ -150,8 +164,15 @@ test('it assigns twice, evaluates the flag, tracks with and without a key and se
     'GET /api/v1/feature-flags/evaluate/sdk_contract_value_string',
     'GET /api/v1/feature-flags/evaluate/sdk_contract_value_number',
     'GET /api/v1/feature-flags/evaluate/sdk_contract_value_json',
+    // #2012: no CONTRACT_MULTIWAY_USERS, so no user of the split; the rule value flag with plan=pro.
+    'GET /api/v1/feature-flags/evaluate/sdk_contract_rule_value',
   ]);
-  expect(seen.slice(12).map(r => new URL(r.url).searchParams.get('user_id'))).toEqual(['user-a', 'user-a', 'user-a']);
+  expect(seen.slice(12).map(r => new URL(r.url).searchParams.get('user_id'))).toEqual([
+    'user-a',
+    'user-a',
+    'user-a',
+    'user-a',
+  ]);
   expect(seen.slice(8, 10).map(r => r.url)).toEqual([
     'http://api.test/api/v1/feature-flags/evaluate/targeted_a?user_id=user-a&context=%7B%22plan%22%3A%22pro%22%7D',
     'http://api.test/api/v1/feature-flags/evaluate/targeted_a?user_id=user-a&context=%7B%22plan%22%3A%22free%22%7D',
@@ -189,6 +210,7 @@ test('it assigns twice, evaluates the flag, tracks with and without a key and se
       payload: { experiment_key: 'exp_a', variant_name: 'control', variant_id: 'v-1', user_id: 'user-a' },
     },
     values: { string: 'on-copy', number: 10, json: { color: 'blue' } },
+    multiway: { users: {}, rule: 'pro-copy' },
   });
   expect(seen.slice(10, 12).map(r => r.body)).toEqual([
     { experiment_key: 'exp_a', user_id: 'user-a' },
@@ -204,6 +226,34 @@ test('without assigned in the answer no hook is called, and it fails on the reje
     'js contract smoke failed: the rejecting hook was reported as [], expected ["exposure/HOOK_ERROR"]\n'
   );
   expect(seen.filter(r => new URL(r.url).pathname === '/api/v1/tracking/assign')).toHaveLength(4);
+});
+
+test('it reads the multi-way flag for each user it is given, and the rule value flag with plan=pro', () => {
+  const { run, seen } = runSmoke({
+    CONTROLVAR_API_URL: 'http://api.test',
+    CONTROLVAR_API_KEY: 'k',
+    CONTRACT_USER_ID: 'user-a',
+    CONTRACT_MULTIWAY_USERS: 'mw-a,mw-b,mw-c',
+  });
+  expect(run.stderr).toBe('');
+  expect(run.status).toBe(0);
+  const read = seen.filter(r => /\/evaluate\/sdk_contract_(multiway|rule_value)$/.test(new URL(r.url).pathname));
+  expect(read.map(r => r.url)).toEqual([
+    'http://api.test/api/v1/feature-flags/evaluate/sdk_contract_multiway?user_id=mw-a',
+    'http://api.test/api/v1/feature-flags/evaluate/sdk_contract_multiway?user_id=mw-b',
+    'http://api.test/api/v1/feature-flags/evaluate/sdk_contract_multiway?user_id=mw-c',
+    'http://api.test/api/v1/feature-flags/evaluate/sdk_contract_rule_value?user_id=user-a&context=%7B%22plan%22%3A%22pro%22%7D',
+  ]);
+  expect(JSON.parse(run.stdout.trim()).multiway).toEqual({
+    users: { 'mw-a': 'value-of-mw-a', 'mw-b': 'value-of-mw-b', 'mw-c': 'value-of-mw-c' },
+    rule: 'pro-copy',
+  });
+});
+
+test('it reports the default for a multi-way flag the server sends no value for', () => {
+  const { run } = runSmoke({ CONTROLVAR_API_KEY: 'k', CONTRACT_MULTIWAY_USERS: 'mw-a', FAKE_NO_VALUES: '1' });
+  expect(run.status).toBe(0);
+  expect(JSON.parse(run.stdout.trim()).multiway).toEqual({ users: { 'mw-a': 'smoke-default' }, rule: 'smoke-default' });
 });
 
 test('it reports what the typed getters returned: the defaults when the server sends no value', () => {
@@ -248,8 +298,8 @@ test('with the sdk:ruleset key it links a new anonymous id to a new known id on 
   // Every step before it is unchanged and uses the plain key; the alias step alone uses the
   // sdk:ruleset key: assign the anonymous id, link it twice, a key-less event under the known id
   // (fanned out to the experiment the anonymous id was answered for), then assign the known id.
-  expect(seen.slice(0, 15).every(r => r.key === 'k')).toBe(true);
-  const step = seen.slice(15);
+  expect(seen.slice(0, 16).every(r => r.key === 'k')).toBe(true);
+  const step = seen.slice(16);
   expect(step.map(r => `${r.key} ${r.method} ${new URL(r.url).pathname}`)).toEqual([
     'scoped POST /api/v1/tracking/assign',
     'scoped POST /api/v1/tracking/alias',
@@ -266,7 +316,7 @@ test('with the sdk:ruleset key it links a new anonymous id to a new known id on 
   });
   expect(step[4].body).toEqual({ experiment_key: 'exp_a', user_id: alias.user_id });
   expect(Object.keys(report).sort()).toEqual(
-    ['alias', 'assign', 'event_id', 'exposure', 'fanout', 'flag', 'sdk', 'targeted', 'track', 'values']
+    ['alias', 'assign', 'event_id', 'exposure', 'fanout', 'flag', 'multiway', 'sdk', 'targeted', 'track', 'values']
   );
 });
 

@@ -13,7 +13,8 @@ It prints one JSON line once the client has loaded the ruleset and answered
 every flag (``loaded``), then waits for one line on stdin (the runner has
 turned the flags off through the API), then evaluates every flag until each
 answers ``inactive`` locally or the wait is over, and prints a second line
-(``after``).
+(``after``). With ``"values": true`` in the config each answer also carries
+the value the client served.
 """
 
 import json
@@ -46,6 +47,10 @@ def main(argv):
                 "reason": result.reason,
                 "source": result.source,
             }
+            if config.get("values"):
+                # The value it serves (0.3.0 on), or "absent" for a release
+                # whose answer has none.
+                out[flag]["value"] = getattr(result, "value", "absent")
         return out
 
     def status():
