@@ -9,6 +9,11 @@ import { answering, calls, experiment, PREVIEW_PATH, previewAnswer, sitePage, VI
  * usual; a call that fails while the page is open still starts one. One tab
  * opens five pages in turn, each left once its load event has fired and its
  * call has reached the API, which answers none of them before the page goes.
+ *
+ * A refusal follows the same rule. When the API's answer is a 401, 403 or 503
+ * that comes only after the page has gone, the tab keeps no pause and each
+ * page asks; the same answer while the page is open pauses the tab, and the
+ * next page makes no call.
  */
 
 const TOKEN = "p".repeat(40) + "abc";
@@ -97,4 +102,49 @@ test.describe("a page left before its call is answered", () => {
     expect(failed, "calls").toBe(1);
     expect(await storageKeys(page), "storage keys").toContain("session:controlvar_backoff");
   });
+});
+
+test.describe("a refused answer", () => {
+  for (const status of [401, 403, 503]) {
+    test(`a tab whose pages are each left before their ${status} answer comes asks on each of five pages and keeps no pause`, async ({
+      page,
+      visualPackage,
+    }) => {
+      let release: () => void = () => undefined;
+      const hold = new Promise<void>((resolve) => (release = resolve));
+      const site = await routeSite(page, visualPackage, {
+        pages: PAGES,
+        answer: answering({ experiments: [experiment("headline", HEADLINE)], status, hold }),
+      });
+      try {
+        const seen = await fivePages(page, () => calls(site, VISUAL_PATH).length, `${SITE}/p/1`);
+        const paused = (await storageKeys(page)).includes("session:controlvar_backoff");
+        expect({ calls: seen, paused }, "calls the API has had after each page, and the pause after the fifth").toEqual({
+          calls: [1, 2, 3, 4, 5],
+          paused: false,
+        });
+      } finally {
+        release();
+        await page.unrouteAll({ behavior: "ignoreErrors" });
+      }
+    });
+
+    test(`a ${status} answer while the page is open pauses the tab for 5 minutes: the next page makes no call`, async ({
+      page,
+      visualPackage,
+    }) => {
+      const site = await routeSite(page, visualPackage, {
+        pages: PAGES,
+        answer: answering({ experiments: [experiment("headline", HEADLINE)], status }),
+      });
+      await page.goto(`${SITE}/p/1`, { waitUntil: "load" });
+      await expect.poll(() => page.evaluate(() => sessionStorage.getItem("controlvar_backoff"))).not.toBeNull();
+      const left = await page.evaluate(() => Number(sessionStorage.getItem("controlvar_backoff")) - Date.now());
+      expect(left, "the pause, in ms").toBeGreaterThan(4 * 60 * 1000);
+      expect(left, "the pause, in ms").toBeLessThanOrEqual(5 * 60 * 1000);
+      await page.goto(`${SITE}/p/2`, { waitUntil: "load" });
+      expect(await arrived(() => calls(site, VISUAL_PATH).length, 2), "calls").toBe(1);
+      expect(await storageKeys(page), "storage keys").toContain("session:controlvar_backoff");
+    });
+  }
 });
