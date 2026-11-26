@@ -1628,6 +1628,22 @@ by = [
 ]
 
 [[unit]]
+text = "POST /api/v1/feature-flags/, PUT /api/v1/feature-flags/{flag_id}, PUT /api/v1/feature-flags/{flag_id}/environments/{environment} (beta), POST /api/v1/feature-flags/{flag_id}/environments/{target}/promote (beta) | #2179 | A native rule's id or the default_rule's id longer than 255 characters answers 422 at [\"body\", \"targeting_rules\"], with Value error, rules[0].id: must be at most 255 characters (or default_rule.id), and nothing is saved. It used to be saved, and then, with a production key, every evaluation that reached that rule and GET /api/v1/feature-flags/user/{user_id} for each user it matched answered 500, because the id a production evaluation records holds at most 255 characters. An id of 255 characters is saved and evaluated as before; the dashboard shape's id is still 1 to 100 characters, and experiment rules are unaffected. A request that resends such stored rules is refused too, and a promotion from environment settings that hold them is refused until they are fixed. A flag stored with such an id before this release keeps answering 500 to those evaluations until its id is shortened: python -m backend.scripts.check_targeting_rules lists it, and a PUT that sends the rules with an id of at most 255 characters fixes it. The OpenAPI document does not change."
+by = [
+    "test:backend/tests/integration/api/test_flag_rule_id_refused.py::test_a_create_refuses_an_id_over_255_characters",
+    "test:backend/tests/integration/api/test_flag_rule_id_refused.py::test_an_update_refuses_it_and_keeps_the_stored_rules",
+    "test:backend/tests/integration/api/test_flag_rule_id_refused.py::test_an_environment_update_refuses_it",
+    "test:backend/tests/integration/api/test_flag_rule_id_refused.py::test_a_promotion_of_a_stored_long_id_is_refused",
+    "test:backend/tests/integration/api/test_flag_rule_id_refused.py::test_an_id_of_255_characters_is_saved_evaluated_and_recorded",
+    "test:backend/tests/integration/api/test_flag_rule_id_refused.py::test_a_flag_stored_with_a_long_id_is_listed_and_can_be_fixed",
+    "test:backend/tests/integration/api/test_flag_rule_id_refused.py::test_experiment_rules_are_unaffected",
+    "test:backend/tests/unit/core/test_targeting_vocabulary.py::test_the_walker_is_called_from_write_paths_only",
+    "test:backend/tests/unit/core/test_flag_targeting_validation.py::test_refused",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
 text = "POST /api/v1/feature-flags/, GET /api/v1/feature-flags/, GET/PUT /api/v1/feature-flags/{flag_id}, POST /api/v1/feature-flags/{flag_id}/activate, POST /api/v1/feature-flags/{flag_id}/deactivate | #2012 | The request and response schemas gain split: what share of the users a string, number or json flag is on for gets each of 3 to 10 values, by whole-number weights that add up to 100. null, every existing flag's, means none, and a boolean flag's is always null. A targeting rule of such a flag may carry a value of its own. Anything else answers 422: a split at [\"body\", \"split\"] or at its entry ([\"body\", \"split\", 2, \"weight\"]), a rule's value at [\"body\", \"targeting_rules\"]. A release older than 0.49.0 refuses both (422) and serves the on value."
 by = [
     "test:backend/tests/unit/schemas/test_flag_split_write.py::test_a_create_accepts_a_split_of_three_to_ten_values",
