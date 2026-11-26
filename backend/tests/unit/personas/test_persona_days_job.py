@@ -340,3 +340,55 @@ def test_a_literal_title_and_other_test_methods_are_accepted():
         "test.extend({});\ntest.setTimeout(1);\nconst x = mytest(a);\n"
     )
     assert title_problems(source, "x") == []
+
+
+# ------------------------------------------------------------------ sign-ins
+
+ORACLES = REPO_ROOT / "frontend" / "tests" / "e2e" / "oracles"
+PACER = "signin.ts"
+#: A sign-in made without oracles/signin.ts: unpaced, and a 429 it meets
+#: could be waited out or read as an answer.
+_UNPACED_SIGN_IN = re.compile(
+    r"submitResilient\(|\bloginAs\(|new LoginPage\(|"
+    r"\.(?:post|fetch)\(\s*[`\"'][^`\"'\n]*auth/login"
+)
+
+
+def sign_in_problems(text: str, name: str) -> list[str]:
+    return [
+        f"{name}:{text.count(chr(10), 0, m.start()) + 1}: signs in without "
+        f"oracles/{PACER} (unpaced; a 429 must fail, not be waited out)"
+        for m in _UNPACED_SIGN_IN.finditer(text)
+    ]
+
+
+def test_the_days_sign_in_only_through_the_pacer():
+    files = sorted(SPECS.glob("*.ts")) + sorted(
+        p for p in ORACLES.glob("*.ts") if p.name != PACER
+    )
+    assert files and (ORACLES / PACER).is_file()
+    problems = []
+    for path in files:
+        problems += sign_in_problems(path.read_text("utf-8"), path.name)
+    assert not problems, "\n".join(problems)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "await login.submitResilient(email, password);",
+        'await loginAs(page, "analyst");',
+        "const login = new LoginPage(page);",
+        "await request.post(`${API_URL}/api/v1/auth/login`, { data });",
+        'await page.request.fetch("/api/v1/auth/login", { method: "POST" });',
+    ],
+)
+def test_a_sign_in_around_the_pacer_is_refused(source):
+    assert sign_in_problems(f"\n{source}\n", "x.persona.spec.ts") == [
+        "x.persona.spec.ts:2: signs in without oracles/signin.ts "
+        "(unpaced; a 429 must fail, not be waited out)"
+    ]
+
+
+def test_naming_the_sign_in_route_in_an_allow_list_is_not_a_sign_in():
+    assert sign_in_problems('["POST /api/v1/auth/login", "signing in"],', "x") == []

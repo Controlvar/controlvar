@@ -394,11 +394,20 @@ def _files(tmp_path: Path, report: Any = None) -> list[str]:
     (tmp_path / "log.jsonl").write_text(
         (RECORDED / "oracle-log.jsonl").read_text("utf-8")
     )
+    # The recording is of U-DEV's day alone: the command reads that card and
+    # a pinned count of 1, not the live ones, which grow with each day.
+    cards = tmp_path / "personas"
+    cards.mkdir()
+    (cards / "u-dev.yaml").write_text(
+        (PERSONAS_ROOT / "personas" / "u-dev.yaml").read_text("utf-8")
+    )
+    (tmp_path / "pinned.yaml").write_text("tests: 1\n")
     return [
         "--list", str(tmp_path / "list.json"), "--list-exit", "0",
         "--report", str(tmp_path / "report.json"), "--run-exit", "0",
         "--oracle-log", str(tmp_path / "log.jsonl"),
         "--details", str(tmp_path / "details.txt"),
+        "--personas", str(cards), "--pinned", str(tmp_path / "pinned.yaml"),
     ]  # fmt: skip
 
 
@@ -498,3 +507,62 @@ def test_the_known_noise_reader_refuses_an_entry_without_an_issue(tmp_path):
     )
     with pytest.raises(ValueError, match="issue number"):
         check_run.read_known_noise(bad)
+
+
+# ------------------------------------------------------------------ sign-ins
+
+SIGNIN_TS = REPO_ROOT / "frontend" / "tests" / "e2e" / "oracles" / "signin.ts"
+
+
+def _signins(*seconds: float) -> list[dict[str, Any]]:
+    start = 1_800_000_000_000
+    return [{"signin": "developer", "at": start + s * 1000} for s in seconds]
+
+
+@pytest.mark.regression
+def test_more_sign_ins_in_a_minute_than_the_budget_is_a_check():
+    """The days together signing in ten times in a minute: one more and the
+    API's limit answers 429 to the next. Red, naming the count."""
+    outcome = _evaluate(oracle_log=[*_log(), *_signins(*range(0, 50, 5))])
+    assert _reasons(outcome) == [
+        "sign-ins: 10 within 60 s, more than the 9 the limit of 10 leaves"
+    ]
+    assert outcome.checks == 1 and not outcome.ok
+    _assert_neutral(check_run.summary_line(outcome))
+
+
+@pytest.mark.parametrize(
+    "seconds",
+    [
+        range(0, 45, 5),  # nine in 45 s: the budget, met
+        range(0, 600, 20),  # thirty, three a minute
+        [*range(9), *range(60, 69)],  # nine, then nine more 60 s later
+    ],
+)
+def test_sign_ins_within_the_budget_are_no_check(seconds):
+    outcome = _evaluate(oracle_log=[*_log(), *_signins(*seconds)])
+    assert outcome.problems == {}, outcome.problems
+
+
+def test_the_busiest_minute_counts_the_api_s_window():
+    """A sign-in exactly 60 s after another is outside its window, as the
+    API's sliding window counts (it drops what is 60 s old)."""
+    assert check_run.busiest_minute([0, 60_000]) == 1
+    assert check_run.busiest_minute([0, 59_999]) == 2
+    assert check_run.busiest_minute([]) == 0
+
+
+def test_the_budget_is_one_under_the_api_s_sign_in_limit_here_and_in_the_pacer():
+    from backend.app.middleware.rate_limiter import RATE_LIMIT_CONFIG
+
+    limit, window = RATE_LIMIT_CONFIG["/api/v1/auth/login"]
+    assert (check_run.SIGN_IN_LIMIT, check_run.SIGN_IN_WINDOW_S) == (limit, window)
+    assert check_run.SIGN_IN_BUDGET == limit - 1
+    pacer = SIGNIN_TS.read_text("utf-8")
+    for line in (
+        'export const LOGIN_PATH = "/api/v1/auth/login";',
+        f"export const SIGN_IN_LIMIT = {limit};",
+        f"export const SIGN_IN_WINDOW_MS = {window * 1000:_};",
+        "export const SIGN_IN_BUDGET = SIGN_IN_LIMIT - 1;",
+    ):
+        assert line in pacer, line

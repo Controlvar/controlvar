@@ -6,9 +6,11 @@ import { writeLogLine } from "./oracle";
 
 /**
  * The passive watcher of a persona day: on its page it notes every uncaught
- * page error, every console error and every same-origin answer of 500 or
- * more, and `step()` (the last line of each day step) scans the visible text
- * for the strings a user must never be shown. Anything noted fails that
+ * page error, every console error, and every same-origin answer of 500 or
+ * more or of 429 (oracles/signin.ts keeps the days under the rate limits, so
+ * a 429 is a defect, never waited out), and `step()` (the last line of each
+ * day step) scans the visible text for the strings a user must never be
+ * shown. Anything noted fails that
  * step, unless it is listed in `known-noise.json` with the issue that tracks
  * it.
  *
@@ -61,7 +63,7 @@ export class Watcher {
     });
     page.on("response", (response) => {
       const url = new URL(response.url());
-      if (url.origin === this.origin && response.status() >= 500) {
+      if (url.origin === this.origin && (response.status() >= 500 || response.status() === 429)) {
         this.note("response", `${response.status()} from ${response.request().method()} ${url.pathname}`);
       }
     });

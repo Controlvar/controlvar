@@ -1,13 +1,21 @@
-import { test as base, expect, loginAs, TEST_USERS, type UserRole } from "../fixtures/auth.fixture";
-import type { Page } from "@playwright/test";
-import { BASE_URL } from "../env";
-import { PersonaApi } from "../oracles/oracle";
+import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { test as base, expect, TEST_USERS, type UserRole } from "../fixtures/auth.fixture";
+import type { Browser, Page } from "@playwright/test";
+import { API_URL, BASE_URL, TOKEN_STORAGE_KEY } from "../env";
+import { ORACLE_LOG, PersonaApi } from "../oracles/oracle";
+import { signInByPage } from "../oracles/signin";
 import { Watcher } from "../oracles/watcher";
 
 /**
  * A persona's session for one day: a browser context of its own (in the
- * persona's time zone), signed in through /login, its API as that session,
- * and the watcher on its page.
+ * persona's time zone), its API as that session, and the watcher on its page.
+ *
+ * Each persona signs in through /login once per run (oracles/signin.ts, which
+ * keeps the run under the sign-in limit). The session is saved to a state
+ * file beside the oracle log (PERSONAS_STATE_DIR to choose another), and a
+ * later test or a retry of the run reuses it while the API still accepts its
+ * token.
  *
  * The session is checked before the day starts: GET /api/v1/auth/me must
  * answer the persona's role, so a day can never run as someone else.
@@ -23,20 +31,58 @@ interface PersonaFixtures {
   developer: PersonaSession;
 }
 
+const STATE_DIR = process.env.PERSONAS_STATE_DIR ?? join(dirname(ORACLE_LOG), "state");
+
+interface StorageState {
+  origins?: Array<{ origin: string; localStorage: Array<{ name: string; value: string }> }>;
+}
+
+/** The token a saved session holds, when the API still answers it with this account. */
+async function savedToken(page: Page, file: string, email: string): Promise<string | null> {
+  if (!existsSync(file)) return null;
+  const state = JSON.parse(readFileSync(file, "utf8")) as StorageState;
+  const origin = new URL(BASE_URL).origin;
+  const token = state.origins
+    ?.find((o) => o.origin === origin)
+    ?.localStorage.find((item) => item.name === TOKEN_STORAGE_KEY)?.value;
+  if (!token) return null;
+  const me = await page.request.get(`${API_URL}/api/v1/auth/me`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (me.status() === 200 && ((await me.json()) as { email: string }).email === email) return token;
+  rmSync(file);
+  return null;
+}
+
 async function open(
-  browser: import("@playwright/test").Browser,
+  browser: Browser,
   role: UserRole,
   timezoneId: string,
 ): Promise<{ session: PersonaSession; close: () => Promise<void> }> {
-  const context = await browser.newContext({ baseURL: BASE_URL, timezoneId });
+  const user = TEST_USERS[role];
+  const file = join(STATE_DIR, `${role}.json`);
+  mkdirSync(STATE_DIR, { recursive: true });
+
+  const probe = await browser.newContext({ baseURL: BASE_URL });
+  const token = await savedToken(await probe.newPage(), file, user.username);
+  await probe.close();
+
+  const context = await browser.newContext(
+    token ? { baseURL: BASE_URL, timezoneId, storageState: file } : { baseURL: BASE_URL, timezoneId },
+  );
   const page = await context.newPage();
   const watch = new Watcher(page);
-  await loginAs(page, role);
-  const api = await PersonaApi.of(page);
+  let session = token;
+  if (!session) {
+    await signInByPage(page, user.username, user.password, role);
+    await context.storageState({ path: file });
+    session = await page.evaluate((key) => window.localStorage.getItem(key), TOKEN_STORAGE_KEY);
+    if (!session) throw new Error(`sign-in ${role}: no session token stored`);
+  }
+  const api = new PersonaApi(page.request, session);
   const me = await api.json<{ role: string; email: string }>("/api/v1/auth/me");
-  const expected = TEST_USERS[role];
-  if (me.role !== expected.role || me.email !== expected.username) {
-    throw new Error(`session role ${me.role}, expected ${expected.role}`);
+  if (me.role !== user.role || me.email !== user.username) {
+    throw new Error(`session role ${me.role}, expected ${user.role}`);
   }
   return { session: { page, api, watch }, close: () => context.close() };
 }

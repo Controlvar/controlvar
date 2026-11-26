@@ -33,6 +33,8 @@ which stays on the machine that ran the days. ``checks`` counts the day steps
 * every oracle a step's card names was decided, with that kind and passing,
   in the oracle log, and the log holds no oracle no card names;
 * every entry of frontend/tests/e2e/oracles/known-noise.json occurred;
+* no 60 seconds of the run hold more sign-ins (the log's ``signin`` lines)
+  than ``SIGN_IN_BUDGET``, one under the API's sign-in limit;
 * the run ran every listed test and reported no error of its own.
 
 The run passes (exit 0) only when both Playwright commands exited 0, the
@@ -70,6 +72,12 @@ LINE = (
 REFUSED = "persona-days: pinned {pinned}: refused"
 FAILED = "persona-days: check_run failed"
 NOISE_KINDS = frozenset({"pageerror", "console", "response", "text"})
+#: POST /api/v1/auth/login: 10 a minute per address (RATE_LIMIT_CONFIG in
+#: backend/app/middleware/rate_limiter.py), and every day signs in from one.
+#: frontend/tests/e2e/oracles/signin.ts paces the days to one under it.
+SIGN_IN_LIMIT = 10
+SIGN_IN_WINDOW_S = 60
+SIGN_IN_BUDGET = SIGN_IN_LIMIT - 1
 #: The JSON reporter's test outcomes and attempt results; anything else is an error.
 TEST_STATUSES = frozenset({"expected", "unexpected", "flaky", "skipped"})
 RESULT_STATUSES = frozenset(
@@ -148,6 +156,18 @@ def step_titles(steps: list[dict[str, Any]]) -> Iterator[str]:
     for step in steps:
         yield step["title"]
         yield from step_titles(step.get("steps", []))
+
+
+def busiest_minute(times_ms: list[Any]) -> int:
+    """The most sign-ins (epoch milliseconds) any SIGN_IN_WINDOW_S holds."""
+    times = sorted(float(t) for t in times_ms)
+    window = SIGN_IN_WINDOW_S * 1000
+    most, start = 0, 0
+    for end, at in enumerate(times):
+        while at - times[start] >= window:
+            start += 1
+        most = max(most, end - start + 1)
+    return most
 
 
 def caught_step_errors(
@@ -300,7 +320,7 @@ def evaluate(
     decided = {
         (e.get("id"), e.get("kind"))
         for e in oracle_log
-        if "noise" not in e and e.get("pass") is True
+        if "noise" not in e and "signin" not in e and e.get("pass") is True
     }
     for (who, n), step in sorted(steps.items()):
         if who not in tested:
@@ -319,8 +339,18 @@ def evaluate(
                     f"declared oracle {oracle.id} ({oracle.kind}) absent from the oracle log",
                 )
 
+    busiest = busiest_minute([e["at"] for e in oracle_log if "signin" in e])
+    if busiest > SIGN_IN_BUDGET:
+        outcome.problem(
+            ("run", "sign-ins"),
+            f"sign-ins: {busiest} within {SIGN_IN_WINDOW_S} s, more than the "
+            f"{SIGN_IN_BUDGET} the limit of {SIGN_IN_LIMIT} leaves",
+        )
+
     noise_seen: set[int] = set()
     for entry in oracle_log:
+        if "signin" in entry:
+            continue
         if "noise" in entry:
             noise_seen.add(entry["noise"])
             continue
