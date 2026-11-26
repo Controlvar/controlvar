@@ -145,7 +145,7 @@ def _check_sent_values(
     ``value_type`` is read-only: sent, it must equal the stored type, compared
     exactly. Each sent value is checked against the stored type, and the pair
     as it will be stored (each value as sent, otherwise as stored) must differ
-    (EMF-5). The update route reads *flag* with ``SELECT ... FOR UPDATE`` when
+    (EMF-5). The update route reads *flag* and locks the row when
     a value is sent, so the stored pair is the committed one and a concurrent
     update of the same flag waits for this one. A check violation that still
     reaches the commit -- a writer that does not take that lock -- is answered
