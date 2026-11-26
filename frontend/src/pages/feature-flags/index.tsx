@@ -132,6 +132,9 @@ export default function FeatureFlagsPage() {
   const [error, setError] = useState<string | null>(null);
   const [totalFlags, setTotalFlags] = useState(0);
   const [toggling, setToggling] = useState<Record<string, boolean>>({});
+  // Rows with a press in flight, set at once: `toggling` only changes on the next
+  // render, so a second press in the same tick would otherwise send a second request.
+  const toggleLock = useRef<Set<string>>(new Set());
   // Keyed by flag id: two toggles can fail at once and both messages matter.
   const [toggleErrors, setToggleErrors] = useState<Record<string, string>>({});
   // "Deleted {name}." when the flag's page has just deleted one (#442). Its
@@ -651,9 +654,17 @@ export default function FeatureFlagsPage() {
                           ) : (
                             <FlagToggle
                               on={on}
-                              disabled={Boolean(toggling[flag.id])}
+                              pending={Boolean(toggling[flag.id])}
                               label={`Turn ${flag.key} ${on ? 'off' : 'on'}${environmentLabel ? ` in ${environmentLabel}` : ''}`}
-                              onChange={() => void handleToggle(flag)}
+                              onChange={async () => {
+                                if (toggleLock.current.has(flag.id)) return;
+                                toggleLock.current.add(flag.id);
+                                try {
+                                  await handleToggle(flag);
+                                } finally {
+                                  toggleLock.current.delete(flag.id);
+                                }
+                              }}
                               data-testid={`flag-toggle-${flag.key}`}
                             />
                           )}

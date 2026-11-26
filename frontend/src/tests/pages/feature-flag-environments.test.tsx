@@ -575,7 +575,7 @@ describe('a save goes to the route of the environment on screen', () => {
       'Could not update the feature flag (request ID: 8a5e6c1e).',
     );
     expect(screen.getByTestId('flag-status')).toHaveTextContent('On');
-    expect(screen.getByRole('switch', { name: 'Turn checkout_v2 off in Staging' })).toBeEnabled();
+    expect(screen.getByRole('switch', { name: 'Turn checkout_v2 off in Staging' })).not.toHaveAttribute('aria-disabled');
   });
 
   it('turning a flag on in Development goes to the Development route, not to enable', async () => {
@@ -724,7 +724,7 @@ describe('a change that answers after the environment was switched', () => {
     await waitFor(() => expect(screen.getByTestId('rollout-value')).toHaveTextContent('25%'));
     await act(async () => answer.refuse(apiError(500, 'Could not update the feature flag.')));
     expect(screen.queryByTestId('save-error')).toBeNull();
-    expect(screen.getByTestId('save-flag')).toBeEnabled();
+    expect(screen.getByTestId('save-flag')).not.toHaveAttribute('aria-disabled');
   });
 
   it('a Staging switch leaves the Production page as it was', async () => {
@@ -743,7 +743,7 @@ describe('a change that answers after the environment was switched', () => {
       answer.give(o.staging);
     });
     expect(screen.getByTestId('flag-status')).toHaveTextContent('On');
-    expect(screen.getByRole('switch', { name: 'Turn checkout_v2 off' })).toBeEnabled();
+    expect(screen.getByRole('switch', { name: 'Turn checkout_v2 off' })).not.toHaveAttribute('aria-disabled');
   });
 
   it('a Production save leaves the Staging page, and the next Staging save, as they were', async () => {

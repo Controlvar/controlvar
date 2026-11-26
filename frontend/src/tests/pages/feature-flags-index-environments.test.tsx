@@ -334,7 +334,7 @@ describe('the flag list in Staging and Development', () => {
     expect(await screen.findByTestId('flag-toggle-error-f2')).toHaveTextContent('Could not update the feature flag.');
     expect(within(row('dark_mode')).getByTestId('flag-status-pill')).toHaveTextContent('Off');
     expect(within(row('dark_mode')).getByTestId('flag-not-configured')).toHaveTextContent('Not configured in Staging');
-    expect(within(row('dark_mode')).getByRole('switch', { name: 'Turn dark_mode on in Staging' })).toBeEnabled();
+    expect(within(row('dark_mode')).getByRole('switch', { name: 'Turn dark_mode on in Staging' })).not.toHaveAttribute('aria-disabled');
   });
 
   it.each(['VIEWER', 'ANALYST'])('%s reads the list in Staging and Development and is offered no change', async (role) => {
@@ -443,7 +443,7 @@ describe('the flag list in Staging and Development', () => {
     expect(within(row('dark_mode')).getByTestId('flag-status-pill')).toHaveTextContent('Off');
     expect(within(row('dark_mode')).getByTestId('flag-not-configured')).toHaveTextContent('Not configured in Development');
     expect(row('dark_mode')).toHaveTextContent('0%');
-    expect(within(row('dark_mode')).getByRole('switch', { name: 'Turn dark_mode on in Development' })).toBeEnabled();
+    expect(within(row('dark_mode')).getByRole('switch', { name: 'Turn dark_mode on in Development' })).not.toHaveAttribute('aria-disabled');
   });
 
   it('a refused Staging switch says nothing in Development', async () => {

@@ -257,12 +257,155 @@ describe('FeatureFlagDetailPage', () => {
 
     fireEvent.click(screen.getByTestId('flag-toggle'));
     expect(screen.getByTestId('flag-toggle')).toHaveAttribute('aria-checked', 'true');
-    await waitFor(() => expect(screen.getByTestId('flag-toggle')).not.toBeDisabled());
+    await waitFor(() => expect(screen.getByTestId('flag-toggle')).not.toHaveAttribute('aria-disabled'));
     expect(screen.getByTestId('flag-status')).toHaveTextContent('On');
     expect(screen.getByTestId('flag-status')).toHaveAttribute('data-status', 'active');
 
     const call = mockedApiFetch.mock.calls.find(([p]) => p === '/api/v1/feature-flags/flag-1/enable');
     expect(call?.[1]?.method).toBe('POST');
+  });
+
+  it('keeps focus on the switch while the request runs, and ignores a second press', async () => {
+    let answer: (v: unknown) => void = () => undefined;
+    const pending = new Promise((resolve) => {
+      answer = resolve;
+    });
+    install([
+      ...happyRoutes(),
+      { method: 'POST', path: '/api/v1/feature-flags/flag-1/enable', handler: () => pending },
+    ]);
+    render(<FeatureFlagDetailPage />);
+    await screen.findByTestId('flag-detail');
+    const toggle = screen.getByTestId('flag-toggle');
+    const enables = () => mockedApiFetch.mock.calls.filter(([p]) => p === '/api/v1/feature-flags/flag-1/enable');
+
+    toggle.focus();
+    fireEvent.click(toggle);
+    await waitFor(() => expect(enables()).toHaveLength(1));
+    expect(toggle).toHaveAttribute('aria-disabled', 'true');
+    expect(toggle).not.toBeDisabled();
+    expect(toggle).toHaveFocus();
+    fireEvent.click(toggle);
+    expect(enables()).toHaveLength(1);
+    await act(async () => {
+      answer({ id: 'flag-1', key: 'checkout_v2', name: 'Checkout v2', status: 'active', updated_at: '2026-09-11T00:00:00Z', audit_log_id: null });
+    });
+    await waitFor(() => expect(toggle).not.toHaveAttribute('aria-disabled'));
+    expect(toggle).toHaveFocus();
+  });
+
+  it('keeps focus on Save while it saves, and ignores a second press', async () => {
+    let answer: (v: unknown) => void = () => undefined;
+    const pending = new Promise((resolve) => {
+      answer = resolve;
+    });
+    install([
+      ...happyRoutes(),
+      { method: 'PUT', path: '/api/v1/feature-flags/flag-1', handler: () => pending },
+    ]);
+    render(<FeatureFlagDetailPage />);
+    await screen.findByTestId('flag-detail');
+    const save = screen.getByTestId('save-flag');
+    const puts = () => mockedApiFetch.mock.calls.filter(([p, o]) => p === '/api/v1/feature-flags/flag-1' && o?.method === 'PUT');
+
+    fireEvent.change(screen.getByTestId('rollout-percentage'), { target: { value: '60' } });
+    save.focus();
+    fireEvent.click(save);
+    await waitFor(() => expect(puts()).toHaveLength(1));
+    expect(save).toHaveAttribute('aria-disabled', 'true');
+    expect(save).not.toBeDisabled();
+    expect(save).toHaveFocus();
+    fireEvent.click(save);
+    expect(puts()).toHaveLength(1);
+    await act(async () => {
+      answer({ ...flag(), rollout_percentage: 60 });
+    });
+    await waitFor(() => expect(save).not.toHaveAttribute('aria-disabled'));
+    expect(save).toHaveFocus();
+  });
+
+  it('two presses of the switch in one tick send one request', async () => {
+    install([
+      ...happyRoutes(),
+      { method: 'POST', path: '/api/v1/feature-flags/flag-1/enable', handler: () => new Promise(() => undefined) },
+    ]);
+    render(<FeatureFlagDetailPage />);
+    await screen.findByTestId('flag-detail');
+    const toggle = screen.getByTestId('flag-toggle');
+    // Both presses land before React renders: the pending state has not changed yet.
+    act(() => {
+      toggle.click();
+      toggle.click();
+    });
+    await waitFor(() =>
+      expect(mockedApiFetch.mock.calls.filter(([p]) => p === '/api/v1/feature-flags/flag-1/enable')).toHaveLength(1),
+    );
+    expect(mockedApiFetch.mock.calls.filter(([p]) => p === '/api/v1/feature-flags/flag-1/enable')).toHaveLength(1);
+  });
+
+  it('two presses of Save in one tick send one request', async () => {
+    install([
+      ...happyRoutes(),
+      { method: 'PUT', path: '/api/v1/feature-flags/flag-1', handler: () => new Promise(() => undefined) },
+    ]);
+    render(<FeatureFlagDetailPage />);
+    await screen.findByTestId('flag-detail');
+    fireEvent.change(screen.getByTestId('rollout-percentage'), { target: { value: '60' } });
+    const save = screen.getByTestId('save-flag');
+    const puts = () => mockedApiFetch.mock.calls.filter(([p, o]) => p === '/api/v1/feature-flags/flag-1' && o?.method === 'PUT');
+    act(() => {
+      save.click();
+      save.click();
+    });
+    await waitFor(() => expect(puts()).toHaveLength(1));
+    expect(puts()).toHaveLength(1);
+  });
+
+  it('after a refused switch, the next press sends a new request', async () => {
+    install([
+      ...happyRoutes(),
+      {
+        method: 'POST',
+        path: '/api/v1/feature-flags/flag-1/enable',
+        handler: () => {
+          throw apiError(500, 'Failed to enable feature flag');
+        },
+      },
+    ]);
+    render(<FeatureFlagDetailPage />);
+    await screen.findByTestId('flag-detail');
+    const toggle = screen.getByTestId('flag-toggle');
+    const enables = () => mockedApiFetch.mock.calls.filter(([p]) => p === '/api/v1/feature-flags/flag-1/enable');
+    fireEvent.click(toggle);
+    expect(await screen.findByTestId('flag-toggle-error')).toBeInTheDocument();
+    await waitFor(() => expect(toggle).not.toHaveAttribute('aria-disabled'));
+    expect(enables()).toHaveLength(1);
+    fireEvent.click(toggle);
+    await waitFor(() => expect(enables()).toHaveLength(2));
+  });
+
+  it('after a refused save, the next press sends a new request', async () => {
+    install([
+      ...happyRoutes(),
+      {
+        method: 'PUT',
+        path: '/api/v1/feature-flags/flag-1',
+        handler: () => {
+          throw apiError(500, 'Could not update the feature flag.');
+        },
+      },
+    ]);
+    render(<FeatureFlagDetailPage />);
+    await screen.findByTestId('flag-detail');
+    fireEvent.change(screen.getByTestId('rollout-percentage'), { target: { value: '60' } });
+    const save = screen.getByTestId('save-flag');
+    const puts = () => mockedApiFetch.mock.calls.filter(([p, o]) => p === '/api/v1/feature-flags/flag-1' && o?.method === 'PUT');
+    fireEvent.click(save);
+    await waitFor(() => expect(puts()).toHaveLength(1));
+    await waitFor(() => expect(save).not.toHaveAttribute('aria-disabled'));
+    await act(async () => undefined);
+    fireEvent.click(save);
+    await waitFor(() => expect(puts()).toHaveLength(2));
   });
 
   it('reverts the switch and shows the error when enabling fails', async () => {

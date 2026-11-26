@@ -258,6 +258,10 @@ function FlagInEnvironment({
 
   // On/off
   const [toggling, setToggling] = useState(false);
+  // Set at once by a press; `toggling` only changes on the next render, so a second
+  // press in the same tick would otherwise send a second request.
+  const toggleLock = useRef(false);
+  const saveLock = useRef(false);
   const [toggleError, setToggleError] = useState<string | null>(null);
 
   // Editable fields. `stored` is the flag's targeting_rules as last loaded or
@@ -716,9 +720,17 @@ function FlagInEnvironment({
               {canChange && !archived && (
                 <FlagToggle
                   on={on}
-                  disabled={toggling}
+                  pending={toggling}
                   label={`Turn ${flag.key} ${on ? 'off' : 'on'}${environmentLabel ? ` in ${environmentLabel}` : ''}`}
-                  onChange={(next) => void handleToggle(next)}
+                  onChange={async (next) => {
+                    if (toggleLock.current) return;
+                    toggleLock.current = true;
+                    try {
+                      await handleToggle(next);
+                    } finally {
+                      toggleLock.current = false;
+                    }
+                  }}
                   data-testid="flag-toggle"
                 />
               )}
@@ -1152,9 +1164,18 @@ function FlagInEnvironment({
             <div className="flex justify-end">
               <button
                 type="button"
-                onClick={() => void handleSave()}
-                disabled={isSaving}
-                className="px-6 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                onClick={async () => {
+                  // aria-disabled, not disabled: focus stays on the button while it saves.
+                  if (saveLock.current) return;
+                  saveLock.current = true;
+                  try {
+                    await handleSave();
+                  } finally {
+                    saveLock.current = false;
+                  }
+                }}
+                aria-disabled={isSaving ? true : undefined}
+                className="px-6 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 aria-disabled:opacity-50 aria-disabled:cursor-not-allowed transition-colors"
                 data-testid="save-flag"
               >
                 {isSaving ? 'Saving...' : environmentLabel ? `Save changes in ${environmentLabel}` : 'Save Changes'}
