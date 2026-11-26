@@ -9,7 +9,8 @@
  *      CONTRACT_EXPERIMENT_KEY (default sdk_contract_ab), CONTRACT_FLAG_KEY (default sdk_contract_flag),
  *      CONTRACT_TARGETED_FLAG_KEY (default sdk_contract_targeted), CONTRACT_USER_ID (default smoke-<uuid>),
  *      CONTROLVAR_LOCAL_API_KEY (optional: a key with the sdk:ruleset scope; with it the smoke also
- *      links two ids with alias, step 7).
+ *      links two ids with alias, step 7), CONTRACT_MULTIWAY_USERS (comma-separated users of the
+ *      multi-way flag, step 6b; the live runner sets it).
  *
  * Prints exactly one JSON line on stdout and exits 0; on failure prints one line to stderr and exits 1.
  */
@@ -140,6 +141,21 @@ try {
     json: await valued.getJsonValue('sdk_contract_value_json', { userId }, ['smoke-default']),
   };
 
+  // 6b. Multi-way flags (#2012): the same client reads the seed's split flag with the string
+  //     getter for each user the runner gives in CONTRACT_MULTIWAY_USERS (one per value of the
+  //     split), and the flag whose rule serves a value of its own for this user with plan=pro.
+  //     The report is what the getter returned; the runner requires each user's value of the
+  //     split, and the rule's own value.
+  const multiway = { users: {}, rule: null };
+  for (const id of (process.env.CONTRACT_MULTIWAY_USERS || '').split(',').filter(Boolean)) {
+    multiway.users[id] = await valued.getStringValue('sdk_contract_multiway', { userId: id }, 'smoke-default');
+  }
+  multiway.rule = await valued.getStringValue(
+    'sdk_contract_rule_value',
+    { userId, attributes: { plan: 'pro' } },
+    'smoke-default'
+  );
+
   // 7. Two ids of one person (#449), only with the seed's sdk:ruleset key, which the live runner
   //    gives every smoke as CONTROLVAR_LOCAL_API_KEY. A NEW client with that key assigns a fresh
   //    anonymous id, links it to a fresh known id twice (created true, then false), sends one
@@ -199,6 +215,7 @@ try {
           : null,
       },
       values,
+      multiway,
       ...(alias ? { alias } : {}),
     }) + '\n'
   );

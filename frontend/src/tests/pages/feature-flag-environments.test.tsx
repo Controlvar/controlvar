@@ -94,6 +94,7 @@ function settings(environment: string, overrides: Partial<FlagEnvironmentSetting
     is_active: false,
     rollout_percentage: 0,
     targeting_rules: null,
+    split: null,
     configured: false,
     updated_at: null,
     ...overrides,
@@ -542,6 +543,61 @@ describe('a save goes to the route of the environment on screen', () => {
 
     expect(callsTo('PUT /api/v1/feature-flags/flag-1')).toBe(1);
     expect(bodyOf('PUT /api/v1/feature-flags/flag-1')).toEqual({ rollout_percentage: 60 });
+    expect(anyEnvironmentRoute()).toEqual([]);
+  });
+
+  // The two above, with a split (#2012): a string flag's split is each
+  // environment's own, so its save is the one that edits the wrong environment
+  // if it takes the wrong route.
+  const SPLIT_BEFORE = [
+    { value: 'red', weight: 34 },
+    { value: 'green', weight: 33 },
+    { value: 'blue', weight: 33 },
+  ];
+  const SPLIT_AFTER = [
+    { value: 'red', weight: 50 },
+    { value: 'green', weight: 25 },
+    { value: 'blue', weight: 25 },
+  ];
+  const STRING_FLAG = () => flag({ value_type: 'string', on_value: 'A', off_value: 'Z', split: SPLIT_BEFORE });
+  async function setWeights(weights: number[]) {
+    weights.forEach((weight, i) =>
+      fireEvent.change(screen.getByLabelText(`Weight of value ${i + 1} (%)`), { target: { value: String(weight) } }),
+    );
+  }
+
+  it('a Staging split save goes to the Staging route, and never to the stable PUT', async () => {
+    mockRouter = makeRouter({ pathname: '/feature-flags/[id]', query: { id: 'flag-1', env: 'staging' } });
+    install({ flag: STRING_FLAG(), staging: { ...STAGING(), split: SPLIT_BEFORE } });
+    renderPage();
+    await screen.findByTestId('flag-detail');
+    await setWeights([50, 25, 25]);
+    fireEvent.click(screen.getByTestId('save-flag'));
+    await screen.findByTestId('save-success');
+
+    expect(callsTo('PUT /api/v1/feature-flags/flag-1/environments/staging')).toBe(1);
+    const body = bodyOf('PUT /api/v1/feature-flags/flag-1/environments/staging');
+    expect(body).toEqual({ rollout_percentage: 40, split: SPLIT_AFTER });
+    expect(shapeErrors('FlagEnvironmentUpdate', body)).toEqual([]);
+    // The target changed; Production and Development were not written at all.
+    expect(screen.getByLabelText('Weight of value 1 (%)')).toHaveValue('50');
+    expect(callsTo('PUT /api/v1/feature-flags/flag-1')).toBe(0);
+    expect(callsTo('PUT /api/v1/feature-flags/flag-1/environments/development')).toBe(0);
+    expect(calls().filter((c) => /\/(enable|disable)$/.test(c))).toEqual([]);
+  });
+
+  it('a Production split save goes to the stable PUT, and never to an environment route', async () => {
+    install({ flag: STRING_FLAG() });
+    renderPage();
+    await screen.findByTestId('flag-detail');
+    await setWeights([50, 25, 25]);
+    fireEvent.click(screen.getByTestId('save-flag'));
+    await screen.findByTestId('save-success');
+
+    expect(callsTo('PUT /api/v1/feature-flags/flag-1')).toBe(1);
+    expect(bodyOf('PUT /api/v1/feature-flags/flag-1')).toEqual({ rollout_percentage: 25, split: SPLIT_AFTER });
+    // The target changed; Staging and Development were not written, or read.
+    expect(screen.getByLabelText('Weight of value 1 (%)')).toHaveValue('50');
     expect(anyEnvironmentRoute()).toEqual([]);
   });
 

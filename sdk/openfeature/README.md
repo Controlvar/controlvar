@@ -63,17 +63,18 @@ can from its ruleset, using that call's attributes, and such an answer is never 
 
 ## Resolution
 
-Every call reads the value the flag serves: its on value when the flag is on for the user, its off
-value otherwise. A boolean call reads a boolean flag (its value is `enabled`), a string or number
-call a string or number flag, and an object call a JSON flag (an object or an array), returned as
-a new copy each time. There is no coercion: a call of another type than the flag's gets your
-default. A server without flag values sends no `value_type`; there a boolean call answers
-`enabled`, and a string, number or object call gets your default.
+Every call reads the value the flag serves: its off value when the flag is off for the user, and
+otherwise its on value, or the value its split or a matched rule's own value gives them. A boolean
+call reads a boolean flag (its value is `enabled`), a string or number call a string or number
+flag, and an object call a JSON flag (an object or an array), returned as a new copy each time.
+There is no coercion: a call of another type than the flag's gets your default. A server without
+flag values sends no `value_type`; there a boolean call answers `enabled`, and a string, number or
+object call gets your default.
 
 | The server's answer | Value | Reason | Variant |
 |---|---|---|---|
-| `reason: "targeting_rule"`, on / off | the on value / the off value | `TARGETING_MATCH` | `"on"` / `"off"` |
-| `reason: "rollout"`, on / off | the on value / the off value | `SPLIT` | `"on"` / `"off"` |
+| `reason: "targeting_rule"`, on / off | the on value (or the split's or the rule's own value) / the off value | `TARGETING_MATCH` | `"on"` / `"off"` |
+| `reason: "rollout"`, on / off | the on value (or the split's value) / the off value | `SPLIT` | `"on"` / `"off"` |
 | `reason: "inactive"` | the off value, not your default | `DISABLED` | `"off"` |
 | answered from the JS SDK's cache | as cached | `CACHED` | as cached |
 | `reason: "error"` | your default | `ERROR`, code `GENERAL` | none |

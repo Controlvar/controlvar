@@ -286,7 +286,8 @@ change; the
 written. An update records only the fields that changed, as
 `old_value` and `new_value` JSON; a create records the new entity's identifying fields in
 `new_value`, and a delete the old ones in `old_value`. Descriptions, hypotheses, targeting
-rules, segment rules, variants, metrics, an experiment's analysis configurations
+rules, segment rules, variants, a flag's values and split, metrics, an experiment's analysis
+configurations
 (`variance_reduction_config` for CUPED, `sequential_testing_config`, `bayesian_config`)
 and a visual experiment's pages, goals and page changes (`visual_config`,
 `visual_changes`) are never stored. A change to any of them is named in
@@ -401,8 +402,8 @@ entry. No entry ever holds:
   code writes a `two_factor_refused` log line with the account's id and the
   reason, never the code);
 - request bodies, IP addresses or user agents;
-- the contents of descriptions, hypotheses, targeting rules, segment rules, variants,
-  metrics, an experiment's CUPED, sequential testing and Bayesian configurations, and a
+- the contents of descriptions, hypotheses, targeting rules, segment rules, variants, a
+  flag's values and split, metrics, an experiment's CUPED, sequential testing and Bayesian configurations, and a
   visual experiment's pages, goals and page changes (a change to one is named under
   `changed_fields`);
 - error text;

@@ -15,7 +15,9 @@
  * Env: CONTROLVAR_API_URL (default http://localhost:8000), CONTROLVAR_API_KEY
  *      (required), CONTRACT_EXPERIMENT_KEY (default sdk_contract_ab),
  *      CONTRACT_FLAG_KEY (default sdk_contract_flag), CONTRACT_TARGETED_FLAG_KEY
- *      (default sdk_contract_targeted), CONTRACT_USER_ID.
+ *      (default sdk_contract_targeted), CONTRACT_USER_ID, CONTRACT_MULTIWAY_USERS
+ *      (comma-separated users of the multi-way flag, step 7b; the live runner
+ *      sets it).
  *
  * On success the contract report is written to `.contract_smoke.json` (the live
  * runner reads the last stdout line, and Jest owns stdout) and echoed there.
@@ -162,6 +164,19 @@ describe('react-native SDK against a live backend', () => {
       json: await valued.getJsonValue('sdk_contract_value_json', userId, ['smoke-default']),
     };
 
+    // 7b. Multi-way flags (#2012): the same client reads the seed's split flag with the string
+    //     getter for each user the runner gives in CONTRACT_MULTIWAY_USERS (one per value of the
+    //     split), and the flag whose rule serves a value of its own for this user with plan=pro.
+    //     The report is what the getter returned; the runner requires each user's value of the
+    //     split, and the rule's own value.
+    const multiway: { users: Record<string, string>; rule: string | null } = { users: {}, rule: null };
+    for (const id of (process.env.CONTRACT_MULTIWAY_USERS || '').split(',').filter(Boolean)) {
+      multiway.users[id] = await valued.getStringValue('sdk_contract_multiway', id, 'smoke-default');
+    }
+    multiway.rule = await valued.getStringValue('sdk_contract_rule_value', userId, 'smoke-default', {
+      plan: 'pro',
+    });
+
     writeFileSync(
       REPORT,
       JSON.stringify({
@@ -184,6 +199,7 @@ describe('react-native SDK against a live backend', () => {
             : null,
         },
         values,
+        multiway,
       }) + '\n'
     );
   });

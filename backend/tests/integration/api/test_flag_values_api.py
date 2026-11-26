@@ -521,7 +521,7 @@ def test_a_concurrent_value_write_is_a_422_not_a_500(
 ):
     """#1514 review R2: the PUT ``{"on_value": "c"}`` arrives while another
     transaction holds the row and sets ``off_value`` to "c"; that one commits
-    while the PUT waits. The update reads the row ``FOR UPDATE``, so it checks
+    while the PUT waits. The update locks the row as it reads it, so it checks
     the committed pair and answers 422 ``values_equal``, storing nothing.
 
     Unlocked, the PUT checked the old pair, its UPDATE then met
@@ -585,8 +585,8 @@ def test_a_check_violation_at_commit_is_answered_as_values_equal(
     engine = db_session.get_bind()
     real_check = feature_flag_service._check_sent_values
 
-    def check_then_race(flag_data, row):
-        real_check(flag_data, row)
+    def check_then_race(flag_data, row, *split):
+        real_check(flag_data, row, *split)
         with engine.begin() as other:
             _set_off_value(other, row.id, '"SECRET-c"')
 

@@ -252,8 +252,9 @@ to build a debug overlay). `useExperimentationContext` is an alias.
 
 ## Flag values
 
-A flag serves two values: its on value to the users it is on for, and its off value to everyone
-else, and to everyone while it is turned off. For a string, number or json flag, read the value
+A flag serves its on value to the users it is on for, and its off value to everyone else, and
+to everyone while it is turned off; a string, number or json flag with a split, or a matched
+rule with a value of its own, serves those users that value instead. For a string, number or json flag, read the value
 with `useFlagValue`, giving the type the flag serves: `'string'`, `'number'` or `'json'`.
 
 ```tsx

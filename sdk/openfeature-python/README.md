@@ -60,14 +60,15 @@ timeout=10, *, client=None, transport=None)`. Pass `client=` to share one
 | `get_float_*` | a number flag | the flag's value as a float (`10` answers `10.0`) |
 | `get_object_*` | a json flag | a new copy of the flag's value (an object or an array) |
 
-The flag's value is its on value when the flag is on for the user, and its off value otherwise,
-an inactive flag included. Nothing is coerced: a call of another type gets your default, a
-boolean call on a string, number or json flag included.
+The flag's value is its off value when the flag is off for the user, an inactive flag included,
+and otherwise its on value, or the value its split or a matched rule's own value gives them.
+Nothing is coerced: a call of another type gets your default, a boolean call on a string, number
+or json flag included.
 
 | The server's answer | Value | Reason | Variant |
 |---|---|---|---|
-| `reason: "targeting_rule"`, on / off | the on value / the off value | `TARGETING_MATCH` | `on` / `off` |
-| `reason: "rollout"`, on / off | the on value / the off value | `SPLIT` | `on` / `off` |
+| `reason: "targeting_rule"`, on / off | the on value (or the split's or the rule's own value) / the off value | `TARGETING_MATCH` | `on` / `off` |
+| `reason: "rollout"`, on / off | the on value (or the split's value) / the off value | `SPLIT` | `on` / `off` |
 | `reason: "inactive"` | the off value, not your default | `DISABLED` | `off` |
 | answered from the SDK's cache | as cached | `CACHED` | as cached |
 | `reason: "error"` | your default | `ERROR`, `GENERAL` | not set |

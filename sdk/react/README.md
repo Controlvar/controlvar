@@ -67,11 +67,11 @@ const { value: label, loading, error } = useFlagValue('checkout-button-label', '
 ```
 
 Reads the value a string, number or json flag serves the user (`type` is `'string'`, `'number'` or
-`'json'`): its on value when the flag is on for them, its off value otherwise. Pass the flag's off
-value as your default. `value` is the default while loading and whenever there is no value of that
-type to read; `error` is then a `FlagValueError` whose `code` is `'REQUEST_FAILED'`,
-`'INVALID_RESPONSE'` or `'TYPE_MISMATCH'`. It never throws, and shares `useFeatureFlag`'s request
-and cache. Full details: [Flag values](https://github.com/Controlvar/controlvar/blob/main/docs/sdk/react.md#flag-values).
+`'json'`): its off value when the flag is off for them, and otherwise its on value, or the value
+its split or a matched rule's own value gives them. Pass the flag's off value as your default.
+`value` is the default while loading and whenever there is no value of that type to read; `error`
+is then a `FlagValueError` whose `code` is `'REQUEST_FAILED'`, `'INVALID_RESPONSE'` or
+`'TYPE_MISMATCH'`. It never throws, and shares `useFeatureFlag`'s request and cache. Full details: [Flag values](https://github.com/Controlvar/controlvar/blob/main/docs/sdk/react.md#flag-values).
 
 ### `useExperiment(experimentKey): ExperimentAssignment`
 

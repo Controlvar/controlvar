@@ -25,7 +25,8 @@ shell variables set by the ones before it.
 - In staging and development a flag is off until someone configures it there: with no settings it
   is off, at 0%, with no rules.
 - A flag's key, name, description, `value_type`, `on_value` and `off_value` are the flag's, and are the same in every
-  environment.
+  environment. A string, number or json flag's split, and the values its targeting rules serve,
+  are each environment's, as its rules are.
 - An archived flag is off in every environment, whatever its settings there.
 - A user who is inside a rollout percentage in one environment is inside the same percentage in
   every environment.
@@ -191,15 +192,15 @@ as `?env=staging`, so a reload or a copied link opens the same one.
   `Not configured in Staging`.
 - **Compare environments** shows the flag's status, rollout and targeting rules in Development,
   Staging and Production side by side.
-- A flag's values, and archiving or deleting it, apply in every environment, so the dashboard offers
-  them in Production only. New flags are created in Production.
+- A flag's value type, on value and off value, and archiving or deleting it, apply in every
+  environment, so the dashboard offers them in Production only. New flags are created in Production.
 
 ## Promotion
 
 Promotion copies a flag's settings from one environment into another:
 `POST /api/v1/feature-flags/{flag_id}/environments/{target}/promote`, with the body
 `{"from": "<environment>"}`. It needs the permission that changing a flag needs. It copies the
-status, the rollout percentage and the targeting rules, all together. It does not copy the flag's
+status, the rollout percentage, the targeting rules and the split, all together. It does not copy the flag's
 `value_type`, `on_value` or `off_value`, its rollout schedules or their stage state, or its safety
 settings. A source nobody has configured copies off.
 A promotion into the environment it copies from answers `422`, and a promotion of an archived flag
@@ -217,8 +218,9 @@ curl -s -X POST localhost:8000/api/v1/feature-flags/$FLAG_ID/environments/develo
 
 In the dashboard, a flag in Development offers **Promote to Staging**, and a flag in Staging offers
 **Promote to Production**; Production offers nothing. The dialog lists **Status**,
-**Rollout percentage** and **Targeting rules** as they are in the target now and as they will be,
-and says what is not copied. A promotion into Production has a second step before it is sent.
+**Rollout percentage**, **Targeting rules** and, for a string, number or json flag, **Split** as
+they are in the target now and as they will be, and says what is not copied. A promotion into
+Production has a second step before it is sent.
 
 ## What runs in production only
 

@@ -38,6 +38,8 @@ export interface FeatureFlag {
   on_value?: unknown;
   /** What everyone else gets, and everyone while it is off; `false` for a boolean flag. */
   off_value?: unknown;
+  /** Production's split (#2012); null when it has none, and always for a boolean flag. */
+  split?: FlagSplitEntry[] | null;
   owner_id: string | null;
   created_at: string;
   updated_at: string;
@@ -83,6 +85,11 @@ export interface UpdateFeatureFlagRequest {
   tags?: string[];
   on_value?: unknown;
   off_value?: unknown;
+  /**
+   * Production's split (#2012); `null` clears it. Sent only when the page
+   * changed it: an API older than the split refuses the field.
+   */
+  split?: FlagSplitEntry[] | null;
 }
 
 /** Why the list marks a flag stale (#1808); a reason a later release adds is read as any string. */
@@ -193,6 +200,12 @@ export interface RolloutScheduleListResponse {
 // `/api/v1/environments/{environment}/feature-flag-settings`
 // ---------------------------------------------------------------------------
 
+/** One entry of a split: a value of the flag's type and its whole-number share, 0 to 100. */
+export interface FlagSplitEntry {
+  value: unknown;
+  weight: number;
+}
+
 /**
  * A flag's settings in one environment. Production's come from the flag row
  * and are always `configured`. A flag with no setting in Staging or
@@ -205,6 +218,8 @@ export interface FlagEnvironmentSettings {
   is_active: boolean;
   rollout_percentage: number;
   targeting_rules: TargetingRules | Record<string, unknown> | null;
+  /** The environment's split (#2012); null when it has none, and always for a boolean flag. */
+  split?: FlagSplitEntry[] | null;
   configured: boolean;
   updated_at: string | null;
 }
@@ -224,12 +239,14 @@ export interface EnvironmentFlagSettingsResponse {
 
 /**
  * The body of `PUT /feature-flags/{id}/environments/{environment}`: only the
- * fields sent change; `targeting_rules: null` clears the rules.
+ * fields sent change; `targeting_rules: null` clears the rules, and
+ * `split: null` the split (#2012), which is sent only when the page changed it.
  */
 export interface UpdateFlagEnvironmentRequest {
   is_active?: boolean;
   rollout_percentage?: number;
   targeting_rules?: TargetingRules | Record<string, unknown> | null;
+  split?: FlagSplitEntry[] | null;
 }
 
 /** The batch route takes 1 to 100 `flag_id` parameters per request. */

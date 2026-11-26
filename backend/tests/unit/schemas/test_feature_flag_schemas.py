@@ -162,6 +162,8 @@ class TestFeatureFlagReadShape:
         "value_type",
         "on_value",
         "off_value",
+        # #2012: what share of the users the flag is on for gets each value.
+        "split",
         "tags",
         "owner_id",
         "created_at",
@@ -460,16 +462,6 @@ class TestValueFields:
         assert _errors(model, self._create(value_type=sent)) == [
             ("literal_error", ("value_type",))
         ]
-
-    @pytest.mark.regression
-    @pytest.mark.parametrize("model", [FeatureFlagCreate, FeatureFlagUpdate])
-    @pytest.mark.parametrize("field", ["values", "value", "variants", "weights"])
-    def test_no_third_value_or_split_is_accepted(self, model, field):
-        """B3: two values per flag, no split among three or more."""
-        body = self._create(
-            value_type="string", on_value="a", off_value="b", **{field: ["a", "b", "c"]}
-        )
-        assert _errors(model, body) == [("extra_forbidden", (field,))]
 
     def test_the_update_schema_leaves_the_values_to_the_stored_type(self):
         """FeatureFlagUpdate cannot see the stored type: the service checks."""

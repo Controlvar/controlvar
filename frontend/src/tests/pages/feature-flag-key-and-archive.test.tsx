@@ -186,6 +186,7 @@ describe('archiving', () => {
       value_type: 'boolean',
       on_value: true,
       off_value: false,
+      split: null,
       tags: [],
       owner_id: 'user-1',
       created_at: '2026-09-01T10:00:00Z',

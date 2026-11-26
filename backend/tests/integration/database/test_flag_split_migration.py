@@ -99,6 +99,7 @@ from backend.tests.integration.database.metric_window_column import (
     without_the_metric_window,
 )
 from backend.tests.integration.database.split_read_path import without_the_read_path
+from backend.tests.integration.database.split_write_path import without_the_write_path
 from backend.tests.integration.database.test_flag_environments_migration import (
     _captured,
     _columns,
@@ -723,16 +724,25 @@ _ADDED = {
             r"(?m)^            if split is not KEEP_SPLIT:\n"
             r"                flag\.split = split\n"
         ),
+        # The update's check, which counts the rules with the split it writes.
+        re.compile(r"(?m), split: Any = KEEP_SPLIT$"),
+        re.compile(
+            r"(?m)^        if split is not KEEP_SPLIT:\n"
+            r'            stored\["split"\] = split\n'
+        ),
+        re.compile(r"(?<=_check_sent_values\(flag_data, flag), split(?=\))"),
     ),
     # A promotion's copy, and its audit entry's name for it.
     ("services", "flag_environment_service.py"): (
         re.compile(r'(?m)^    "split",\n'),
         re.compile(r'(?m)^    "split": None,\n'),
         re.compile(r'(?m)^        "split": view\.split,\n'),
-        re.compile(r'(?m)^        "#split": stored\["split"\],\n'),
+        re.compile(
+            r'(?m)^        "#split": name_only_fingerprint\(stored\["split"\]\),\n'
+        ),
     ),
     ("api", "v1", "endpoints", "flag_environments.py"): (
-        re.compile(r"(?m)\bKEEP_SPLIT, (?=FeatureFlagService$)"),
+        re.compile(r"(?m)^    KEEP_SPLIT,\n"),
         re.compile(r'(?m)^            split=changes\.get\("split", KEEP_SPLIT\),\n'),
     ),
     ("services", "audit_service.py"): (re.compile(r'(?m)^        "split",\n'),),
@@ -740,8 +750,8 @@ _ADDED = {
 
 
 def _previous_release(profile: str, tmp_path) -> Path:
-    """Release N-1: a copy of this tree without the revision, the columns and
-    what carries, writes or reads them."""
+    """Release N-1, 0.48.0: a copy of this tree without the revision, the
+    columns and what carries, writes, reads or takes them in a request."""
     destination = tmp_path / "release-n-minus-1"
     if profile == FULL:
         tree = tree_profiles.full_tree(destination)
@@ -761,6 +771,7 @@ def _previous_release(profile: str, tmp_path) -> Path:
             assert found == 1, f"{found} matches of {addition.pattern}: update it"
         module.write_text(source, encoding="utf-8")
     without_the_read_path(tree)
+    without_the_write_path(tree)
     return tree
 
 

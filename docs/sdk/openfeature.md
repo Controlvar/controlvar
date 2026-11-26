@@ -104,17 +104,18 @@ await provider.client.track('user-12345', 'page_view'); // no key → fanned out
 ### Resolution rules
 
 Every call (`getBooleanValue`, `getStringValue`, `getNumberValue`, `getObjectValue` and their
-`…Details`) reads the value the flag serves: its on value when the flag is on for the user, its
-off value otherwise. A boolean call reads a boolean flag (its value is `enabled`), a string or
-number call a string or number flag, and an object call a JSON flag (an object or an array),
-returned as a new copy each time. There is no coercion: a call of another type than the flag's
-gets the caller's default. A server without flag values sends no `value_type`; there a boolean
-call answers `enabled`, and a string, number or object call gets the caller's default.
+`…Details`) reads the value the flag serves: its off value when the flag is off for the user, and
+otherwise its on value, or the value its split or a matched rule's own value gives them. A
+boolean call reads a boolean flag (its value is `enabled`), a string or number call a string or
+number flag, and an object call a JSON flag (an object or an array), returned as a new copy each
+time. There is no coercion: a call of another type than the flag's gets the caller's default. A
+server without flag values sends no `value_type`; there a boolean call answers `enabled`, and a
+string, number or object call gets the caller's default.
 
 | The server's answer | Value | Reason | Variant |
 |---|---|---|---|
-| `reason: "targeting_rule"`, on / off | the on value / the off value | `TARGETING_MATCH` | `"on"` / `"off"` |
-| `reason: "rollout"`, on / off | the on value / the off value | `SPLIT` | `"on"` / `"off"` |
+| `reason: "targeting_rule"`, on / off | the on value (or the split's or the rule's own value) / the off value | `TARGETING_MATCH` | `"on"` / `"off"` |
+| `reason: "rollout"`, on / off | the on value (or the split's value) / the off value | `SPLIT` | `"on"` / `"off"` |
 | `reason: "inactive"` | the off value, not the caller's default | `DISABLED` | `"off"` |
 | answered from the JS SDK's cache | as cached | `CACHED` | as cached |
 | `reason: "error"` | the caller's default | `ERROR`, `errorCode: GENERAL` | not set |
@@ -294,17 +295,18 @@ provider.client.track("user-12345", "purchase", event_value=49.99, experiment_ke
 | `get_float_*` | a number flag | the flag's value as a float (`10` answers `10.0`) |
 | `get_object_*` | a json flag | a new copy of the flag's value (an object or an array) |
 
-Every call reads the value the flag serves: its on value when the flag is on for the user, its
-off value otherwise; a boolean flag's is `enabled`. There is no coercion: a call of another type
-gets the caller's default, a boolean call on a string, number or json flag and an integer call
-on a number with a fractional part (`2.5`) included, and `bool` is never a number. A boolean call
-reads `enabled`, so an answer with no `value_type` (from a server without flag values, where every
-flag is boolean) answers it rather than the caller's default.
+Every call reads the value the flag serves: its off value when the flag is off for the user, and
+otherwise its on value, or the value its split or a matched rule's own value gives them; a boolean
+flag's is `enabled`. There is no coercion: a call of another type gets the caller's default, a
+boolean call on a string, number or json flag and an integer call on a number with a fractional
+part (`2.5`) included, and `bool` is never a number. A boolean call reads `enabled`, so an answer
+with no `value_type` (from a server without flag values, where every flag is boolean) answers it
+rather than the caller's default.
 
 | The server's answer | Value | Reason | Variant |
 |---|---|---|---|
-| `reason: "targeting_rule"`, on / off | the on value / the off value | `TARGETING_MATCH` | `"on"` / `"off"` |
-| `reason: "rollout"`, on / off | the on value / the off value | `SPLIT` | `"on"` / `"off"` |
+| `reason: "targeting_rule"`, on / off | the on value (or the split's or the rule's own value) / the off value | `TARGETING_MATCH` | `"on"` / `"off"` |
+| `reason: "rollout"`, on / off | the on value (or the split's value) / the off value | `SPLIT` | `"on"` / `"off"` |
 | `reason: "inactive"` | the off value, not the caller's default | `DISABLED` | `"off"` |
 | answered from the SDK's cache | as cached | `CACHED` | as cached |
 | `reason: "error"` | the caller's default | `ERROR`, `error_code` `GENERAL` | not set |
@@ -478,9 +480,9 @@ const value = await client.getBooleanValue('my-flag', false, { targetingKey: use
 ```
 
 For a boolean, string, number or object call only the provider initialization changes, and the
-context's other keys reach the flag's targeting rules as the user's attributes. A flag here serves
-two values, its on value and its off value, so a flag with three or more variations has no
-single equivalent: run a multivariate experiment for that (see
+context's other keys reach the flag's targeting rules as the user's attributes. A flag with three
+or more variations becomes a string, number or object flag with a split of those values (3 to
+10, by weight); to measure which one does better, run a multivariate experiment (see
 [Limitations](../getting-started/limitations.md)).
 
 ### Switching from Split.io
@@ -500,8 +502,8 @@ enabled = client.get_boolean_value('my_feature', False, ctx)
 treatment = client.get_string_value('checkout_copy', 'control', ctx)
 ```
 
-A flag serves two values, its on value and its off value, so a split with three or more
-treatments has no single equivalent: run a multivariate experiment for that (see
+A split with three or more treatments becomes a string flag with a split of those treatments
+(3 to 10, by weight); to measure which one does better, run a multivariate experiment (see
 [Limitations](../getting-started/limitations.md)).
 
 ---

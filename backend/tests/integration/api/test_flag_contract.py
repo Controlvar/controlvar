@@ -57,6 +57,8 @@ READ_KEYS = {
     "value_type",
     "on_value",
     "off_value",
+    # #2012
+    "split",
     "tags",
     "owner_id",
     "created_at",

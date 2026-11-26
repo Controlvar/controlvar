@@ -81,6 +81,7 @@ function settings(environment: string, overrides: Partial<FlagEnvironmentSetting
     is_active: false,
     rollout_percentage: 0,
     targeting_rules: null,
+    split: null,
     configured: false,
     updated_at: null,
     ...overrides,
@@ -1267,6 +1268,133 @@ describe('what a screen-reader or keyboard user gets', () => {
       await screen.findByText(/^Promoted Staging to Production/);
       expect(promoteCalls()).toEqual([PRODUCTION_PROMOTE]);
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// A string flag's split (#2012)
+// ---------------------------------------------------------------------------
+
+describe("a string flag's split in the diff", () => {
+  const DEV_SPLIT = [
+    { value: 'red', weight: 50 },
+    { value: 'green', weight: 30 },
+    { value: 'blue', weight: 20 },
+  ];
+  const STAGING_SPLIT = [
+    { value: 'red', weight: 100 },
+    { value: 'green', weight: 0 },
+    { value: 'blue', weight: 0 },
+  ];
+
+  /** The flag is a string flag; the promotion copies the split too, as the API does. */
+  function installString() {
+    install([
+      {
+        path: '/api/v1/feature-flags/flag-1',
+        handler: () => ({ ...productionFlag(), value_type: 'string', on_value: 'A', off_value: 'Z', split: world.production.split }),
+      },
+      {
+        method: 'POST',
+        path: PROMOTE,
+        handler: (p, opts) => {
+          const target = p.split('/')[6] as Name;
+          const from = world[(opts.json as { from: Name }).from];
+          world[target] = {
+            ...world[target],
+            status: from.is_active ? 'active' : 'inactive',
+            is_active: from.is_active,
+            rollout_percentage: from.rollout_percentage,
+            targeting_rules: from.targeting_rules,
+            split: from.split,
+            configured: true,
+            updated_at: '2026-11-24T10:00:00Z',
+          };
+          return world[target];
+        },
+      },
+    ]);
+  }
+
+  beforeEach(() => {
+    world.development = { ...on('development', 10, ALPHA), split: DEV_SPLIT };
+    world.staging = { ...on('staging', 10, ALPHA), split: STAGING_SPLIT };
+  });
+
+  it('a string flag: the Split row names each value and weight, from what Staging has to what it will have', async () => {
+    installString();
+    await openIn('development');
+    await openDialog();
+    expect(within(row('split')).getByRole('rowheader')).toHaveTextContent('Split');
+    expect(text('promote-change-split')).toBe('Changes');
+    const lines = (testId: string) => Array.from(screen.getByTestId(testId).children).map((el) => el.textContent);
+    expect(lines('promote-now-split')).toEqual(['"red": 100%', '"green": 0%', '"blue": 0%']);
+    expect(lines('promote-after-split')).toEqual(['"red": 50%', '"green": 30%', '"blue": 20%']);
+    expect(text('promote-change-rules')).toBe('No change');
+    expect(text('promote-summary')).toBe(
+      "Copies Development's status, rollout percentage, targeting rules and split into Staging.",
+    );
+    expect(text('promote-not-copied')).toBe(
+      "Not copied: the flag's rollout schedules and safety settings, and its type, on value and off value. They stay as they are.",
+    );
+    expect(screen.getByTestId('promote-status')).toHaveTextContent('1 of 4 settings change in Staging.');
+  });
+
+  it('the same split in both is No change', async () => {
+    world.staging = { ...on('staging', 10, ALPHA), split: DEV_SPLIT.map((entry) => ({ ...entry })) };
+    installString();
+    await openIn('development');
+    await openDialog();
+    expect(text('promote-change-split')).toBe('No change');
+    expect(screen.getByTestId('promote-no-change')).toBeInTheDocument();
+  });
+
+  it('no split in the source shows the target losing its own', async () => {
+    world.development = { ...on('development', 10, ALPHA), split: null };
+    installString();
+    await openIn('development');
+    await openDialog();
+    expect(text('promote-after-split')).toBe('None');
+    expect(text('promote-change-split')).toBe('Changes');
+  });
+
+  it('a long value is a bounded, labelled preview in the diff', async () => {
+    const long = 'x'.repeat(8190);
+    world.development = { ...on('development', 10, ALPHA), split: [{ value: long, weight: 50 }, ...DEV_SPLIT.slice(1)] };
+    installString();
+    await openIn('development');
+    await openDialog();
+    const first = screen.getByTestId('promote-after-split').children[0];
+    expect(first.textContent).toBe(`"${'x'.repeat(79)}… (first 80 of 8192 characters): 50%`);
+  });
+
+  it('confirming copies the split into Staging and leaves Development and Production as they were', async () => {
+    world.production = { ...on('production', 25, US), split: null };
+    installString();
+    await openIn('development');
+    await openDialog();
+    fireEvent.click(screen.getByTestId('promote-confirm'));
+    await waitFor(() => expect(promoteCalls()).toEqual([STAGING_PROMOTE]));
+    await waitFor(() => expect(world.staging.split).toEqual(DEV_SPLIT));
+    expect(world.development.split).toEqual(DEV_SPLIT);
+    expect(world.production.split).toBeNull();
+  });
+
+  it('axe finds nothing on the diff with a split', async () => {
+    installString();
+    await openIn('development');
+    await openDialog();
+    const root = document.getElementById('__next') as HTMLElement;
+    const result = await axe.run(root, { rules: { 'color-contrast': { enabled: false } } });
+    expect(result.violations.map((v) => v.id)).toEqual([]);
+  });
+
+  it('a boolean flag lists no Split row', async () => {
+    install();
+    await openIn('development');
+    await openDialog();
+    expect(screen.queryByTestId('promote-row-split')).toBeNull();
+    expect(screen.getByTestId('promote-diff').querySelectorAll('tbody tr')).toHaveLength(3);
   });
 });
 

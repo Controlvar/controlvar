@@ -9,11 +9,43 @@
  */
 import { TargetingRules } from '@/types/targeting';
 import { isEditableTargeting, isNoRules, isPlainObject, targetingPayload } from '@/utils/experimentTargeting';
+import { isValueFlagType, parseValue, valueToText } from '@/utils/flagValues';
 import { FLAG_OPERATOR_OPTIONS, jsonToRules } from '@/utils/targeting';
 
-/** Whether the flag page's builder can edit `stored` without changing what it means. */
-export function isEditableFlagTargeting(stored: unknown): boolean {
+/**
+ * Whether a rule's own `value` (#2012) is one the flag page's Serve control
+ * can show and send back exactly: of the flag's type, as the value fields
+ * read it (its text parses back to it).
+ */
+function servableRuleValue(valueType: string, value: unknown): boolean {
+  if (!isValueFlagType(valueType) || value === null || value === undefined) return false;
+  return parseValue(valueType, 'value', valueToText(valueType, value)).ok;
+}
+
+/**
+ * Whether the flag page's builder can edit `stored` without changing what it means.
+ *
+ * The experiment page's reading (`isEditableTargeting`), plus one key the flag
+ * pages alone take: the dashboard rule's own `value` (#2012), which the Serve
+ * control shows and sends back. It is editable on a string, number or json
+ * flag (`valueType`) whose rule has a condition, when the value is of the
+ * flag's type; anywhere else a stored `value` leaves the rules read-only, so
+ * nothing the page cannot show is saved over. The experiment page still reads
+ * `value` as a key it does not know.
+ */
+export function isEditableFlagTargeting(stored: unknown, valueType?: string): boolean {
+  if (isPlainObject(stored) && 'value' in stored) {
+    const { value, ...rule } = stored;
+    if (valueType === undefined || !servableRuleValue(valueType, value)) return false;
+    if (!Array.isArray(rule.groups) || rule.groups.length === 0) return false;
+    return isEditableTargeting(rule, FLAG_OPERATOR_OPTIONS);
+  }
   return isEditableTargeting(stored, FLAG_OPERATOR_OPTIONS);
+}
+
+/** The stored dashboard rule's own value, or `undefined` when it has none. */
+export function storedRuleValue(stored: unknown): unknown {
+  return isPlainObject(stored) && 'value' in stored ? stored.value : undefined;
 }
 
 /** The builder state the flag page opens with for an editable stored value. */
@@ -109,5 +141,40 @@ export function targetingToSend(
   const payload = targetingPayload(rules, stored);
   if (replaced) return payload;
   const baseline = targetingPayload(rulesFromStored(stored), stored);
+  return sameJson(payload, baseline) ? undefined : payload;
+}
+
+/**
+ * What the dashboard rule serves (#2012): its default (the split, or the on
+ * value when there is none), or `value`, a value of its own.
+ */
+export type RuleServe = { own: false } | { own: true; value: unknown };
+
+/** *payload* with the rule's own value, which only a rule with a condition can carry. */
+function withRuleValue(payload: Record<string, unknown>, rules: TargetingRules, serve: RuleServe) {
+  return serve.own && rules.groups.length > 0 ? { ...payload, value: serve.value } : payload;
+}
+
+/**
+ * What a flag page's save sends as `targeting_rules`, the rule's own value
+ * counted as part of the rules: `targetingToSend`'s rule, with the stored
+ * value in the baseline. So a rule left as it was, value included, is not
+ * sent; changing only what it serves sends the rules with the new value (or
+ * without one, for the default). Rules with no group carry no value: the API
+ * refuses one there.
+ */
+export function flagTargetingToSend(
+  rules: TargetingRules | null,
+  serve: RuleServe,
+  stored: unknown,
+  replaced: boolean,
+): Record<string, unknown> | undefined {
+  if (rules === null) return undefined;
+  const payload = withRuleValue(targetingPayload(rules, stored), rules, serve);
+  if (replaced) return payload;
+  const storedRules = rulesFromStored(stored);
+  const storedValue = storedRuleValue(stored);
+  const storedServe: RuleServe = storedValue === undefined ? { own: false } : { own: true, value: storedValue };
+  const baseline = withRuleValue(targetingPayload(storedRules, stored), storedRules, storedServe);
   return sameJson(payload, baseline) ? undefined : payload;
 }

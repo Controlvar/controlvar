@@ -99,8 +99,8 @@ AUDIT_VALUE_FIELDS: Dict[EntityType, Tuple[str, ...]] = {
 #: ``off_value`` are user-authored content of up to 8 KiB, like its rules: a
 #: value recorded beside them could push the whole entry over
 #: ``AUDIT_VALUE_MAX`` and lose the ``rollout_percentage`` change with it
-#: (Plan F ruling 3). A flag's ``split`` is such values, and is named the same
-#: way: only a promotion into production changes it (#2012). An experiment's
+#: (Plan F ruling 3). A flag's ``split`` is such values, up to ten of them, and
+#: is named the same way (#2012). An experiment's
 #: three analysis configurations (CUPED, sequential testing, Bayesian) are JSON
 #: objects and are named the same way; the two switches that turn sequential and
 #: Bayesian analysis on are values (#848).
@@ -340,6 +340,12 @@ def _read(source: Any, field: str) -> Any:
 def _fingerprint(value: Any) -> str:
     """Comparable text for a field recorded by name only (never stored)."""
     return json.dumps(value, default=str, sort_keys=True)
+
+
+#: For a snapshot built outside this module, such as a flag's settings in one
+#: environment (``flag_environment_service.audit_setting``): two values with
+#: the same text are the same, and ``true`` is not ``1``.
+name_only_fingerprint = _fingerprint
 
 
 def _rows_fingerprint(rows: Any, columns: Tuple[str, ...]) -> str:

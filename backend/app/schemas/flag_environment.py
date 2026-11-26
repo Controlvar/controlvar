@@ -30,7 +30,13 @@ from backend.app.core.targeting_adapter import (
     validate_flag_targeting,
 )
 from backend.app.models.feature_flag import flag_status_name
-from backend.app.schemas.feature_flag import TARGETING_RULES_DESCRIPTION
+from backend.app.schemas.feature_flag import (
+    SPLIT_READ_DESCRIPTION,
+    SPLIT_REQUEST_DESCRIPTION,
+    TARGETING_RULES_DESCRIPTION,
+    _split_schema,
+    read_split,
+)
 from backend.app.schemas.storable_text import (
     contains_unstorable_text,
     unstorable_text_message,
@@ -69,6 +75,9 @@ class FlagEnvironmentSettings(BaseModel):
     targeting_rules: Optional[Any] = Field(
         None, description="The environment's targeting rules, as stored."
     )
+    split: Optional[Any] = Field(
+        None, description="The environment's split. " + SPLIT_READ_DESCRIPTION
+    )
     configured: bool = Field(
         ...,
         description=(
@@ -102,6 +111,7 @@ class FlagEnvironmentSettings(BaseModel):
             is_active=status == "active",
             rollout_percentage=view.rollout_percentage,
             targeting_rules=view.targeting_rules,
+            split=read_split(view.value_type, view.split),
             configured=row is not None,
             updated_at=None if row is None else row.updated_at,
         )
@@ -132,8 +142,10 @@ class FlagEnvironmentUpdate(BaseModel):
     """The settings of a flag in one environment to change.
 
     Only the fields sent change. ``is_active`` and ``rollout_percentage``
-    refuse null; a null ``targeting_rules`` clears the rules. A field not
-    listed here answers 422.
+    refuse null; a null ``targeting_rules`` clears the rules, and a null
+    ``split`` the split. A field not listed here answers 422. The split and
+    the rules' own values are checked against the flag's type by the route
+    (``flag_values.serving_errors``): this model cannot see it.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -146,6 +158,11 @@ class FlagEnvironmentUpdate(BaseModel):
     rollout_percentage: int = Field(None, ge=0, le=100)
     targeting_rules: Optional[Any] = Field(
         None, description=TARGETING_RULES_DESCRIPTION
+    )
+    split: Any = Field(
+        None,
+        description=SPLIT_REQUEST_DESCRIPTION,
+        json_schema_extra=_split_schema(),
     )
 
     @field_validator("is_active", "rollout_percentage", mode="before")

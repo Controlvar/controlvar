@@ -8,7 +8,8 @@
  * Env: CONTROLVAR_API_URL (default http://localhost:8000), CONTROLVAR_API_KEY (required),
  * (the former names EXPERIMENTLY_API_URL / EXPERIMENTLY_API_KEY are read when these are unset),
  *      CONTRACT_EXPERIMENT_KEY (default sdk_contract_ab), CONTRACT_FLAG_KEY (default sdk_contract_flag),
- *      CONTRACT_USER_ID (default smoke-<uuid>).
+ *      CONTRACT_USER_ID (default smoke-<uuid>), CONTRACT_MULTIWAY_USERS (comma-separated users of
+ *      the multi-way flag, step 7b; the live runner sets it).
  *
  * Prints exactly one JSON line on stdout and exits 0; on failure prints one line to stderr and exits 1.
  *
@@ -180,8 +181,8 @@ try {
   //    type as useFlagValue reads it. Each default is no flag value, so a read that falls back
   //    shows; the report is what the reads returned.
   const valued = new ExperimentationClient(config);
-  const readValue = async (key, type, fallback) => {
-    const read = readFlagValue(await valued.evaluateFeatureFlagDetailed(user, key), type);
+  const readValue = async (key, type, fallback, reader = user) => {
+    const read = readFlagValue(await valued.evaluateFeatureFlagDetailed(reader, key), type);
     return read.found ? read.value : fallback;
   };
   const values = {
@@ -189,6 +190,19 @@ try {
     number: await readValue('sdk_contract_value_number', 'number', -1),
     json: await readValue('sdk_contract_value_json', 'json', ['smoke-default']),
   };
+
+  // 7b. Multi-way flags (#2012), read the same way: the seed's split flag for each user the
+  //     runner gives in CONTRACT_MULTIWAY_USERS (one per value of the split), and the flag whose
+  //     rule serves a value of its own for this user with plan=pro. The runner requires each
+  //     user's value of the split, and the rule's own value.
+  const multiway = { users: {}, rule: null };
+  for (const id of (process.env.CONTRACT_MULTIWAY_USERS || '').split(',').filter(Boolean)) {
+    multiway.users[id] = await readValue('sdk_contract_multiway', 'string', 'smoke-default', { userId: id });
+  }
+  multiway.rule = await readValue('sdk_contract_rule_value', 'string', 'smoke-default', {
+    userId,
+    attributes: { plan: 'pro' },
+  });
 
   process.stdout.write(
     JSON.stringify({
@@ -210,6 +224,7 @@ try {
           : null,
       },
       values,
+      multiway,
     }) + '\n'
   );
 } catch (err) {

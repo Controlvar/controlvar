@@ -1085,10 +1085,18 @@ by = [
 ]
 
 [[unit]]
-text = "Its value_type is set when it is created, and it has two values: on_value, what the users it is on for get, and off_value, what everyone else gets, and everyone while the flag is off."
+text = "Its value_type is set when it is created, and it has an on_value, what the users it is on for get, and an off_value, what everyone else gets, and everyone while the flag is off."
 by = [
     "test:backend/tests/integration/api/test_flag_values_api.py::test_value_type_is_read_only",
     "test:backend/tests/integration/api/test_flag_values_api.py::test_evaluation_serves_on_exactly_when_enabled_and_off_otherwise",
+]
+
+[[unit]]
+text = "Through the API, a split or a targeting rule's own value can give the users it is on for other values of its type instead."
+by = [
+    "test:backend/tests/integration/api/test_flag_split_write_api.py::test_a_split_set_through_the_api_is_served_by_the_hash",
+    "test:backend/tests/integration/api/test_flag_split_write_api.py::test_a_rule_set_through_the_api_serves_its_own_value",
+    "test:backend/tests/integration/api/test_flag_split_write_api.py::test_every_write_path_stores_what_it_accepts_as_sent",
 ]
 
 [[unit]]
@@ -1186,10 +1194,6 @@ by = ["exempt:baseline"]
 [[unit]]
 text = "When a Flag Evaluates to Off"
 by = ["exempt:baseline"]
-
-[[unit]]
-text = "Every flag serves two values."
-by = ["test:backend/tests/unit/api/test_documented_limits.py::test_a_boolean_flag_serves_false_when_off_and_a_value_flag_its_off_value"]
 
 [[unit]]
 text = "Evaluation returns enabled: false, and value set to the flag's off_value (false for a boolean flag), when:"
@@ -1297,8 +1301,11 @@ text = "evaluates every active flag the same way and returns {\"flag-key\": true
 by = ["test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestUserFlagsWithContext::test_context_query_param"]
 
 [[unit]]
-text = "A value flag answers true when the user gets its on value."
-by = ["test:backend/tests/integration/api/test_flag_values_api.py::test_the_bulk_route_answers_true_or_false_for_a_value_flag"]
+text = "A value flag answers true when the flag is on for the user, whatever value it serves them."
+by = [
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_the_bulk_route_answers_true_or_false_for_a_value_flag",
+    "test:backend/tests/integration/api/test_flag_split_api.py::test_the_bulk_route_answers_true_or_false_and_agrees_with_evaluate",
+]
 
 [[unit]]
 text = "Reporting client-side errors"

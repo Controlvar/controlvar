@@ -348,6 +348,14 @@ downgrade.
 
 ### Rolling back past flag splits
 
+Rolling the API back alone, with the database left as it is: a 0.48.0 task
+ignores splits and rule values and serves each such flag's on value to every
+user the flag is on for. This holds during the rolling upgrade and after an
+API-only rollback to 0.48.0, until the API is upgraded again or the splits and
+rule values are cleared with 0.49.0 serving. A rollback to 0.49.0 or a later
+release changes no answer: each serves splits and rule values. No flag needs to
+be turned off first.
+
 Downgrading below `t2012_flag_split` drops `feature_flags.split` and
 `flag_environment_settings.split`. It refuses while any flag has a split or a
 rule value (a value of its own that a targeting rule of a string, number or

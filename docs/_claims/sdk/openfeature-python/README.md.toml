@@ -115,10 +115,12 @@ by = [
 ]
 
 [[unit]]
-text = "The flag's value is its on value when the flag is on for the user, and its off value otherwise, an inactive flag included."
+text = "The flag's value is its off value when the flag is off for the user, an inactive flag included, and otherwise its on value, or the value its split or a matched rule's own value gives them."
 by = [
     "test:sdk/openfeature-python/tests/test_provider.py::TestResolutionTable::test_the_on_or_off_value_with_the_servers_reason",
     "test:sdk/openfeature-python/tests/test_provider.py::TestResolutionTable::test_an_inactive_flag_answers_its_off_value_with_disabled",
+    "test:backend/tests/integration/api/test_flag_split_write_api.py::test_a_split_set_through_the_api_is_served_by_the_hash",
+    "test:backend/tests/integration/api/test_flag_split_write_api.py::test_a_rule_set_through_the_api_serves_its_own_value",
 ]
 
 [[unit]]
@@ -134,12 +136,18 @@ text = "The server's answer | Value | Reason | Variant"
 by = ["exempt:label"]
 
 [[unit]]
-text = "reason: \"targeting_rule\", on / off | the on value / the off value | TARGETING_MATCH | on / off"
-by = ["test:sdk/openfeature-python/tests/test_provider.py::TestResolutionTable::test_the_on_or_off_value_with_the_servers_reason"]
+text = "reason: \"targeting_rule\", on / off | the on value (or the split's or the rule's own value) / the off value | TARGETING_MATCH | on / off"
+by = [
+    "test:sdk/openfeature-python/tests/test_provider.py::TestResolutionTable::test_the_on_or_off_value_with_the_servers_reason",
+    "test:backend/tests/integration/api/test_flag_split_write_api.py::test_a_rule_set_through_the_api_serves_its_own_value",
+]
 
 [[unit]]
-text = "reason: \"rollout\", on / off | the on value / the off value | SPLIT | on / off"
-by = ["test:sdk/openfeature-python/tests/test_provider.py::TestResolutionTable::test_the_on_or_off_value_with_the_servers_reason"]
+text = "reason: \"rollout\", on / off | the on value (or the split's value) / the off value | SPLIT | on / off"
+by = [
+    "test:sdk/openfeature-python/tests/test_provider.py::TestResolutionTable::test_the_on_or_off_value_with_the_servers_reason",
+    "test:backend/tests/integration/api/test_flag_split_write_api.py::test_a_split_set_through_the_api_is_served_by_the_hash",
+]
 
 [[unit]]
 text = "reason: \"inactive\" | the off value, not your default | DISABLED | off"

@@ -7,7 +7,8 @@
 // Environment: CONTROLVAR_API_URL (default http://localhost:8000), CONTROLVAR_API_KEY
 // (required), CONTRACT_EXPERIMENT_KEY (default sdk_contract_ab), CONTRACT_FLAG_KEY (default
 // sdk_contract_flag), CONTRACT_TARGETED_FLAG_KEY (default sdk_contract_targeted),
-// CONTRACT_USER_ID (default smoke-<guid>).
+// CONTRACT_USER_ID (default smoke-<guid>), CONTRACT_MULTIWAY_USERS (comma-separated users of the
+// multi-way flag, step 6b; the live runner sets it).
 //
 // Prints exactly one JSON line on stdout and exits 0; on failure prints one line to stderr and
 // exits 1. Only the SDK's public API is used. (`dotnet run` itself may print restore/build
@@ -183,15 +184,25 @@ static async Task<int> RunAsync()
     //    three value flags, each on at 100% while the SDK rows run, with defaults that are no flag
     //    value, so a getter that falls back shows. The report is what they returned; the runner
     //    requires the seed's on values.
+    // 6b. Multi-way flags (#2012): the same client reads the seed's split flag with the string
+    //     getter for each user the runner gives in CONTRACT_MULTIWAY_USERS (one per value of the
+    //     split), and the flag whose rule serves a value of its own for this user with plan=pro.
+    //     The runner requires each user's value of the split, and the rule's own value.
     string stringValue;
     double numberValue;
     JsonElement jsonValue;
+    var multiwayUsers = new Dictionary<string, string>();
+    string ruleValue;
     using (var valued = new ExperimentationClient(config))
     {
         using var smokeDefault = JsonDocument.Parse("[\"smoke-default\"]");
         stringValue = await valued.GetStringValueAsync("sdk_contract_value_string", userId, "smoke-default");
         numberValue = await valued.GetNumberValueAsync("sdk_contract_value_number", userId, -1);
         jsonValue = (await valued.GetJsonValueAsync("sdk_contract_value_json", userId, smokeDefault.RootElement)).Clone();
+        foreach (var id in Env("CONTRACT_MULTIWAY_USERS", "").Split(',', StringSplitOptions.RemoveEmptyEntries))
+            multiwayUsers[id] = await valued.GetStringValueAsync("sdk_contract_multiway", id, "smoke-default");
+        ruleValue = await valued.GetStringValueAsync(
+            "sdk_contract_rule_value", userId, "smoke-default", new Dictionary<string, object> { ["plan"] = "pro" });
     }
 
     var seen = exposures.ToArray();
@@ -215,7 +226,8 @@ static async Task<int> RunAsync()
         event_id = new { user_id = userId, event_name = dedupName, id = dedupId, sends = 2 },
         targeted = new { pro = pro.Enabled, free = free.Enabled, reason = answered[0] },
         exposure = new { calls = seen.Length, payload },
-        values = new { @string = stringValue, number = numberValue, json = jsonValue }
+        values = new { @string = stringValue, number = numberValue, json = jsonValue },
+        multiway = new { users = multiwayUsers, rule = ruleValue }
     });
     Console.Out.WriteLine(line);
     return 0;

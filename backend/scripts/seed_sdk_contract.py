@@ -17,6 +17,14 @@ Creates (idempotently):
   runner's ``ATTRIBUTE_SDKS`` evaluate it with ``{"plan": "pro"}`` (on, reason
   ``targeting_rule``) and ``{"plan": "free"}`` (off), so it is on only when
   the SDK sends the attributes (an existing one is put back to that state),
+- two ACTIVE string flags with the string flag's values (#2012; an existing
+  one is put back to that state): ``sdk_contract_multiway``, on at 100% with
+  a split of three values, ``red``, ``green`` and ``blue``, weighted 34/33/33,
+  and ``sdk_contract_rule_value``, at 0% with the targeted flag's rule
+  (``plan`` equals ``pro``) serving a value of its own, ``pro-copy``.
+  ``multiway_users()`` picks three users, one per value of the split, with
+  the server's own split function; the runner gives them to the smokes of the
+  SDKs in its ``MULTIWAY_SDKS``,
 - an API key named ``sdk-contract-smoke``, with no ``sdk:ruleset`` scope,
   whose plaintext is written to ``tests/sdk-contract/live/.api_key``;
 - a second key of the same user, ``sdk-contract-local``, with the
@@ -129,6 +137,30 @@ TARGETED_FLAG_RULES = {
         }
     ],
 }
+#: A string flag with a split (#2012): on at 100%, each user served one of
+#: three values by weight. :func:`multiway_users` picks the users the smokes
+#: read it for, one per value, with the server's own split function.
+MULTIWAY_FLAG_KEY = "sdk_contract_multiway"
+MULTIWAY_SPLIT = [
+    {"value": "red", "weight": 34},
+    {"value": "green", "weight": 33},
+    {"value": "blue", "weight": 33},
+]
+#: A string flag off for everyone (0%) except through its one rule, plan
+#: equals pro at 100%, which serves a value of its own (#2012).
+RULE_VALUE_FLAG_KEY = "sdk_contract_rule_value"
+RULE_VALUE = "pro-copy"
+RULE_VALUE_FLAG_RULES = {**TARGETED_FLAG_RULES, "value": RULE_VALUE}
+#: What an existing one of the two is put back to.
+MULTIWAY_FIELDS = (
+    "status",
+    "value_type",
+    "on_value",
+    "off_value",
+    "rollout_percentage",
+    "targeting_rules",
+    "split",
+)
 API_KEY_NAME = "sdk-contract-smoke"
 LOCAL_API_KEY_NAME = "sdk-contract-local"
 LOCAL_API_KEY_SCOPES = "sdk:ruleset"
@@ -263,6 +295,75 @@ def seed_value_flags(db, admin_user) -> list[FeatureFlag]:
         db.commit()
         db.refresh(flag)
         print(f"  Created {value_type} flag '{key}' at 100% (id={flag.id}).")
+        flags.append(flag)
+    return flags
+
+
+def multiway_users() -> dict[str, str]:
+    """Three users of the multi-way flag, each served a different value:
+    ``{user_id: value}``, picked by the server's own split function
+    (``flag_values.split_bucket`` and ``split_value``), the first of
+    ``mw-user-0``, ``mw-user-1``, ... to get each value."""
+    from backend.app.core.flag_values import split_bucket, split_value
+
+    picked: dict[str, str] = {}
+    for n in range(1000):
+        user = f"mw-user-{n}"
+        value = split_value(MULTIWAY_SPLIT, split_bucket(user, MULTIWAY_FLAG_KEY))
+        if value not in picked.values():
+            picked[user] = value
+        if len(picked) == len(MULTIWAY_SPLIT):
+            return picked
+    raise RuntimeError("no three users get the three values of the split")
+
+
+def seed_multiway_flags(db, admin_user) -> list[FeatureFlag]:
+    """The flag with a split and the flag whose rule serves a value of its own,
+    both string flags with the seed's string values (#2012), written through
+    the model as the other flags are. An existing one is put back to exactly
+    that."""
+    _, on_value, off_value = VALUE_FLAGS["string"]
+    common = {
+        "description": "A multi-way flag for the live SDK contract tests.",
+        "status": FeatureFlagStatus.ACTIVE,
+        "owner_id": admin_user.id,
+        "tags": ["sdk-contract"],
+        "value_type": "string",
+        "on_value": on_value,
+        "off_value": off_value,
+    }
+    wanted = [
+        FeatureFlag(
+            key=MULTIWAY_FLAG_KEY,
+            name="SDK contract multi-way flag",
+            rollout_percentage=100,
+            targeting_rules={},
+            split=MULTIWAY_SPLIT,
+            **common,
+        ),
+        FeatureFlag(
+            key=RULE_VALUE_FLAG_KEY,
+            name="SDK contract rule value flag",
+            rollout_percentage=0,
+            targeting_rules=RULE_VALUE_FLAG_RULES,
+            split=None,
+            **common,
+        ),
+    ]
+    flags = []
+    for new in wanted:
+        flag = db.query(FeatureFlag).filter(FeatureFlag.key == new.key).first()
+        if flag is None:
+            db.add(new)
+            flag = new
+        else:
+            for field in MULTIWAY_FIELDS:
+                setattr(flag, field, getattr(new, field))
+        db.commit()
+        db.refresh(flag)
+        print(
+            f"  Flag '{flag.key}' active at {flag.rollout_percentage}% (id={flag.id})."
+        )
         flags.append(flag)
     return flags
 
@@ -451,6 +552,8 @@ def reset(db) -> None:
         FLAG_KEY,
         *(key for key, _, _ in VALUE_FLAGS.values()),
         TARGETED_FLAG_KEY,
+        MULTIWAY_FLAG_KEY,
+        RULE_VALUE_FLAG_KEY,
     ]:
         flag = db.query(FeatureFlag).filter(FeatureFlag.key == key).first()
         if flag:
@@ -500,6 +603,9 @@ def main(argv: Optional[list[str]] = None) -> int:
         seed_flag(db, admin)
         seed_value_flags(db, admin)
         seed_targeted_flag(db, admin)
+        seed_multiway_flags(db, admin)
+        for user, value in multiway_users().items():
+            print(f"  '{MULTIWAY_FLAG_KEY}' serves {user} {value!r}.")
         seed_staging_settings(db)
         seed_api_key(db, admin)
         seed_local_api_key(db, admin)

@@ -301,11 +301,12 @@ text = "Flag values"
 by = ["exempt:label"]
 
 [[unit]]
-text = "EvalResult.Value is what the flag serves this user: its on value when Enabled is true, its off value otherwise (true or false for a boolean flag)."
+text = "EvalResult.Value is what the flag serves this user: its off value when Enabled is false, and otherwise its on value, or the value its split or a matched rule's own value gives them (true or false for a boolean flag)."
 by = [
     "test:sdk/go/value_test.go::TestEvalResult_StringValue_ReadsAStringFlag",
     "test:sdk/go/value_test.go::TestEvalResult_BooleanFlag_AccessorsReturnTheDefault",
-    "test:backend/tests/integration/api/test_flag_values_api.py::test_evaluation_serves_on_exactly_when_enabled_and_off_otherwise",
+    "test:backend/tests/integration/api/test_flag_split_write_api.py::test_a_split_set_through_the_api_is_served_by_the_hash",
+    "test:backend/tests/integration/api/test_flag_split_write_api.py::test_a_rule_set_through_the_api_serves_its_own_value",
 ]
 
 [[unit]]

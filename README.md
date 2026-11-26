@@ -133,8 +133,8 @@ step: [Guided examples](docs/guides/guided-examples.md).
 
 ## What it does not do (yet)
 
-- A flag serves two values, its on value and its off value; no rule or rollout splits users
-  among three or more. For three or more experiences, run a multivariate experiment.
+- A flag's split, 3 to 10 values by weight, records no exposure and measures nothing. To
+  compare values on a metric, run a multivariate experiment.
 - A revenue, count, duration or custom metric's sequential, Bayesian, sample-size, breakdown and
   daily views are of the share of users who sent its event.
 - Variant weights must add up to exactly 100%; there is no separate experiment-level traffic
