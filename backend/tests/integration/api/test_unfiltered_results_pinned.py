@@ -40,7 +40,7 @@ import math
 import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional
+from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 import pytest
 from freezegun import freeze_time
@@ -100,7 +100,29 @@ PINNED: Dict[str, Dict[str, str]] = {
             "d9d705ebd77321676e62a674b2885b6e0e2eb5a9c4bfe88d511a8b7ddf5eec3f"
         ),
     },
+    # #1934: each metric carries conversion_window_hours and each of its
+    # variants open_window_users, both null here (no metric has a window), and
+    # engine_version is 1.14.0. Without exactly those, every document is
+    # 1.13.0's: test_the_window_keys_are_all_that_moved_from_1_13_0.
+    "1.14.0": {
+        "computed": "426a6504804dd12b52d3479e376aef2d18620551bb05d779c006247ce2b0a57d",
+        "cache_hit": "426a6504804dd12b52d3479e376aef2d18620551bb05d779c006247ce2b0a57d",
+        "alias": "426a6504804dd12b52d3479e376aef2d18620551bb05d779c006247ce2b0a57d",
+        "breakdown_tier": "5c60a6580ed524bf84a39d68073b99ff31bd1e6665bfda9530bd2d1ff749f3da",
+        "snapshot_frequentist": (
+            "426a6504804dd12b52d3479e376aef2d18620551bb05d779c006247ce2b0a57d"
+        ),
+        "snapshot_bayesian": (
+            "fdcec1ddfc9bc1e13a6ab9ea7f189abb8a9846bd5958a3c26235433ef599969d"
+        ),
+        "snapshot_sequential": (
+            "d9d705ebd77321676e62a674b2885b6e0e2eb5a9c4bfe88d511a8b7ddf5eec3f"
+        ),
+    },
 }
+
+#: The keys 1.14.0 added (#1934): on each metric, and on each of its variants.
+WINDOW_KEYS = ("conversion_window_hours", "open_window_users")
 
 # --- the fixed experiment ------------------------------------------------------
 
@@ -458,6 +480,68 @@ def test_the_unfiltered_answers_are_byte_identical(
                 f"{PINNED[ENGINE_VERSION][name]}; first difference {where}"
             )
     assert moved == [], "\n".join(moved)
+
+
+def without_the_window_keys(document: Any) -> Tuple[Any, Tuple[int, int, int]]:
+    """*document* with exactly the two keys 1.14.0 added removed, after
+    checking each is null, and each ``engine_version`` 1.14.0 set back to
+    1.13.0; and how many metrics, variants and versions that touched."""
+    metric_key, variant_key = WINDOW_KEYS
+    touched = {"metrics": 0, "variants": 0, "versions": 0}
+
+    def walk(value: Any) -> Any:
+        if isinstance(value, list):
+            return [walk(v) for v in value]
+        if not isinstance(value, dict):
+            return value
+        out = {}
+        for key, item in value.items():
+            if key == "metrics" and isinstance(item, list):
+                out[key] = []
+                for metric in item:
+                    metric = dict(metric)
+                    assert metric.pop(metric_key) is None
+                    touched["metrics"] += 1
+                    metric["variants"] = [dict(v) for v in metric["variants"]]
+                    for variant in metric["variants"]:
+                        assert variant.pop(variant_key) is None
+                        touched["variants"] += 1
+                    out[key].append(walk(metric))
+            elif key == "engine_version":
+                assert item == "1.14.0", item
+                out[key] = "1.13.0"
+                touched["versions"] += 1
+            else:
+                out[key] = walk(item)
+        return out
+
+    stripped = walk(document)
+    return stripped, (touched["metrics"], touched["variants"], touched["versions"])
+
+
+def test_the_window_keys_are_all_that_moved_from_1_13_0():
+    """Byte for byte (#1934): every pinned document of this engine, without
+    exactly the two window keys and with its engine version set back, has
+    1.13.0's digest, so the pins above are main's answers with nothing else
+    moved."""
+    assert ENGINE_VERSION == "1.14.0"
+    golden = _golden()["documents"]
+    counts = {}
+    for name, document in golden.items():
+        stripped, counts[name] = without_the_window_keys(document)
+        assert digest(stripped) == PINNED["1.13.0"][name], name
+    # Four metrics of two variants each, and one engine version (the
+    # Bayesian block's); the breakdown's answer has the same; the Bayesian
+    # snapshot only its engine version, the sequential one neither.
+    assert counts == {
+        "computed": (4, 8, 1),
+        "cache_hit": (4, 8, 1),
+        "alias": (4, 8, 1),
+        "breakdown_tier": (4, 8, 1),
+        "snapshot_frequentist": (4, 8, 1),
+        "snapshot_bayesian": (0, 0, 1),
+        "snapshot_sequential": (0, 0, 0),
+    }
 
 
 def test_the_documents_carry_what_the_pin_is_meant_to_cover(

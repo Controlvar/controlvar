@@ -237,6 +237,16 @@ CHARACTERISATIONS: Dict[str, Dict[str, str]] = {
         "edges-0.95-none": "ec0b2f6f4ce27a2ec9dbc540ef79d9c74ac423844d26e75a089a75a1ccb893ee",
         "edges-0.95-bonferroni": "ebbbc649115fe1c97337c4afcbe04c6c8f80591c8b6a2654d90ee8d7eacba10d",
     },
+    # 1.14.0 (#1934): a metric's conversion window; no fixture here has one,
+    # so 1.13.0's entries.
+    "1.14.0": {
+        "three_variants-0.95-none": "ece157050f50545868f0578cfaa695d25584f87c1546aa86f7d02e0f41516b53",
+        "three_variants-0.95-bonferroni": "d3a91b82c4a94008c415af63846df6245af4719997ea6dc4b0985f3a5dfa1b8b",
+        "three_variants-0.95-benjamini_hochberg": "dd080d66753fbe4a6a0a391d59a6e193370456310bc5bd88a2fb5bc0eb061e43",
+        "three_variants-0.9-benjamini_hochberg": "3fccfd274278e5811b851b2f097580678de0ad5d3d1e3ab6bea48425f86fa453",
+        "edges-0.95-none": "ec0b2f6f4ce27a2ec9dbc540ef79d9c74ac423844d26e75a089a75a1ccb893ee",
+        "edges-0.95-bonferroni": "ebbbc649115fe1c97337c4afcbe04c6c8f80591c8b6a2654d90ee8d7eacba10d",
+    },
 }
 
 #: The cases pinned for the running engine.  The same six keys in every
@@ -382,6 +392,25 @@ def results_output(
     # the fake session cannot answer it, so it is null and the summary is
     # the engine's.  It came after these hashes, which are pinned without it.
     assert output.pop("srm") is None
+    return pop_window_keys(output)
+
+
+#: The keys 1.14.0 added to a /results metric and to each of its variants
+#: (#1934): the metric's conversion window and how many of the variant's users
+#: had less than all of it.
+WINDOW_KEYS = ("conversion_window_hours", "open_window_users")
+
+
+def pop_window_keys(output: Dict[str, Any]) -> Dict[str, Any]:
+    """Set the window keys aside from every metric of a ``get_experiment_results``
+    output, after checking each is there and null: no pinned fixture has a
+    window, and the pins are of what an engine computes from the counts.
+    ``test_metric_window_readers.py`` holds the keys to their own numbers."""
+    metric_key, variant_key = WINDOW_KEYS
+    for metric in output["metrics"]:
+        assert metric.pop(metric_key) is None, metric_key
+        for variant in metric["variants"]:
+            assert variant.pop(variant_key) is None, variant_key
     return output
 
 

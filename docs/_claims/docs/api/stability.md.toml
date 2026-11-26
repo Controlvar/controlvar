@@ -1518,6 +1518,20 @@ by = [
 ]
 
 [[unit]]
+text = "GET /api/v1/results/{experiment_id}, GET /api/v1/experiments/{experiment_id}/results, GET /api/v1/results/{experiment_id}/segments/{segment_id} (beta), GET /api/v1/results/{experiment_id}/bayesian, GET /api/v1/results/{experiment_id}/cuped (beta), GET /api/v1/results/{experiment_id}/balanced-groups (beta), GET /api/v1/bandit/{experiment_id}, POST /api/v1/bandit/{experiment_id}/update, PUT /api/v1/bandit/{experiment_id}/weights | #1934 (engine 1.14.0) | Additive. Each metric of /results, of its alias and of a saved segment's results carries conversion_window_hours, and each of its variants open_window_users. Both are null for a metric with no conversion window, which is every metric: no request can set one yet. A metric with a window counts only the events within that many hours of each user's assignment, in every result that reads it, and open_window_users is how many of the variant's assigned users had less than the full window. Without a window every answer is the one before, less the two keys and with engine_version 1.14.0, so the Bayesian, CUPED, balanced-groups and bandit operations change only in their engine_version, and /results serves no answer cached before the upgrade. The OpenAPI document changes in MetricResult and VariantResult, which gain the two properties, and in the four engine_version defaults, in both snapshots."
+by = [
+    "test:backend/tests/integration/api/test_metric_window_results.py::test_a_window_is_the_only_thing_that_moves_a_number",
+    "test:backend/tests/integration/api/test_metric_window_results.py::test_every_view_counts_the_window",
+    "test:backend/tests/integration/api/test_metric_window_open_users.py::test_the_open_windows_of_each_status",
+    "test:backend/tests/integration/api/test_metric_window_open_users.py::test_an_answer_cached_by_the_engine_before_is_not_served",
+    "test:backend/tests/integration/api/test_unfiltered_results_pinned.py::test_the_window_keys_are_all_that_moved_from_1_13_0",
+    "test:backend/tests/unit/services/test_metric_window_has_no_writer.py::test_no_metric_request_schema_takes_a_window",
+    "test:backend/tests/unit/services/test_engine_versions_frozen.py",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
 text = "POST /api/v1/auth/login, POST /api/v1/auth/token | #1812 | For an account with two-step sign-in on, the right password answers 200 with {\"mfa_required\": true, \"mfa_token\", \"enrol\": false, \"expires_in\": 300} and no access_token; the access token comes from POST /api/v1/auth/mfa/verify. For an account whose role LOCAL_AUTH_2FA_REQUIRED_ROLES names and that has not set it up, it answers {\"mfa_required\": true, \"mfa_token\", \"enrol\": true, \"expires_in\": 600} and no access_token; the access token comes from POST /api/v1/auth/mfa/enroll/confirm. Every other account gets the answer it got before. The OpenAPI document changes: each 200 answer is an anyOf that adds MfaRequiredResponse, and the descriptions say so. See Two-step sign-in."
 by = [
     "test:backend/tests/unit/api/test_two_factor_routes.py::test_the_password_step_answers_mfa_required_and_no_access_token",

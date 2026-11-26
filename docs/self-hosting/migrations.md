@@ -1164,7 +1164,8 @@ creating, changing, pausing or cloning an experiment, and computing its results 
 This revision adds the column `conversion_window_hours` (`integer`) to
 `metrics`, with the check `check_metric_conversion_window`: empty, or a whole
 number of hours from 1 to 8760 (365 days). Every metric's window is empty
-after the upgrade. Nothing reads or sets a window yet.
+after the upgrade. Results count a metric's events only within its window;
+nothing sets a window yet.
 
 The previous release, 0.48.0, runs against this schema unchanged: a metric it
 creates has no window, and a window stored beside it stays.

@@ -328,6 +328,12 @@ LOWER_IS_BETTER_FINGERPRINTS: Dict[str, Dict[str, str]] = {
         "binomial_metric_result": "f32e707b71ccdf962c066949eb2ce4524fe6a22fbd5bc60fcce216a52e27a818",
         "mean_metric_result": "11b6c73a38a716f809bfeb2ef9735045459973fbaa457087c4409074456952df",
     },
+    # 1.14.0 (#1934): a metric's conversion window; no fixture here has one,
+    # so 1.13.0's entries.
+    "1.14.0": {
+        "binomial_metric_result": "f32e707b71ccdf962c066949eb2ce4524fe6a22fbd5bc60fcce216a52e27a818",
+        "mean_metric_result": "11b6c73a38a716f809bfeb2ef9735045459973fbaa457087c4409074456952df",
+    },
 }
 
 

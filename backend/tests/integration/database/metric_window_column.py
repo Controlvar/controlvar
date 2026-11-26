@@ -1,9 +1,12 @@
 """What the metric window's column adds to the code (#1934), for the tests that
 copy this tree and take it out to stand for a release without it.
 
-``t1934_metric_window``'s file, and in ``Metric`` the column and its check.
-Each pattern is a whole statement and is found exactly once; if one is not
-found, the test that uses this says so rather than testing the wrong tree.
+``t1934_metric_window``'s file, in ``Metric`` the column and its check, and
+the two result keys that read it (``MetricResult.conversion_window_hours`` and
+``VariantResult.open_window_users``): without them the results it answers
+carry neither, as the release before them answered. Each pattern is a whole
+statement and is found exactly once; if one is not found, the test that uses
+this says so rather than testing the wrong tree.
 """
 
 from __future__ import annotations
@@ -25,6 +28,14 @@ COLUMN = {
             r"            CheckConstraint\(\n.*?"
             r'^                name="check_metric_conversion_window",\n'
             r"^            \),\n"
+        ),
+    ),
+    ("schemas", "results.py"): (
+        re.compile(
+            r"(?ms)^    open_window_users: Optional\[int\] = Field\(\n.*?^    \)\n"
+        ),
+        re.compile(
+            r"(?ms)^    conversion_window_hours: Optional\[int\] = Field\(\n.*?^    \)\n"
         ),
     ),
 }

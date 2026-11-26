@@ -36,6 +36,8 @@ from backend.app.services.event_matching import (
     first_conversion_times,
     metric_event_filter,
     metric_events,
+    windowed,
+    windowed_users,
 )
 from backend.app.services.segment_breakdown import segment_rows
 from backend.app.services.srm_service import (
@@ -59,6 +61,95 @@ logger = logging.getLogger(__name__)
 
 #: Monte Carlo samples per variant for the Bayesian block of the results API.
 BAYESIAN_N_SAMPLES: int = DEFAULT_N_SAMPLES
+
+
+def _naive(moment: Optional[datetime]) -> Optional[datetime]:
+    """``moment`` as naive UTC, the form ``assignments.created_at`` stores."""
+    if moment is not None and moment.tzinfo is not None:
+        moment = moment.astimezone(timezone.utc).replace(tzinfo=None)
+    return moment
+
+
+def open_window_time(experiment: Any, computed_at: datetime) -> Optional[datetime]:
+    """When an experiment's open conversion windows are counted at (#1934).
+
+    ``computed_at`` while it is DRAFT or ACTIVE. Once COMPLETED, its
+    ``end_date``: counting stopped there. ARCHIVED with an ``end_date`` at or
+    before ``computed_at``, that ``end_date``. PAUSED, or ARCHIVED without
+    such an ``end_date``: None, because events sent while it is paused or
+    archived are not counted and when counting stopped is not recorded.
+    Naive UTC.
+    """
+    status = getattr(experiment.status, "value", experiment.status)
+    status = str(status).lower()
+    now = _naive(computed_at)
+    end = _naive(getattr(experiment, "end_date", None))
+    if status in ("draft", "active"):
+        return now
+    if status == "completed":
+        return end
+    if status == "archived" and end is not None and end <= now:
+        return end
+    return None
+
+
+def open_window_counts(
+    db: Session,
+    experiment_id: Any,
+    window_hours: int,
+    counted_at: Optional[datetime],
+    members: Optional[Any] = None,
+) -> Optional[Dict[str, int]]:
+    """``variant_id -> assigned users whose window was still open at
+    counted_at``: assigned after ``counted_at - window_hours``, so with less
+    than the full window before it. One aggregate statement. ``members``, a
+    saved segment's id, counts its members only. None when ``counted_at`` is.
+    """
+    if counted_at is None:
+        return None
+    query = db.query(Assignment.variant_id, func.count(Assignment.id)).filter(
+        Assignment.experiment_id == experiment_id,
+        Assignment.created_at > counted_at - timedelta(hours=window_hours),
+    )
+    if members is not None:
+        from backend.app.models.segment import SegmentMember
+
+        query = query.filter(
+            Assignment.user_id.in_(
+                db.query(SegmentMember.member_id).filter(
+                    SegmentMember.segment_id == members
+                )
+            )
+        )
+    rows = query.group_by(Assignment.variant_id).all()
+    return {str(variant_id): count for variant_id, count in rows}
+
+
+def add_window_keys(
+    db: Session,
+    experiment: Any,
+    metric_definitions: Iterable[Any],
+    metrics: List[Dict[str, Any]],
+    computed_at: datetime,
+    members: Optional[Any] = None,
+) -> None:
+    """Add ``conversion_window_hours`` to each schema-shaped metric result,
+    and ``open_window_users`` to each of its variants (#1934): None without a
+    window, else ``open_window_counts`` at ``open_window_time`` (None when
+    that is). No statement for a metric without a window."""
+    counted_at = open_window_time(experiment, computed_at)
+    for metric, result in zip(metric_definitions, metrics):
+        hours = getattr(metric, "conversion_window_hours", None)
+        result["conversion_window_hours"] = hours
+        counts = None
+        if hours is not None:
+            counts = open_window_counts(
+                db, experiment.id, hours, counted_at, members=members
+            )
+        for variant in result.get("variants") or []:
+            variant["open_window_users"] = (
+                None if counts is None else counts.get(str(variant["variant_id"]), 0)
+            )
 
 
 class AnalysisService:
@@ -172,6 +263,8 @@ class AnalysisService:
             )
             for metric, raw in zip(metric_definitions, metrics_results)
         ]
+        computed_at = datetime.now(timezone.utc)
+        add_window_keys(self.db, experiment, metric_definitions, metrics, computed_at)
         sample_size_adequate = self._sample_size_adequate(experiment, metrics_results)
         summary.update(
             self._summarise_decision(experiment, metrics, sample_size_adequate)
@@ -205,7 +298,7 @@ class AnalysisService:
             "confidence_level": confidence_level,
             "correction_method": correction_method,
             "sample_size_adequate": sample_size_adequate,
-            "computed_at": datetime.now(timezone.utc),
+            "computed_at": computed_at,
             # Legacy per-metric dicts (variant_results / conversion_rate ...)
             "metrics_results": metrics_results,
             # Schema-shaped per-metric results
@@ -374,8 +467,16 @@ class AnalysisService:
         value predicate here (the one ``value_totals`` has would make a user
         whose events carry no value 0).  A stored event counts each time it
         was stored.  A user with no such event is not listed, so their value
-        is 0.
+        is 0.  With a conversion window, only the events inside it count
+        (``windowed_users``).
         """
+        if windowed(events):
+            return [
+                float(row.events)
+                for row in windowed_users(
+                    self.db, experiment_id, variant_id, events
+                ).values()
+            ]
         rows = (
             self.db.query(Event.user_id, func.count(Event.id))
             .filter(
@@ -406,8 +507,18 @@ class AnalysisService:
         when ``abs(value) <= VALUE_BOUND``: an event with no value, or a value
         that is not finite or is beyond the bound, adds nothing to its user's
         total, and the user still counts as a converting user.  A user whose
-        every event is like that has no total here, so their value is 0.
+        every event is like that has no total here, so their value is 0.  With
+        a conversion window, only the events inside it count
+        (``windowed_users``).
         """
+        if windowed(events):
+            return [
+                row.value
+                for row in windowed_users(
+                    self.db, experiment_id, variant_id, events
+                ).values()
+                if row.valued
+            ]
         rows = (
             self.db.query(Event.user_id, func.sum(Event.value))
             .filter(
