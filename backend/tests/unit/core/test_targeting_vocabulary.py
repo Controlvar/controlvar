@@ -1022,6 +1022,16 @@ def test_the_walker_is_called_from_write_paths_only():
         (adapter, "validate_experiment_targeting"),
         (adapter, "validate_flag_targeting"),
     }
+    # #2179: the native flag walk, which refuses a rule id over 255
+    # characters, runs only for a flag write and the check script; read
+    # paths (``normalise_targeting_rules``) never judge a stored id.
+    assert _callers("_check_native_flag_rules") == {(adapter, "_validated_native")}
+    assert _callers("_validated_native") == {(adapter, "_validate_targeting")}
+    assert _callers("validate_flag_targeting") == {
+        ("backend/app/schemas/feature_flag.py", "checked_targeting_rules"),
+        ("backend/app/schemas/flag_environment.py", "checked_targeting_rules"),
+        ("backend/scripts/check_targeting_rules.py", "finding_for"),
+    }
     callers = _callers("validate_flag_targeting") | _callers(
         "validate_experiment_targeting"
     )
