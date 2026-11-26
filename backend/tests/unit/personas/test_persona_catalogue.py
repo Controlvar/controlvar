@@ -91,6 +91,33 @@ def test_the_u_dev_day_is_eight_consecutive_steps_that_write_or_read_on_purpose(
     assert {o.kind for o in step5.oracles} == {"count_delta", "ui_matches_api"}
 
 
+@pytest.mark.parametrize(
+    ("persona_id", "role", "refused", "numeric"),
+    [
+        ("U-ANALYST", "ANALYST", [6, 7, 8], [1, 2, 3, 4]),
+        ("U-VIEWER", "VIEWER", [1, 2], [3]),
+    ],
+)
+def test_a_read_only_day_tries_each_refused_change_and_decides_numbers_by_a_ledger(
+    persona_id, role, refused, numeric
+):
+    personas = catalogue.load_personas(PERSONAS_ROOT / "personas", REPO_ROOT)
+    (persona,) = [p for p in personas if p.id == persona_id]
+    assert persona.role == role
+    assert [s.n for s in persona.day] == list(range(1, len(persona.day) + 1))
+    # Each refused change is a write decided by the API refusing it and the
+    # thing reading back unchanged, never by the page alone.
+    for n in refused:
+        step = persona.day[n - 1]
+        assert step.writes and step.security, n
+        assert "api_refused" in {o.kind for o in step.oracles}, n
+    # Every number on a page is decided by something other than the page.
+    assert [s.n for s in persona.day if s.numeric] == numeric
+    for n in numeric:
+        kinds = {o.kind for o in persona.day[n - 1].oracles}
+        assert kinds - {"ui_matches_api"}, n
+
+
 def test_the_real_matrix_loads_and_the_row_count_is_pinned():
     matrix = catalogue.load_matrix(PERSONAS_ROOT / "role-matrix.yaml", REPO_ROOT)
     assert len(matrix.rows) == MATRIX_ROWS

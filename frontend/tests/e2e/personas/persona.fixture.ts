@@ -32,11 +32,17 @@ export interface PersonaSession {
 interface PersonaFixtures {
   /** dev@demo.com, a DEVELOPER (not a superuser), in Los Angeles. */
   developer: PersonaSession;
+  /** analyst@demo.com, an ANALYST, in London. */
+  analyst: PersonaSession;
+  /** viewer@demo.com, a VIEWER, in Tokyo. */
+  viewer: PersonaSession;
 }
 
 /** The seeded accounts (backend/scripts/seed_demo_data.py) the days sign in as. */
 export const ACCOUNTS = {
   developer: { email: "dev@demo.com", password: "Demo1234!", role: "DEVELOPER" },
+  analyst: { email: "analyst@demo.com", password: "Demo1234!", role: "ANALYST" },
+  viewer: { email: "viewer@demo.com", password: "Demo1234!", role: "VIEWER" },
 } as const;
 
 export type Persona = keyof typeof ACCOUNTS;
@@ -100,6 +106,16 @@ async function open(
 export const test = base.extend<PersonaFixtures>({
   developer: async ({ browser }, use) => {
     const { session, close } = await open(browser, "developer", "America/Los_Angeles");
+    await use(session);
+    await close();
+  },
+  analyst: async ({ browser }, use) => {
+    const { session, close } = await open(browser, "analyst", "Europe/London");
+    await use(session);
+    await close();
+  },
+  viewer: async ({ browser }, use) => {
+    const { session, close } = await open(browser, "viewer", "Asia/Tokyo");
     await use(session);
     await close();
   },
