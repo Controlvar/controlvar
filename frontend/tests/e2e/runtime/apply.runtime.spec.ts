@@ -63,7 +63,9 @@ test.describe("applying", () => {
     expect(await page.locator(".many").first().evaluate((el) => getComputedStyle(el).display)).toBe("none");
     expect(await page.locator("#t").evaluate((el) => getComputedStyle(el).color)).toBe("rgb(1, 2, 3)");
     const [ask] = calls(site, VISUAL_PATH);
-    expect(Object.keys(ask.body as object).sort()).toEqual(["format_version", "host", "path", "user_id"]);
+    expect(Object.keys(ask.body as object).sort()).toEqual(["context", "format_version", "host", "path", "user_id"]);
+    // The context holds only the website details a tag without data-collect sends: no address.
+    expect(Object.keys((ask.body as { context: object }).context)).toEqual(["web_device", "web_browser", "web_language", "web_visitor"]);
     expect(ask.body).toMatchObject({ host: "localhost:4100", path: "/a/b", format_version: 1 });
     expect(JSON.stringify(ask.body)).not.toContain("jane");
     expect(ask.headers["x-api-key"]).toBe(API_KEY);

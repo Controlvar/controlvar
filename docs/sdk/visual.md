@@ -50,6 +50,8 @@ Requests carry no cookies and no Referer.
 | Key | Where | What it holds | How long |
 |---|---|---|---|
 | `controlvar_uid` | cookie | The visitor's random id, when the page sets no data-user-id. Its name is data-cookie-name's default. | 30 days (Max-Age=2592000, Path=/, SameSite=Lax, Secure on https) |
+| `controlvar_visit` | localStorage | The visit's start and last page view, and its first page's campaign values and landing path when the tag collects them, cleaned. | replaced when a visit starts after 30 minutes without a page view; revokeConsent() deletes it |
+| `controlvar_seen` | localStorage | When this browser was first seen (milliseconds since 1970), to tell a new visitor from a returning one. | until deleted |
 | `controlvar_assigned` | localStorage | The keys of the experiments this visitor was assigned to, each with the time it was last seen, so track() can name them. | 30 days per experiment |
 | `controlvar_pages` | localStorage | The page rules of the running visual experiments on this site (match and path), so a page none of them covers makes no call. | 60 seconds |
 | `controlvar_backoff` | sessionStorage | The time until which the script sends nothing, set after a refused or failed call. | 5 minutes, in this tab |

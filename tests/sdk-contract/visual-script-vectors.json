@@ -1,0 +1,1621 @@
+{
+  "description": "Written by hand: what a browser gives the visual script (sdk/visual) and the exact website details it sends for each, on a visit's first page with empty storage. sdk/visual/__tests__/details.test.ts holds the script to every entry (exact count); backend/tests/unit/schemas/test_visual_visitor_attributes.py holds every detail here to the server's rules. collect null means the tag has no data-collect.",
+  "page_host": "shop.example",
+  "counts": {
+    "user_agents": 44,
+    "languages": 12,
+    "referrers": 16,
+    "pages": 9,
+    "collects": 12
+  },
+  "user_agents": [
+    {
+      "id": "ua-01",
+      "name": "Chrome on Windows",
+      "mobile": false,
+      "max_touch_points": 0,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "chrome",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "ua-02",
+      "name": "Chrome on a Mac",
+      "mobile": false,
+      "max_touch_points": 0,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "chrome",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "ua-03",
+      "name": "Safari on a Mac, no touch",
+      "mobile": null,
+      "max_touch_points": 0,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "safari",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "ua-04",
+      "name": "Firefox on Linux",
+      "mobile": null,
+      "max_touch_points": 0,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (X11; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "firefox",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "ua-05",
+      "name": "Safari on an iPhone",
+      "mobile": null,
+      "max_touch_points": 5,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
+      "context": {
+        "web_device": "phone",
+        "web_browser": "safari",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "ua-06",
+      "name": "Safari on an iPod touch",
+      "mobile": null,
+      "max_touch_points": 5,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (iPod touch; CPU iPhone OS 15_8 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.6.6 Mobile/15E148 Safari/604.1",
+      "context": {
+        "web_device": "phone",
+        "web_browser": "safari",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "ua-07",
+      "name": "Safari on an iPad with iOS 12 (its user agent also says Mobile)",
+      "mobile": null,
+      "max_touch_points": 5,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (iPad; CPU OS 12_5_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/12.1.2 Mobile/15E148 Safari/604.1",
+      "context": {
+        "web_device": "tablet",
+        "web_browser": "safari",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "ua-08",
+      "name": "Mobile before iPad in the user agent",
+      "mobile": null,
+      "max_touch_points": 5,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 Mobile/15E148 (iPad; CPU OS 12_5_7 like Mac OS X) Safari/604.1",
+      "context": {
+        "web_device": "tablet",
+        "web_browser": "safari",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "ua-09",
+      "name": "an iPad that reports a Mac, 5 touch points",
+      "mobile": null,
+      "max_touch_points": 5,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15",
+      "context": {
+        "web_device": "tablet",
+        "web_browser": "safari",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "ua-10",
+      "name": "the same Mac user agent, 1 touch point",
+      "mobile": null,
+      "max_touch_points": 1,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "safari",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "ua-11",
+      "name": "the same Mac user agent, 2 touch points",
+      "mobile": null,
+      "max_touch_points": 2,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15",
+      "context": {
+        "web_device": "tablet",
+        "web_browser": "safari",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "ua-12",
+      "name": "Edge on Windows",
+      "mobile": false,
+      "max_touch_points": 0,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "edge",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "ua-13",
+      "name": "Edg/ before Chrome/ in the user agent",
+      "mobile": false,
+      "max_touch_points": 0,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Edg/131.0.0.0 AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "edge",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "ua-14",
+      "name": "Opera on Windows",
+      "mobile": false,
+      "max_touch_points": 0,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 OPR/116.0.0.0",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "opera",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "ua-15",
+      "name": "OPR/ before Chrome/ in the user agent",
+      "mobile": false,
+      "max_touch_points": 0,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) OPR/116.0.0.0 AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "opera",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "ua-16",
+      "name": "Samsung Internet on an Android phone",
+      "mobile": true,
+      "max_touch_points": 5,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Linux; Android 14; SM-S921B) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/26.0 Chrome/122.0.0.0 Mobile Safari/537.36",
+      "context": {
+        "web_device": "phone",
+        "web_browser": "samsung",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "ua-17",
+      "name": "Chrome/ before SamsungBrowser/ in the user agent",
+      "mobile": true,
+      "max_touch_points": 5,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Linux; Android 14; SM-S921B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 SamsungBrowser/26.0 Mobile Safari/537.36",
+      "context": {
+        "web_device": "phone",
+        "web_browser": "samsung",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "ua-18",
+      "name": "Chrome on an iPhone (CriOS)",
+      "mobile": null,
+      "max_touch_points": 5,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/131.0.6778.73 Mobile/15E148 Safari/604.1",
+      "context": {
+        "web_device": "phone",
+        "web_browser": "chrome",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "ua-19",
+      "name": "Safari/ before CriOS/ in the user agent",
+      "mobile": null,
+      "max_touch_points": 5,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) Safari/604.1 AppleWebKit/605.1.15 CriOS/131.0.6778.73 Mobile/15E148",
+      "context": {
+        "web_device": "phone",
+        "web_browser": "chrome",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "ua-20",
+      "name": "Firefox on an iPhone (FxiOS)",
+      "mobile": null,
+      "max_touch_points": 5,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) FxiOS/133.0 Mobile/15E148 Safari/605.1.15",
+      "context": {
+        "web_device": "phone",
+        "web_browser": "firefox",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "ua-21",
+      "name": "Safari/ before FxiOS/ in the user agent",
+      "mobile": null,
+      "max_touch_points": 5,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) Safari/605.1.15 AppleWebKit/605.1.15 FxiOS/133.0 Mobile/15E148",
+      "context": {
+        "web_device": "phone",
+        "web_browser": "firefox",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "ua-22",
+      "name": "Chrome on an Android phone",
+      "mobile": true,
+      "max_touch_points": 5,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36",
+      "context": {
+        "web_device": "phone",
+        "web_browser": "chrome",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "ua-23",
+      "name": "Chrome on an Android phone, no userAgentData",
+      "mobile": null,
+      "max_touch_points": 5,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36",
+      "context": {
+        "web_device": "phone",
+        "web_browser": "chrome",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "ua-24",
+      "name": "Chrome on an Android tablet",
+      "mobile": false,
+      "max_touch_points": 5,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "context": {
+        "web_device": "tablet",
+        "web_browser": "chrome",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "ua-25",
+      "name": "Firefox on an Android phone",
+      "mobile": null,
+      "max_touch_points": 5,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Android 14; Mobile; rv:133.0) Gecko/133.0 Firefox/133.0",
+      "context": {
+        "web_device": "phone",
+        "web_browser": "firefox",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "ua-26",
+      "name": "Firefox on an Android tablet",
+      "mobile": null,
+      "max_touch_points": 5,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Android 14; Tablet; rv:133.0) Gecko/133.0 Firefox/133.0",
+      "context": {
+        "web_device": "tablet",
+        "web_browser": "firefox",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "ua-27",
+      "name": "Edge on Android (EdgA/ is not Edg/)",
+      "mobile": true,
+      "max_touch_points": 5,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36 EdgA/131.0.0.0",
+      "context": {
+        "web_device": "phone",
+        "web_browser": "chrome",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "ua-28",
+      "name": "Edge on an iPhone (EdgiOS/ is not Edg/)",
+      "mobile": null,
+      "max_touch_points": 5,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 EdgiOS/131.2903.68 Mobile/15E148 Safari/605.1.15",
+      "context": {
+        "web_device": "phone",
+        "web_browser": "safari",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "ua-29",
+      "name": "Facebook's in-app browser on an iPhone",
+      "mobile": null,
+      "max_touch_points": 5,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 [FBAN/FBIOS;FBAV/490.0.0.40.104;FBDV/iPhone15,2;FBMD/iPhone;FBSN/iOS;FBSV/17.5;FBLC/en_US]",
+      "context": {
+        "web_device": "phone",
+        "web_browser": "other",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "ua-30",
+      "name": "Instagram's in-app browser on Android",
+      "mobile": true,
+      "max_touch_points": 5,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Linux; Android 14; Pixel 8 Build/AP2A.240805.005; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/128.0.6613.127 Mobile Safari/537.36 Instagram 346.0.0.31.105 Android (34/14; 420dpi; 1080x2400; Google/google; Pixel 8; shiba; shiba; en_US; 634108317)",
+      "context": {
+        "web_device": "phone",
+        "web_browser": "chrome",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "ua-31",
+      "name": "Googlebot",
+      "mobile": null,
+      "max_touch_points": 0,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "other",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "ua-32",
+      "name": "Googlebot for phones",
+      "mobile": null,
+      "max_touch_points": 0,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.6778.69 Mobile Safari/537.36 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+      "context": {
+        "web_device": "phone",
+        "web_browser": "chrome",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "ua-33",
+      "name": "Bingbot",
+      "mobile": null,
+      "max_touch_points": 0,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "other",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "ua-34",
+      "name": "curl",
+      "mobile": null,
+      "max_touch_points": 0,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "curl/8.7.1",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "other",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "ua-35",
+      "name": "an empty user agent",
+      "mobile": null,
+      "max_touch_points": 0,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "other",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "ua-36",
+      "name": "tokens past character 512 are not read",
+      "mobile": false,
+      "max_touch_points": 0,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Filler/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx Edg/131.0.0.0 iPhone",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "chrome",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "ua-37",
+      "name": "a token ending before character 512 is read",
+      "mobile": false,
+      "max_touch_points": 0,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0) Filler/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx Edg/131 Chrome/131.0.0.0yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "edge",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "ua-38",
+      "name": "userAgentData says mobile, the user agent is a desktop's",
+      "mobile": true,
+      "max_touch_points": 0,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "context": {
+        "web_device": "phone",
+        "web_browser": "chrome",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "ua-39",
+      "name": "userAgentData says not mobile, the user agent is an iPhone's",
+      "mobile": false,
+      "max_touch_points": 5,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
+      "context": {
+        "web_device": "phone",
+        "web_browser": "safari",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "ua-40",
+      "name": "Edge on Windows Phone (Edge/ is not Edg/)",
+      "mobile": null,
+      "max_touch_points": 0,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Windows Phone 10.0; Android 6.0.1; Microsoft; Lumia 950) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/52.0.2743.116 Mobile Safari/537.36 Edge/15.15063",
+      "context": {
+        "web_device": "phone",
+        "web_browser": "chrome",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "ua-41",
+      "name": "Opera 12 (Presto)",
+      "mobile": null,
+      "max_touch_points": 0,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Opera/9.80 (Windows NT 6.1; WOW64) Presto/2.12.388 Version/12.18",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "other",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "ua-42",
+      "name": "Silk on a Kindle tablet",
+      "mobile": null,
+      "max_touch_points": 5,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Linux; Android 9; KFTRWI) AppleWebKit/537.36 (KHTML, like Gecko) Silk/131.3.2 like Chrome/131.0.6778.85 Safari/537.36",
+      "context": {
+        "web_device": "tablet",
+        "web_browser": "chrome",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "ua-43",
+      "name": "Opera Mobile on Android (Mobi, not Mobile)",
+      "mobile": null,
+      "max_touch_points": 5,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Opera/9.80 (Android 2.3.3; Linux; Opera Mobi/ADR-1111101157; U; es-ES) Presto/2.9.201 Version/11.50",
+      "context": {
+        "web_device": "phone",
+        "web_browser": "other",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "ua-44",
+      "name": "Mobile before Android in the user agent",
+      "mobile": null,
+      "max_touch_points": 5,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 Mobile (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "context": {
+        "web_device": "phone",
+        "web_browser": "chrome",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    }
+  ],
+  "languages": [
+    {
+      "id": "lang-01",
+      "name": "language \"en-US\"",
+      "mobile": false,
+      "max_touch_points": 0,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "chrome",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "lang-02",
+      "name": "language \"fil-PH\"",
+      "mobile": false,
+      "max_touch_points": 0,
+      "language": "fil-PH",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "chrome",
+        "web_language": "fil",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "lang-03",
+      "name": "language \"EN\"",
+      "mobile": false,
+      "max_touch_points": 0,
+      "language": "EN",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "chrome",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "lang-04",
+      "name": "language \"zh-Hant-TW\"",
+      "mobile": false,
+      "max_touch_points": 0,
+      "language": "zh-Hant-TW",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "chrome",
+        "web_language": "zh",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "lang-05",
+      "name": "language \"es-419\"",
+      "mobile": false,
+      "max_touch_points": 0,
+      "language": "es-419",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "chrome",
+        "web_language": "es",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "lang-06",
+      "name": "language \"de\"",
+      "mobile": false,
+      "max_touch_points": 0,
+      "language": "de",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "chrome",
+        "web_language": "de",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "lang-07",
+      "name": "language \"x-klingon\"",
+      "mobile": false,
+      "max_touch_points": 0,
+      "language": "x-klingon",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "chrome",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "lang-08",
+      "name": "language \"engl\"",
+      "mobile": false,
+      "max_touch_points": 0,
+      "language": "engl",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "chrome",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "lang-09",
+      "name": "language \"\"",
+      "mobile": false,
+      "max_touch_points": 0,
+      "language": "",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "chrome",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "lang-10",
+      "name": "language \"en_US\"",
+      "mobile": false,
+      "max_touch_points": 0,
+      "language": "en_US",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "chrome",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "lang-11",
+      "name": "language null",
+      "mobile": false,
+      "max_touch_points": 0,
+      "language": null,
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "chrome",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "lang-12",
+      "name": "language \"e\"",
+      "mobile": false,
+      "max_touch_points": 0,
+      "language": "e",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "chrome",
+        "web_visitor": "new"
+      }
+    }
+  ],
+  "referrers": [
+    {
+      "id": "ref-01",
+      "name": "referrer 'https://www.google.com/search?q=cv-secret-7731'",
+      "mobile": false,
+      "max_touch_points": 0,
+      "language": "en-US",
+      "referrer": "https://www.google.com/search?q=cv-secret-7731",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "chrome",
+        "web_language": "en",
+        "web_visitor": "new",
+        "web_referrer": "www.google.com"
+      }
+    },
+    {
+      "id": "ref-02",
+      "name": "referrer 'https://WWW.Example.ORG/Path?x=1#frag'",
+      "mobile": false,
+      "max_touch_points": 0,
+      "language": "en-US",
+      "referrer": "https://WWW.Example.ORG/Path?x=1#frag",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "chrome",
+        "web_language": "en",
+        "web_visitor": "new",
+        "web_referrer": "www.example.org"
+      }
+    },
+    {
+      "id": "ref-03",
+      "name": "referrer 'https://shop.example/other?utm_source=x'",
+      "mobile": false,
+      "max_touch_points": 0,
+      "language": "en-US",
+      "referrer": "https://shop.example/other?utm_source=x",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "chrome",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "ref-04",
+      "name": "referrer 'https://shop.example:8443/other'",
+      "mobile": false,
+      "max_touch_points": 0,
+      "language": "en-US",
+      "referrer": "https://shop.example:8443/other",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "chrome",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "ref-05",
+      "name": "referrer ''",
+      "mobile": false,
+      "max_touch_points": 0,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "chrome",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "ref-06",
+      "name": "referrer 'not a url'",
+      "mobile": false,
+      "max_touch_points": 0,
+      "language": "en-US",
+      "referrer": "not a url",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "chrome",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "ref-07",
+      "name": "referrer 'android-app://com.google.android.gm/'",
+      "mobile": false,
+      "max_touch_points": 0,
+      "language": "en-US",
+      "referrer": "android-app://com.google.android.gm/",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "chrome",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "ref-08",
+      "name": "referrer 'http://localhost:3000/'",
+      "mobile": false,
+      "max_touch_points": 0,
+      "language": "en-US",
+      "referrer": "http://localhost:3000/",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "chrome",
+        "web_language": "en",
+        "web_visitor": "new",
+        "web_referrer": "localhost"
+      }
+    },
+    {
+      "id": "ref-09",
+      "name": "referrer 'https://[::1]/'",
+      "mobile": false,
+      "max_touch_points": 0,
+      "language": "en-US",
+      "referrer": "https://[::1]/",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "chrome",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "ref-10",
+      "name": "referrer 'https://xn--bcher-kva.example/'",
+      "mobile": false,
+      "max_touch_points": 0,
+      "language": "en-US",
+      "referrer": "https://xn--bcher-kva.example/",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "chrome",
+        "web_language": "en",
+        "web_visitor": "new",
+        "web_referrer": "xn--bcher-kva.example"
+      }
+    },
+    {
+      "id": "ref-11",
+      "name": "referrer 'https://b\u00fccher.example/'",
+      "mobile": false,
+      "max_touch_points": 0,
+      "language": "en-US",
+      "referrer": "https://b\u00fccher.example/",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "chrome",
+        "web_language": "en",
+        "web_visitor": "new",
+        "web_referrer": "xn--bcher-kva.example"
+      }
+    },
+    {
+      "id": "ref-12",
+      "name": "referrer 'https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'",
+      "mobile": false,
+      "max_touch_points": 0,
+      "language": "en-US",
+      "referrer": "https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc.ddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd/",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "chrome",
+        "web_language": "en",
+        "web_visitor": "new",
+        "web_referrer": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc.ddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+      }
+    },
+    {
+      "id": "ref-13",
+      "name": "referrer 'https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'",
+      "mobile": false,
+      "max_touch_points": 0,
+      "language": "en-US",
+      "referrer": "https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc.ddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddde/",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "chrome",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "ref-14",
+      "name": "referrer 'https://user:secret@news.example/a'",
+      "mobile": false,
+      "max_touch_points": 0,
+      "language": "en-US",
+      "referrer": "https://user:secret@news.example/a",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "chrome",
+        "web_language": "en",
+        "web_visitor": "new",
+        "web_referrer": "news.example"
+      }
+    },
+    {
+      "id": "ref-15",
+      "name": "referrer 'file:///etc/hosts'",
+      "mobile": false,
+      "max_touch_points": 0,
+      "language": "en-US",
+      "referrer": "file:///etc/hosts",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "chrome",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "ref-16",
+      "name": "referrer 'https://www.google.com'",
+      "mobile": false,
+      "max_touch_points": 0,
+      "language": "en-US",
+      "referrer": "https://www.google.com",
+      "url": "https://shop.example/a/b/page",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "chrome",
+        "web_language": "en",
+        "web_visitor": "new",
+        "web_referrer": "www.google.com"
+      }
+    }
+  ],
+  "pages": [
+    {
+      "id": "page-01",
+      "name": "landing on, the plan's address",
+      "mobile": false,
+      "max_touch_points": 0,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page?email=a%40b.c&gclid=XYZ&utm_source=news&utm_campaign=a@b.c",
+      "collect": "device,browser,language,visitor,referrer,utm,landing",
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "chrome",
+        "web_language": "en",
+        "web_visitor": "new",
+        "web_utm_source": "news",
+        "web_landing_path": "/a/b/page"
+      }
+    },
+    {
+      "id": "page-02",
+      "name": "landing off by default",
+      "mobile": false,
+      "max_touch_points": 0,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/a/b/page?utm_source=news",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "chrome",
+        "web_language": "en",
+        "web_visitor": "new",
+        "web_utm_source": "news"
+      }
+    },
+    {
+      "id": "page-03",
+      "name": "all three campaign values; term and content never read",
+      "mobile": false,
+      "max_touch_points": 0,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/?utm_source=news&utm_medium=email&utm_campaign=spring-sale&utm_term=shoes&utm_content=a",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "chrome",
+        "web_language": "en",
+        "web_visitor": "new",
+        "web_utm_source": "news",
+        "web_utm_medium": "email",
+        "web_utm_campaign": "spring-sale"
+      }
+    },
+    {
+      "id": "page-04",
+      "name": "a 255-character landing path",
+      "mobile": false,
+      "max_touch_points": 0,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "collect": "device,browser,language,visitor,landing",
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "chrome",
+        "web_language": "en",
+        "web_visitor": "new",
+        "web_landing_path": "/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "page-05",
+      "name": "a 256-character landing path is left out",
+      "mobile": false,
+      "max_touch_points": 0,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "collect": "device,browser,language,visitor,landing",
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "chrome",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "page-06",
+      "name": "a landing path with @",
+      "mobile": false,
+      "max_touch_points": 0,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/u/a@b.c",
+      "collect": "device,browser,language,visitor,landing",
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "chrome",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "page-07",
+      "name": "a landing path with %40",
+      "mobile": false,
+      "max_touch_points": 0,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/u/a%40b.c",
+      "collect": "device,browser,language,visitor,landing",
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "chrome",
+        "web_language": "en",
+        "web_visitor": "new"
+      }
+    },
+    {
+      "id": "page-08",
+      "name": "the root",
+      "mobile": false,
+      "max_touch_points": 0,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/",
+      "collect": "device,browser,language,visitor,landing",
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "chrome",
+        "web_language": "en",
+        "web_visitor": "new",
+        "web_landing_path": "/"
+      }
+    },
+    {
+      "id": "page-09",
+      "name": "a path the browser encodes (a space)",
+      "mobile": false,
+      "max_touch_points": 0,
+      "language": "en-US",
+      "referrer": "",
+      "url": "https://shop.example/a b",
+      "collect": "device,browser,language,visitor,landing",
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "context": {
+        "web_device": "desktop",
+        "web_browser": "chrome",
+        "web_language": "en",
+        "web_visitor": "new",
+        "web_landing_path": "/a%20b"
+      }
+    }
+  ],
+  "collects": [
+    {
+      "id": "collect-01",
+      "name": "absent: the six defaults",
+      "mobile": null,
+      "max_touch_points": 5,
+      "language": "en-US",
+      "referrer": "https://www.google.com/",
+      "url": "https://shop.example/a?utm_source=news",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
+      "context": {
+        "web_device": "phone",
+        "web_browser": "safari",
+        "web_language": "en",
+        "web_visitor": "new",
+        "web_referrer": "www.google.com",
+        "web_utm_source": "news"
+      },
+      "warnings": 0,
+      "writes": [
+        "controlvar_seen",
+        "controlvar_visit"
+      ]
+    },
+    {
+      "id": "collect-02",
+      "name": "none",
+      "mobile": null,
+      "max_touch_points": 5,
+      "language": "en-US",
+      "referrer": "https://www.google.com/",
+      "url": "https://shop.example/a?utm_source=news",
+      "collect": "none",
+      "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
+      "context": {},
+      "warnings": 0,
+      "writes": []
+    },
+    {
+      "id": "collect-03",
+      "name": "empty",
+      "mobile": null,
+      "max_touch_points": 5,
+      "language": "en-US",
+      "referrer": "https://www.google.com/",
+      "url": "https://shop.example/a?utm_source=news",
+      "collect": "",
+      "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
+      "context": {},
+      "warnings": 1,
+      "writes": []
+    },
+    {
+      "id": "collect-04",
+      "name": "none with another value",
+      "mobile": null,
+      "max_touch_points": 5,
+      "language": "en-US",
+      "referrer": "https://www.google.com/",
+      "url": "https://shop.example/a?utm_source=news",
+      "collect": "none,device",
+      "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
+      "context": {},
+      "warnings": 1,
+      "writes": []
+    },
+    {
+      "id": "collect-05",
+      "name": "device only",
+      "mobile": null,
+      "max_touch_points": 5,
+      "language": "en-US",
+      "referrer": "https://www.google.com/",
+      "url": "https://shop.example/a?utm_source=news",
+      "collect": "device",
+      "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
+      "context": {
+        "web_device": "phone"
+      },
+      "warnings": 0,
+      "writes": []
+    },
+    {
+      "id": "collect-06",
+      "name": "an unknown value and a known one",
+      "mobile": null,
+      "max_touch_points": 5,
+      "language": "en-US",
+      "referrer": "https://www.google.com/",
+      "url": "https://shop.example/a?utm_source=news",
+      "collect": "device,colour",
+      "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
+      "context": {
+        "web_device": "phone"
+      },
+      "warnings": 1,
+      "writes": []
+    },
+    {
+      "id": "collect-07",
+      "name": "two unknown values: one warning",
+      "mobile": null,
+      "max_touch_points": 5,
+      "language": "en-US",
+      "referrer": "https://www.google.com/",
+      "url": "https://shop.example/a?utm_source=news",
+      "collect": "Device,colour",
+      "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
+      "context": {},
+      "warnings": 1,
+      "writes": []
+    },
+    {
+      "id": "collect-08",
+      "name": "spaces around values and an empty one",
+      "mobile": null,
+      "max_touch_points": 5,
+      "language": "en-US",
+      "referrer": "https://www.google.com/",
+      "url": "https://shop.example/a?utm_source=news",
+      "collect": " utm , referrer ,, ",
+      "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
+      "context": {
+        "web_referrer": "www.google.com",
+        "web_utm_source": "news"
+      },
+      "warnings": 0,
+      "writes": [
+        "controlvar_visit"
+      ]
+    },
+    {
+      "id": "collect-09",
+      "name": "landing only",
+      "mobile": null,
+      "max_touch_points": 5,
+      "language": "en-US",
+      "referrer": "https://www.google.com/",
+      "url": "https://shop.example/a?utm_source=news",
+      "collect": "landing",
+      "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
+      "context": {
+        "web_landing_path": "/a"
+      },
+      "warnings": 0,
+      "writes": [
+        "controlvar_visit"
+      ]
+    },
+    {
+      "id": "collect-10",
+      "name": "visitor only",
+      "mobile": null,
+      "max_touch_points": 5,
+      "language": "en-US",
+      "referrer": "https://www.google.com/",
+      "url": "https://shop.example/a?utm_source=news",
+      "collect": "visitor",
+      "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
+      "context": {
+        "web_visitor": "new"
+      },
+      "warnings": 0,
+      "writes": [
+        "controlvar_seen",
+        "controlvar_visit"
+      ]
+    },
+    {
+      "id": "collect-11",
+      "name": "browser and language",
+      "mobile": null,
+      "max_touch_points": 5,
+      "language": "en-US",
+      "referrer": "https://www.google.com/",
+      "url": "https://shop.example/a?utm_source=news",
+      "collect": "browser,language",
+      "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
+      "context": {
+        "web_browser": "safari",
+        "web_language": "en"
+      },
+      "warnings": 0,
+      "writes": []
+    },
+    {
+      "id": "collect-12",
+      "name": "a browser first seen before this visit",
+      "mobile": null,
+      "max_touch_points": 5,
+      "language": "en-US",
+      "referrer": "https://www.google.com/",
+      "url": "https://shop.example/a?utm_source=news",
+      "collect": null,
+      "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
+      "context": {
+        "web_device": "phone",
+        "web_browser": "safari",
+        "web_language": "en",
+        "web_visitor": "returning",
+        "web_referrer": "www.google.com",
+        "web_utm_source": "news"
+      },
+      "warnings": 0,
+      "writes": [
+        "controlvar_seen",
+        "controlvar_visit"
+      ],
+      "local_storage": {
+        "controlvar_seen": "1"
+      }
+    }
+  ]
+}

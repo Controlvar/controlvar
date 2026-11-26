@@ -1,0 +1,122 @@
+{
+  "description": "The website details the visual script (sdk/visual) reads about a visitor: one entry per web_ key it sends, with the data-collect value that turns it on, whether a tag without data-collect collects it, its name and its values as the dashboard and the docs show them, and the install guide's table cells. The keys and the closed values equal the server's (backend/tests/unit/schemas/test_visual_visitor_attributes.py) and the script's (sdk/visual/__tests__/details.test.ts); docs/sdk/visual.md's table is these rows. A detail the script cannot read in its form is not sent.",
+  "visit_minutes": 30,
+  "collect_tokens": ["device", "browser", "language", "visitor", "referrer", "utm", "landing", "none"],
+  "collect_default": ["device", "browser", "language", "visitor", "referrer", "utm"],
+  "details": [
+    {
+      "key": "web_device",
+      "collect": "device",
+      "default": true,
+      "label": "Device type",
+      "values": [
+        { "value": "phone", "label": "Phone" },
+        { "value": "tablet", "label": "Tablet" },
+        { "value": "desktop", "label": "Desktop" }
+      ],
+      "source": "The browser's user agent, whether it says it is a mobile, and its touch points",
+      "example": "phone",
+      "sent": "Yes",
+      "stored": "No"
+    },
+    {
+      "key": "web_browser",
+      "collect": "browser",
+      "default": true,
+      "label": "Browser",
+      "values": [
+        { "value": "chrome", "label": "Chrome" },
+        { "value": "edge", "label": "Edge" },
+        { "value": "firefox", "label": "Firefox" },
+        { "value": "safari", "label": "Safari" },
+        { "value": "samsung", "label": "Samsung Internet" },
+        { "value": "opera", "label": "Opera" },
+        { "value": "other", "label": "Other" }
+      ],
+      "source": "The browser's user agent",
+      "example": "chrome",
+      "sent": "Yes",
+      "stored": "No"
+    },
+    {
+      "key": "web_language",
+      "collect": "language",
+      "default": true,
+      "label": "Language",
+      "values": null,
+      "source": "The browser's language, its first part (en for en-US)",
+      "example": "en",
+      "sent": "Yes",
+      "stored": "No"
+    },
+    {
+      "key": "web_visitor",
+      "collect": "visitor",
+      "default": true,
+      "label": "New or returning",
+      "values": [
+        { "value": "new", "label": "New" },
+        { "value": "returning", "label": "Returning" }
+      ],
+      "source": "Whether this browser was first seen before this visit started",
+      "example": "returning",
+      "sent": "Yes",
+      "stored": "localStorage: controlvar_seen and controlvar_visit"
+    },
+    {
+      "key": "web_referrer",
+      "collect": "referrer",
+      "default": true,
+      "label": "Came from",
+      "values": null,
+      "source": "The host of the page that linked to this one, when it is another site",
+      "example": "www.google.com",
+      "sent": "Yes",
+      "stored": "No"
+    },
+    {
+      "key": "web_utm_source",
+      "collect": "utm",
+      "default": true,
+      "label": "Campaign source",
+      "values": null,
+      "source": "utm_source in the address of the visit's first page",
+      "example": "newsletter",
+      "sent": "Yes, on every page of the visit",
+      "stored": "localStorage: controlvar_visit"
+    },
+    {
+      "key": "web_utm_medium",
+      "collect": "utm",
+      "default": true,
+      "label": "Campaign medium",
+      "values": null,
+      "source": "utm_medium in the address of the visit's first page",
+      "example": "email",
+      "sent": "Yes, on every page of the visit",
+      "stored": "localStorage: controlvar_visit"
+    },
+    {
+      "key": "web_utm_campaign",
+      "collect": "utm",
+      "default": true,
+      "label": "Campaign name",
+      "values": null,
+      "source": "utm_campaign in the address of the visit's first page",
+      "example": "spring-sale",
+      "sent": "Yes, on every page of the visit",
+      "stored": "localStorage: controlvar_visit"
+    },
+    {
+      "key": "web_landing_path",
+      "collect": "landing",
+      "default": false,
+      "label": "Landing page",
+      "values": null,
+      "source": "The path of the visit's first page, without its query",
+      "example": "/sale/shoes",
+      "sent": "Only with landing in data-collect, on every page of the visit",
+      "stored": "localStorage: controlvar_visit"
+    }
+  ]
+}

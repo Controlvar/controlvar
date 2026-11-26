@@ -1,5 +1,5 @@
 {
-  "description": "Every browser storage key the visual script (sdk/visual) may use: the closed list. The names are final. revokeConsent() deletes all of them. `written` says whether this version of the script writes the key; the others are reserved for the goal and visitor-detail features. No key ever holds a raw URL, a query string, a referrer, an editor link or a token.",
+  "description": "Every browser storage key the visual script (sdk/visual) may use: the closed list. The names are final. revokeConsent() deletes all of them. `written` says whether this version of the script writes the key; the others are reserved for the goal features. No key ever holds a raw URL, a query string, a referrer, an editor link or a token.",
   "prefix": "controlvar_",
   "keys": [
     {
@@ -12,15 +12,15 @@
     {
       "name": "controlvar_visit",
       "storage": "localStorage",
-      "written": false,
-      "holds": "The visit's start and last activity, and its cleaned campaign values and landing path.",
-      "kept": "30 minutes after the last activity"
+      "written": true,
+      "holds": "The visit's start and last page view, and its first page's campaign values and landing path when the tag collects them, cleaned.",
+      "kept": "replaced when a visit starts after 30 minutes without a page view; revokeConsent() deletes it"
     },
     {
       "name": "controlvar_seen",
       "storage": "localStorage",
-      "written": false,
-      "holds": "When this browser was first seen, to tell a new visitor from a returning one.",
+      "written": true,
+      "holds": "When this browser was first seen (milliseconds since 1970), to tell a new visitor from a returning one.",
       "kept": "until deleted"
     },
     {

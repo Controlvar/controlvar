@@ -82,7 +82,13 @@ test.describe("consent()", () => {
     await visual(page, "consent");
     await expect(page.locator("#t")).toHaveText("Changed");
     const ordinary = await controlvarKeys(page, context);
-    expect(ordinary, "after consent").toEqual(["cookie:controlvar_uid", "local:controlvar_assigned", "local:controlvar_pages"]);
+    expect(ordinary, "after consent").toEqual([
+      "cookie:controlvar_uid",
+      "local:controlvar_assigned",
+      "local:controlvar_pages",
+      "local:controlvar_seen",
+      "local:controlvar_visit",
+    ]);
     ordinary.forEach((key) => seen.add(key));
 
     // A refused call: the silence.

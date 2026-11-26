@@ -165,6 +165,14 @@ text = "controlvar_uid | cookie | The visitor's random id, when the page sets no
 by = ["mechanism:visual-stored-keys"]
 
 [[unit]]
+text = "controlvar_visit | localStorage | The visit's start and last page view, and its first page's campaign values and landing path when the tag collects them, cleaned. | replaced when a visit starts after 30 minutes without a page view; revokeConsent() deletes it"
+by = ["mechanism:visual-stored-keys"]
+
+[[unit]]
+text = "controlvar_seen | localStorage | When this browser was first seen (milliseconds since 1970), to tell a new visitor from a returning one. | until deleted"
+by = ["mechanism:visual-stored-keys"]
+
+[[unit]]
 text = "controlvar_assigned | localStorage | The keys of the experiments this visitor was assigned to, each with the time it was last seen, so track() can name them. | 30 days per experiment"
 by = ["mechanism:visual-stored-keys"]
 
