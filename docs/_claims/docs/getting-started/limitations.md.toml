@@ -569,3 +569,37 @@ by = [
     "test:backend/tests/integration/api/test_visual_editor_sign_in.py::test_each_credential_lasts_its_time",
     "test:backend/tests/integration/api/test_visual_editor_sign_in.py::test_the_editor_routes_are_exactly_these",
 ]
+
+[[unit]]
+text = "An iPad counted as a tablet | An iPad that reports a Mac, as iPadOS Safari does by default, is counted as a tablet by its touch support. This was checked by emulating one in Chromium, not on real iPads."
+by = ["test:frontend/tests/e2e/runtime/tablet.runtime.spec.ts::five touch points make it a tablet; none make the same user agent a desktop"]
+
+[[unit]]
+text = "A returning visitor counted as returning | Safari may delete what a script stores after 7 days without a visit to your site, so a returning visitor can count as new."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "A campaign from any page of a visit | The campaign (utm_) values come from the first page of a visit only; a campaign in a later page's address is not used until a new visit starts."
+by = [
+    "test:sdk/visual/__tests__/visit.test.ts::lasts while pages are viewed less than 30 minutes apart, and keeps its first page campaign and landing page",
+    "test:frontend/tests/e2e/runtime/details.runtime.spec.ts::the visit keeps its start, its last page view and its cleaned campaign and landing page, and nothing from the address",
+]
+
+[[unit]]
+text = "Every campaign value recorded | A campaign value with a space, an @, a + or another character, or over 100 characters, is not recorded."
+by = [
+    "test:sdk/visual/__tests__/details.test.ts::every campaign query: the script reads the same value and keeps it exactly when the server does (10, exact)",
+    "test:sdk/visual/__tests__/details.test.ts::every detail vector: the script keeps exactly what the server keeps (60, exact)",
+    "test:frontend/tests/e2e/runtime/details.runtime.spec.ts::each campaign query of the server's vectors gives the browser's own reading of it, kept as the server keeps it",
+]
+
+[[unit]]
+text = "Every landing page recorded | A landing path over 255 characters, or with an @, is not recorded."
+by = [
+    "test:sdk/visual/__tests__/details.test.ts::every detail vector: the script keeps exactly what the server keeps (60, exact)",
+    "test:sdk/visual/__tests__/contexts.test.ts::every vector: the script sends exactly its details, and no other context",
+]
+
+[[unit]]
+text = "A phones-only test shown only on phones | A visitor your site signs in (data-user-id) keeps their variant on every device, so one who joins a phones-only test on a phone also gets its changes on a desktop."
+by = ["test:frontend/tests/e2e/runtime/real-api-details.runtime.spec.ts::a visitor the site names keeps their variant on a desktop after joining on a phone"]

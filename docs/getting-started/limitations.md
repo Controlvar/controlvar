@@ -121,3 +121,9 @@ The visual editor is not yet available. These lines are about the browser script
 | A change to a text the page keeps updating | Do not change a text your site keeps updating while the page is open (a cart count, a timer, a price that loads late): once changed, either it stops showing your site's updates or your site's update replaces the change. |
 | A visual experiment on a site that routes after `#` | On a site that routes with the part of the address after `#` (hash routing), the visual editor always opens the site's default route, and page rules treat every route as one page. |
 | An editor sign-in that can be extended | The visual editor's sign-in on your page lasts 4 hours and cannot be extended there. Every saved change is kept, and you go on by opening the editor again from the experiment's page. This does not meet WCAG 2.1 success criterion 2.2.1 (Timing Adjustable). |
+| An iPad counted as a tablet | An iPad that reports a Mac, as iPadOS Safari does by default, is counted as a tablet by its touch support. This was checked by emulating one in Chromium, not on real iPads. |
+| A returning visitor counted as returning | Safari may delete what a script stores after 7 days without a visit to your site, so a returning visitor can count as new. |
+| A campaign from any page of a visit | The campaign (`utm_`) values come from the first page of a visit only; a campaign in a later page's address is not used until a new visit starts. |
+| Every campaign value recorded | A campaign value with a space, an @, a + or another character, or over 100 characters, is not recorded. |
+| Every landing page recorded | A landing path over 255 characters, or with an @, is not recorded. |
+| A phones-only test shown only on phones | A visitor your site signs in (`data-user-id`) keeps their variant on every device, so one who joins a phones-only test on a phone also gets its changes on a desktop. |

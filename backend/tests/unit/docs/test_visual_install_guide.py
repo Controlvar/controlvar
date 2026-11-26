@@ -11,6 +11,10 @@ tests hold the parts of the page that copy something the script defines:
 * the table of what the script stores is, row for row, the keys
   ``tests/sdk-contract/visual-storage-keys.json`` marks written (the file the
   script's own key list is pinned to), with that file's words;
+* the table of what the script reads about visitors is, row for row,
+  ``tests/sdk-contract/visitor-attributes.json`` (the vocabulary the script's
+  and the server's tests hold to), and the words around it name that file's
+  values, its visit length, its data-collect values and the server's limits;
 * while the visual editor is not yet available, the page says so and is not
   in the navigation, the limitations page's lines about the script sit under a
   heading that says so, and nothing in the dashboard loads the script;
@@ -35,6 +39,11 @@ PAGE = REPO_ROOT / "docs" / "sdk" / "visual.md"
 LIMITATIONS = REPO_ROOT / "docs" / "getting-started" / "limitations.md"
 SNIPPET = REPO_ROOT / "sdk" / "visual" / "snippet.html"
 KEYS = REPO_ROOT / "tests" / "sdk-contract" / "visual-storage-keys.json"
+VOCABULARY = REPO_ROOT / "tests" / "sdk-contract" / "visitor-attributes.json"
+VECTORS = REPO_ROOT / "tests" / "sdk-contract" / "visual-visitor-vectors.json"
+DETAILS_HEADER = (
+    "| Detail | Where it comes from | Example | Sent to Controlvar | Stored and where |"
+)
 MKDOCS = REPO_ROOT / "mkdocs.yml"
 FRONTEND_SRC = REPO_ROOT / "frontend" / "src"
 
@@ -117,6 +126,79 @@ def test_the_stored_keys_table_is_the_contract_files_written_keys():
     ]
     assert len(written) == 8
     assert rows == written
+
+
+def _either(values: List[str]) -> str:
+    return ", ".join(values[:-1]) + " or " + values[-1]
+
+
+def _vocabulary() -> Dict:
+    return json.loads(VOCABULARY.read_text(encoding="utf-8"))
+
+
+def _limits() -> Dict[str, int]:
+    return json.loads(VECTORS.read_text(encoding="utf-8"))["limits"]
+
+
+def test_the_details_table_is_the_vocabulary():
+    rows = [
+        [cell.replace("`", "") for cell in row]
+        for row in _table_rows(PAGE.read_text(encoding="utf-8"), DETAILS_HEADER)
+    ]
+    details = _vocabulary()["details"]
+    assert len(details) == 9
+    assert rows == [
+        [
+            f"{d['label']} ({d['key']})",
+            d["source"],
+            d["example"],
+            d["sent"],
+            d["stored"],
+        ]
+        for d in details
+    ]
+
+
+def test_the_details_words_name_the_vocabulary_and_the_limits():
+    text = PAGE.read_text(encoding="utf-8")
+    vocabulary = _vocabulary()
+    closed = {
+        d["key"]: [v["value"] for v in d["values"]]
+        for d in vocabulary["details"]
+        if d["values"]
+    }
+    tokens = [f"`{t}`" for t in vocabulary["collect_tokens"] if t != "none"]
+    limits = _limits()
+    for words in (
+        f"The device type is {_either(closed['web_device'])}; the browser is "
+        f"{_either(closed['web_browser'])}; new or returning is "
+        f"{_either(closed['web_visitor'])}.",
+        f"A visit ends after {vocabulary['visit_minutes']} minutes without a page view",
+        f"1 to {limits['utm']} of the letters",
+        f"a path of at most {limits['landing_path']} characters",
+        "`data-collect` names the details to send: "
+        + ", ".join(tokens[:-1])
+        + f" and {tokens[-1]}, separated by commas.",
+    ):
+        assert words in text, words
+
+
+def test_the_limitations_name_what_the_website_details_leave_out():
+    text = LIMITATIONS.read_text(encoding="utf-8")
+    before, after = text.split(LIMITATIONS_HEADING, 1)
+    section = after.split("\n## ", 1)[0]
+    limits = _limits()
+    for words in (
+        "An iPad that reports a Mac",
+        "not on real iPads",
+        "after 7 days without a visit",
+        "from the first page of a visit only",
+        f"or over {limits['utm']} characters, is not recorded",
+        f"over {limits['landing_path']} characters, or with an @, is not recorded",
+        "keeps their variant on every device",
+    ):
+        assert words in section, words
+        assert words not in before, words
 
 
 def _dashboard_files_naming_the_script() -> List[str]:

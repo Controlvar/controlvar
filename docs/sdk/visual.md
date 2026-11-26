@@ -22,7 +22,8 @@ Placed anywhere else (in `<body>`, with `defer` or `async`, or added by a tag ma
 | `data-timeout-ms` | How long the page may stay hidden while its changes are applied: 0 to 4000 milliseconds, 1000 by default; 0 never hides it. |
 | `data-user-id` | Your own id for the visitor, at most 255 characters. Use an id that does not identify a person, such as an account number, not an email address: anyone with your page's key can ask what that id is assigned to. |
 | `data-cookie-name` | Without `data-user-id`, the script keeps a random id in a cookie of this name, `controlvar_uid` by default. |
-| `data-attributes` | A JSON object of at most 4 KB about the visitor, sent with each call for the experiments' audiences. |
+| `data-attributes` | A JSON object of at most 4 KB about the visitor (4096 bytes, as written and as sent), sent with each call for the experiments' audiences. Its keys that start with `web_` are ignored, with one console warning: the script sets those itself. |
+| `data-collect` | The website details the script sends, separated by commas: `device`, `browser`, `language`, `visitor`, `referrer`, `utm`, `landing`, or `none`. Without it the script sends all of them but `landing`. See [What the script reads about visitors](#what-the-script-reads-about-visitors). |
 
 If your site sends a Content-Security-Policy, allow the script's address in `script-src` and your Controlvar API in `connect-src`.
 The script needs no `'unsafe-inline'` and no `'unsafe-eval'`, and it writes styles through the CSSOM, which `style-src` does not restrict:
@@ -33,8 +34,8 @@ script-src 'self' https://controlvar.example.com; connect-src 'self' https://api
 
 ## What the script sends
 
-On each page an experiment covers, the script makes one call to your Controlvar API with the visitor's id, the page's host and path, and `data-attributes` if the tag has it.
-It never sends the query string or the part of the address after `#`.
+On each page an experiment covers, the script makes one call to your Controlvar API with the visitor's id, the page's host and path, the website details described in [What the script reads about visitors](#what-the-script-reads-about-visitors) (as `data-collect` sets them), and `data-attributes` if the tag has it.
+It never sends the query string, except three campaign (`utm_`) values, or the part of the address after `#`.
 It keeps the page rules of the running experiments for 60 seconds, and a page none of them covers makes no call and is never hidden.
 
 When a change cannot be applied, the script sends an error report with the experiment's key, a fixed message, the change's position and the reason.
@@ -44,6 +45,43 @@ At most 5 reports are sent per page load.
 `controlvar.visual.track(event, { value })` sends one event for each experiment the visitor was assigned to in the last 30 days, so a purchase on another page counts for the experiment the visitor saw first.
 
 Requests carry no cookies and no Referer.
+
+## What the script reads about visitors
+
+With the call for a page's changes, the script sends the website details `data-collect` turns on, so that an experiment's audience can use them.
+Each is sent only in the form below; a detail the script cannot read in that form is left out.
+No other call carries them: not `track()`'s events and not the error reports.
+
+| Detail | Where it comes from | Example | Sent to Controlvar | Stored and where |
+|---|---|---|---|---|
+| Device type (`web_device`) | The browser's user agent, whether it says it is a mobile, and its touch points | phone | Yes | No |
+| Browser (`web_browser`) | The browser's user agent | chrome | Yes | No |
+| Language (`web_language`) | The browser's language, its first part (en for en-US) | en | Yes | No |
+| New or returning (`web_visitor`) | Whether this browser was first seen before this visit started | returning | Yes | localStorage: controlvar_seen and controlvar_visit |
+| Came from (`web_referrer`) | The host of the page that linked to this one, when it is another site | www.google.com | Yes | No |
+| Campaign source (`web_utm_source`) | utm_source in the address of the visit's first page | newsletter | Yes, on every page of the visit | localStorage: controlvar_visit |
+| Campaign medium (`web_utm_medium`) | utm_medium in the address of the visit's first page | email | Yes, on every page of the visit | localStorage: controlvar_visit |
+| Campaign name (`web_utm_campaign`) | utm_campaign in the address of the visit's first page | spring-sale | Yes, on every page of the visit | localStorage: controlvar_visit |
+| Landing page (`web_landing_path`) | The path of the visit's first page, without its query | /sale/shoes | Only with landing in data-collect, on every page of the visit | localStorage: controlvar_visit |
+
+The device type is phone, tablet or desktop; the browser is chrome, edge, firefox, safari, samsung, opera or other; new or returning is new or returning.
+The script never asks the browser for its detailed model: the device type comes from the user agent, whether the browser says it is a mobile, and its touch points.
+The referring site is a host only, never a path or a query, and is left out when the page that linked here is on your own site.
+
+A visit ends after 30 minutes without a page view, and every tab on the same origin shares it.
+A page view is each page load the script starts on and each path change it follows.
+The campaign values and the landing page are the visit's first page's: a later page of the same visit does not change them.
+
+Campaign values are kept only if they are 1 to 100 of the letters A to Z and a to z, the digits, and `.`, `_`, `~` and `-`; a longer value is left out, never cut.
+A tag with an @, a space or another character is not recorded, so an email address in a link is never stored.
+The landing page is a path of at most 255 characters, with no `@`, `%40`, whitespace or control character; a longer path is left out, never cut.
+Because a path can hold an order number or a name, the landing page is sent only when `data-collect` names `landing`.
+
+`data-collect` names the details to send: `device`, `browser`, `language`, `visitor`, `referrer`, `utm` and `landing`, separated by commas.
+With `none`, the script sends no website detail and stores no visit.
+A value it does not know gets one console warning, and the values it knows still apply.
+With `data-require-consent`, the script reads none of these before `consent()`.
+In a preview tab and on an editor link it sends no detail and stores no visit.
 
 ## What it stores in the browser
 
