@@ -21,13 +21,16 @@
  *   answered, so the proxy's count is the authority) or `default` (the call threw:
  *   `enabled` and `value` are the default and `error` names the error's type and
  *   status). `error` is `null` otherwise; it is never left out.
+ * - `enabled {flag, user, context?}`: `enabled` and `ms`, what the SDK's
+ *   `isFeatureEnabled` answers: the flag's `enabled`, or `false` for a flag it cannot
+ *   evaluate (it swallows the error, so none is reported here).
  * - `status`: the SDK's `status()`, and `errors`: the `onError` calls so far,
  *   `{refresh, flush, evaluate, other}` (any other operation counts as `other`).
  * - `close`: closes the client, answers, and exits 0. End of input does the same
  *   without an answer.
  *
- * Refused but answered: `unknown_command`, `not_initialised` (`evaluate` or
- * `status` before `init`), `already_initialised` and `bad_request` (a line that is
+ * Refused but answered: `unknown_command`, `not_initialised` (`evaluate`,
+ * `enabled` or `status` before `init`), `already_initialised` and `bad_request` (a line that is
  * not a JSON object, or arguments of the wrong type).
  *
  * - Identity. The SDK is loaded from sdk/js/dist by its path from this file, and
@@ -240,6 +243,20 @@ class Driver {
     };
   }
 
+  async enabled(args) {
+    if (this.client === null) throw new Refused('not_initialised');
+    const flag = string(args, 'flag');
+    const user = string(args, 'user');
+    const context = args.context;
+    if (context !== undefined && context !== null && (typeof context !== 'object' || Array.isArray(context))) {
+      throw new Refused('bad_request');
+    }
+    const started = performance.now();
+    const subject = context ? { userId: user, attributes: context } : { userId: user };
+    const enabled = await this.client.isFeatureEnabled(flag, subject);
+    return { enabled, ms: performance.now() - started };
+  }
+
   async status() {
     if (this.client === null) throw new Refused('not_initialised');
     const status = this.client.status();
@@ -261,7 +278,14 @@ class Driver {
   }
 }
 
-Driver.COMMANDS = { hello: 'hello', init: 'init', evaluate: 'evaluate', status: 'status', close: 'close' };
+Driver.COMMANDS = {
+  hello: 'hello',
+  init: 'init',
+  evaluate: 'evaluate',
+  enabled: 'enabled',
+  status: 'status',
+  close: 'close',
+};
 
 function write(answer) {
   return new Promise(resolve => process.stdout.write(`${JSON.stringify(answer)}\n`, resolve));
