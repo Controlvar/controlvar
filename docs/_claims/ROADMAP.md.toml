@@ -106,7 +106,7 @@ text = "Flag checks are answered next to your apps, quickly, and keep working wh
 by = ["exempt:policy"]
 
 [[unit]]
-text = "A relay that runs beside your apps, holds the rules, answers flag checks for every SDK and streams changes."
+text = "A relay that runs beside your apps, holds the rules and answers flag checks for every SDK (#2212)."
 by = ["exempt:policy"]
 
 [[unit]]
@@ -142,11 +142,11 @@ text = "Every analysis reads a revenue, count or duration metric by its values."
 by = ["exempt:policy"]
 
 [[unit]]
-text = "A shared metric library: define a metric once, use it in experiments and rollouts."
+text = "A shared metric library: define a metric once, use it in experiments and rollouts (#2213)."
 by = ["exempt:policy"]
 
 [[unit]]
-text = "Every view of a mean metric reads its values: Bayesian, sequential, sample size, daily, Live and breakdowns; then CUPED and outlier control (winsorization) for means, and ratio metrics."
+text = "Every view of a mean metric reads its values: Bayesian, sequential, sample size, daily, Live and breakdowns; then CUPED and outlier control (winsorization) for means (#2214)."
 by = ["exempt:policy"]
 
 [[unit]]
@@ -154,11 +154,11 @@ text = "Also in Next:"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Dashboard screens for what only the API does today (#442)."
+text = "Dashboard screens for what only the API does today (#442), starting with the per-flag safety configuration page (#2215)."
 by = ["exempt:policy"]
 
 [[unit]]
-text = "Guardrail thresholds that act: alert, then stop or roll back on a business metric, in experiments and in rollouts."
+text = "Guardrail thresholds that act: alert, then stop or roll back on a business metric, in experiments and in rollouts (#2218)."
 by = ["exempt:policy"]
 
 [[unit]]
@@ -185,11 +185,11 @@ text = "Data retention by age, and erasing one person's data."
 by = ["exempt:policy"]
 
 [[unit]]
-text = "Moving in and out: import flags from other flag tools, and export and import between Controlvar instances."
+text = "Moving in and out: import flags from other flag tools, and export and import between Controlvar instances (#2216)."
 by = ["exempt:policy"]
 
 [[unit]]
-text = "Rollback on an outside alert: an alert from your monitoring stops the matching rollouts."
+text = "Rollback on an outside alert: an alert from your monitoring stops the matching rollouts (#2217)."
 by = ["exempt:policy"]
 
 [[unit]]
@@ -225,7 +225,11 @@ text = "Holdout results for mean metrics (#835)."
 by = ["exempt:policy"]
 
 [[unit]]
-text = "Quantile and funnel metrics, and metrics defined from dbt models."
+text = "Quantile, funnel and ratio metrics, and metrics defined from dbt models."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "Streaming flag changes to the relay."
 by = ["exempt:policy"]
 
 [[unit]]

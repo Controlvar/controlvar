@@ -21,14 +21,17 @@ its answer, one JSON object with ``ok`` true or false, in order:
   or ``default`` (the call raised: ``enabled`` and ``value`` are the default
   and ``error`` names the exception's type and status). ``error`` is ``null``
   otherwise; it is never left out.
+* ``enabled {flag, user, context?}``: ``enabled`` and ``ms``, what the SDK's
+  ``is_feature_enabled`` answers: the flag's ``enabled``, or ``false`` for a
+  flag it cannot evaluate (it swallows the error, so none is reported here).
 * ``status``: the SDK's ``status()``, and ``errors``: the ``on_error`` calls
   so far, ``{refresh, flush, evaluate, other}`` (any other operation counts as
   ``other``).
 * ``close``: closes the client, answers, and exits 0. End of input does the
   same without an answer.
 
-Refused but answered: ``unknown_command``, ``not_initialised`` (``evaluate`` or
-``status`` before ``init``), ``already_initialised`` and ``bad_request`` (a
+Refused but answered: ``unknown_command``, ``not_initialised`` (``evaluate``,
+``enabled`` or ``status`` before ``init``), ``already_initialised`` and ``bad_request`` (a
 line that is not a JSON object, or arguments of the wrong type).
 
 * **Identity.** ``sdk/python`` is put first on ``sys.path`` and the driver
@@ -223,6 +226,17 @@ class Driver:
             "error": None,
             "ms": (time.monotonic() - started) * 1000,
         }
+
+    def _cmd_enabled(self, args: dict[str, Any]) -> dict[str, Any]:
+        if self._client is None:
+            raise Refused("not_initialised")
+        flag, user = _string(args, "flag"), _string(args, "user")
+        context = args.get("context")
+        if context is not None and not isinstance(context, dict):
+            raise Refused("bad_request")
+        started = time.monotonic()
+        enabled = self._client.is_feature_enabled(flag, user, context)
+        return {"enabled": enabled, "ms": (time.monotonic() - started) * 1000}
 
     def _cmd_status(self, args: dict[str, Any]) -> dict[str, Any]:
         if self._client is None:

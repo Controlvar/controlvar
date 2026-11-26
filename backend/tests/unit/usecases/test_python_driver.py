@@ -210,6 +210,20 @@ def test_local_mode_round_trip_behind_the_proxy(driver, relay):
     ]
 
 
+def test_enabled_answers_what_is_feature_enabled_answers(driver, relay):
+    init = driver.call(
+        "init", api_url=relay.origin, api_key=KEY, mode="server", cache_ttl_seconds=0
+    )
+    assert init == {"ok": True, "mode": "server"}
+    known = driver.call("enabled", flag=FLAG_KEY, user="u-1")
+    assert (known["ok"], known["enabled"]) == (True, True)
+    # A key the API does not know (404) is false, and no error is reported.
+    unknown = driver.call("enabled", flag="no-such-flag", user="u-1")
+    assert (unknown["ok"], unknown["enabled"]) == (True, False)
+    assert "error" not in unknown
+    assert driver.call("close") == {"ok": True}
+
+
 # -- the error tally and the cache lifetime -----------------------------------------------
 def test_on_error_counts_one_refresh_per_ruleset_request_the_proxy_faulted(
     driver, relay, upstream
