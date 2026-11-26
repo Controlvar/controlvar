@@ -28,6 +28,10 @@ else; no other route takes that token:
 * ``PUT /api/v1/visual-editor/sessions/current/variants/{variant_id}/changes``:
   saves one variant's page changes, through the experiment update's own
   steps (``experiments._apply_experiment_update``), as the session's user.
+* ``GET /api/v1/visual-editor/sessions/current/segments`` and
+  ``GET /api/v1/visual-editor/sessions/current/exclusion-groups``: the active
+  segments and exclusion groups the editor may choose from, needing what
+  the dashboard's lists of them need.
 
 Each runs :func:`current_editor_session` first (signing out,
 :func:`signing_out_editor_session`). A session that cannot be used answers 401
@@ -41,6 +45,7 @@ import secrets
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
+from typing import List
 
 from fastapi import (
     APIRouter,
@@ -61,11 +66,25 @@ from sqlalchemy.orm import Session
 from backend.app.api import deps
 from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.api.v1.endpoints import experiments as experiments_endpoints
+from backend.app.api.v1.endpoints import (
+    mutual_exclusion_groups as exclusion_groups_endpoints,
+)
+from backend.app.api.v1.endpoints import segments as segments_endpoints
 from backend.app.core.logger import unexpected_failure
 from backend.app.core.logging import logger
+from backend.app.core.permissions import Action
 from backend.app.core.security import hash_api_key
+from backend.app.core.targeting_adapter import (
+    TargetingRulesError,
+    validate_segment_rules,
+)
 from backend.app.models.audit_log import ActionType, EntityType
 from backend.app.models.experiment import Experiment, ExperimentStatus
+from backend.app.models.mutual_exclusion_group import (
+    MutualExclusionGroup,
+    MutualExclusionGroupStatus,
+)
+from backend.app.models.segment import Segment, SegmentKind, SegmentStatus
 from backend.app.models.user import User
 from backend.app.models.visual_token import (
     EDITOR_CLAIM,
@@ -78,6 +97,8 @@ from backend.app.schemas.experiment import ExperimentUpdate, VariantBase
 from backend.app.schemas.visual import VisualChanges
 from backend.app.schemas.visual_editor import (
     ClaimExchange,
+    EditorExclusionGroup,
+    EditorSegment,
     EditorSessionOpened,
     EditorSessionState,
     TicketClaim,
@@ -378,7 +399,7 @@ def open_editor_session(
         token = visual_editor.SESSION_TOKEN_PREFIX + secrets.token_urlsafe(32)
         expires_at = now + visual_editor.SESSION_LIFETIME
         session_id = uuid.uuid4()
-        state = visual_editor.session_state(experiment, expires_at)
+        state = visual_editor.session_state(db, experiment, expires_at, user)
         name = experiment.name
         experiment_id = experiment.id
         visual_editor.hold_editor(db, experiment_id)
@@ -557,16 +578,122 @@ _SESSION_REFUSALS = {
 def read_editor_session(
     response: Response,
     session: EditorSession = Depends(current_editor_session),
+    db: Session = Depends(deps.get_db),
 ) -> EditorSessionState:
     """
     The session's end, the experiment's sites the editor may run on, and the
     draft's design as stored now: the session's answer without its token.
-    Sent with `Cache-Control: no-store`.
+
+    The design is the draft's page changes, pages and editor page, its
+    audience (`targeting_rules`), each variant's share of the traffic, its
+    metrics (each as the experiment's own answer gives it), its goals, and
+    its exclusion group. `holdout` is the active global holdout, shown only
+    to a user who may create experiments. `capabilities` says which other
+    settings the editor may offer: none yet. Sent with
+    `Cache-Control: no-store`.
     """
     response.headers["Cache-Control"] = "no-store"
     return EditorSessionState(
-        **visual_editor.session_state(session.experiment, session.expires_at)
+        **visual_editor.session_state(
+            db, session.experiment, session.expires_at, session.user
+        )
     )
+
+
+@router.get(
+    "/sessions/current/segments",
+    response_model=List[EditorSegment],
+    summary="The segments the visual editor may choose from (beta)",
+    openapi_extra={"x-stability": "beta"},
+    responses={
+        **_SESSION_REFUSALS,
+        403: {
+            "description": (
+                "The request does not come from the dashboard, or the user may "
+                "not list experiments or may no longer change the experiment"
+            )
+        },
+    },
+)
+def list_editor_segments(
+    response: Response,
+    session: EditorSession = Depends(current_editor_session),
+    db: Session = Depends(deps.get_db),
+) -> List[EditorSegment]:
+    """
+    Every active segment, by id, name and kind, for the editor's audience
+    step. `rules_valid` says whether a segment can be used in an audience:
+    true for an id_list segment, and for a rules segment whose stored rules
+    are in the targeting rule format. Neither a segment's rules nor its
+    members are sent. Needs permission to list experiments, as
+    `GET /api/v1/segments` does. Sent with `Cache-Control: no-store`.
+    """
+    segments_endpoints._require_permission(session.user, Action.LIST)
+    rows = (
+        db.query(Segment)
+        .filter(Segment.status == SegmentStatus.ACTIVE)
+        .order_by(Segment.created_at, Segment.id)
+        .all()
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return [
+        EditorSegment(
+            id=row.id,
+            name=row.name,
+            kind=row.kind,
+            rules_valid=_rules_valid(row),
+        )
+        for row in rows
+    ]
+
+
+def _rules_valid(segment: Segment) -> bool:
+    """Whether *segment* can be used in an audience: an id list always, a
+    rules segment when its stored rules pass ``validate_segment_rules``."""
+    if segment.kind == SegmentKind.ID_LIST.value:
+        return True
+    try:
+        validate_segment_rules(segment.rules)
+    except TargetingRulesError:
+        return False
+    return True
+
+
+@router.get(
+    "/sessions/current/exclusion-groups",
+    response_model=List[EditorExclusionGroup],
+    summary="The exclusion groups the visual editor may choose from (beta)",
+    openapi_extra={"x-stability": "beta"},
+    responses={
+        **_SESSION_REFUSALS,
+        403: {
+            "description": (
+                "The request does not come from the dashboard, or the user may "
+                "not create experiments or may no longer change the experiment"
+            )
+        },
+    },
+)
+def list_editor_exclusion_groups(
+    response: Response,
+    session: EditorSession = Depends(current_editor_session),
+    db: Session = Depends(deps.get_db),
+) -> List[EditorExclusionGroup]:
+    """
+    Every active mutual exclusion group, by id and name, for the editor's
+    split step. Needs permission to create experiments, as
+    `GET /api/v1/mutual-exclusion-groups` does. Sent with
+    `Cache-Control: no-store`.
+    """
+    exclusion_groups_endpoints._require_developer(session.user)
+    rows = (
+        db.query(MutualExclusionGroup)
+        .filter(MutualExclusionGroup.status == MutualExclusionGroupStatus.ACTIVE)
+        .order_by(MutualExclusionGroup.created_at, MutualExclusionGroup.id)
+        .all()
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return [EditorExclusionGroup(id=row.id, name=row.name) for row in rows]
 
 
 @router.delete(
@@ -708,4 +835,6 @@ async def save_variant_changes(
     db.expire_all()
     saved = db.query(Experiment).filter(Experiment.id == experiment_id).first()
     response.headers["Cache-Control"] = "no-store"
-    return EditorSessionState(**visual_editor.session_state(saved, session.expires_at))
+    return EditorSessionState(
+        **visual_editor.session_state(db, saved, session.expires_at, session.user)
+    )

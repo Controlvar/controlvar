@@ -1481,6 +1481,18 @@
         "summary": "The visual editor session and its draft (beta)"
       }
     },
+    "/api/v1/visual-editor/sessions/current/exclusion-groups": {
+      "get": {
+        "operationId": "list_editor_exclusion_groups_api_v1_visual_editor_sessions_current_exclusion_groups_get",
+        "summary": "The exclusion groups the visual editor may choose from (beta)"
+      }
+    },
+    "/api/v1/visual-editor/sessions/current/segments": {
+      "get": {
+        "operationId": "list_editor_segments_api_v1_visual_editor_sessions_current_segments_get",
+        "summary": "The segments the visual editor may choose from (beta)"
+      }
+    },
     "/api/v1/visual-editor/sessions/current/variants/{variant_id}/changes": {
       "put": {
         "operationId": "save_variant_changes_api_v1_visual_editor_sessions_current_variants__variant_id__changes_put",

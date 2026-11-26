@@ -32,7 +32,7 @@ fails it (the failing line is the assertion's message or comparison):
 * V26     who may open the editor, and a session whose user may no longer
           change experiments is refused.
 * V65     a dated draft is not opened, and a session does not write to one.
-* V27     the session's token works on its three routes, as a bearer token,
+* V27     the session's token works on its own routes, as a bearer token,
           and nowhere else, as a bearer token or as an API key; each
           credential lasts its time; another experiment's variant is not
           saved.
@@ -1120,6 +1120,7 @@ def test_the_session_answer_holds_the_draft_and_its_sites(
             "id": next(v["id"] for v in detail["variants"] if v["name"] == name),
             "name": name,
             "is_control": name == "Control",
+            "traffic_allocation": 50,
             "visual_changes": None if name == "Control" else CHANGES,
         }
         for name in ("B", "Control")
@@ -2385,6 +2386,8 @@ SESSION_ROUTES = {
     ("GET", "/api/v1/visual-editor/sessions/current"),
     ("DELETE", "/api/v1/visual-editor/sessions/current"),
     ("PUT", "/api/v1/visual-editor/sessions/current/variants/{variant_id}/changes"),
+    ("GET", "/api/v1/visual-editor/sessions/current/segments"),
+    ("GET", "/api/v1/visual-editor/sessions/current/exclusion-groups"),
 }
 EDITOR_ROUTES = SESSION_ROUTES | {
     ("POST", "/api/v1/visual-editor/tickets/claim"),
@@ -2455,8 +2458,8 @@ def test_no_other_route_takes_a_session_token(client, developer, experiment):
     """Every route but the session's own, and the session's own routes in
     every place but ``Authorization: Bearer``, answer a live session's token
     exactly as they answer a made-up one, the token sent as a bearer token
-    and as an API key; on its own three routes, as a bearer token, the live
-    token gets in and the made-up one does not."""
+    and as an API key; on its own routes, as a bearer token, the live token
+    gets in and the made-up one does not."""
     chain = _opened(client, developer, experiment)
     live, made_up = chain["token"], "cves_" + _value()
     routes = _http_routes()
@@ -2476,6 +2479,9 @@ def test_no_other_route_takes_a_session_token(client, developer, experiment):
     assert _current(client, live).status_code == 200
     assert _save(client, made_up, variant, NEW_CHANGES).status_code == 401
     assert _save(client, live, variant, NEW_CHANGES).status_code == 200
+    for path in (f"{CURRENT}/segments", f"{CURRENT}/exclusion-groups"):
+        assert client.get(path, headers=_bearer(made_up)).status_code == 401
+        assert client.get(path, headers=_bearer(live)).status_code == 200
     assert _sign_out(client, made_up).status_code == 401
     assert _sign_out(client, live).status_code == 204
 
