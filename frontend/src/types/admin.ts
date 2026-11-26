@@ -167,23 +167,34 @@ export interface RollbackRecord {
   new_percentage?: number | null;
 }
 
+/** Outcome of one scheduler run (`SchedulerRunStatus`). */
+export type SchedulerRunStatus = 'success' | 'partial' | 'failed' | 'skipped';
+
+/**
+ * One item of `GET /api/v1/scheduler/health` (`SchedulerHealthResponse`).
+ * Times are ISO strings, null until the scheduler has run once.
+ */
 export interface SchedulerHealth {
-  name: string;
-  status: 'running' | 'idle' | 'error';
-  last_run: string;
-  next_run: string;
-  run_count: number;
-  error_count: number;
+  scheduler_name: string;
+  is_running: boolean;
+  last_run_at: string | null;
+  last_run_status: SchedulerRunStatus | null;
+  next_run_at: string | null;
+  consecutive_failures: number;
+  average_duration_seconds: number | null;
 }
 
+/** One item of `GET /api/v1/scheduler/{name}/history` (`SchedulerRunRecord`). */
 export interface SchedulerRun {
-  id: string;
+  id: string | null;
   scheduler_name: string;
   started_at: string;
-  completed_at: string;
-  duration_ms: number;
-  outcome: 'success' | 'error';
-  error_message?: string;
+  completed_at: string | null;
+  status: SchedulerRunStatus;
+  items_processed: number;
+  items_failed: number;
+  error_message: string | null;
+  metadata: Record<string, unknown>;
 }
 
 /** `GET /api/v1/api-keys` item (`APIKeyRead`). No secret and no prefix are ever returned. */
