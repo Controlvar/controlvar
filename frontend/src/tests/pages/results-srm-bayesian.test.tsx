@@ -453,6 +453,16 @@ describe('the Bayesian panel', () => {
     expect(sections[sections.length - 1]).toBe(panel);
   });
 
+  it('the table scrolls inside a box that takes Tab and has a name (#2208)', async () => {
+    install(results({ bayesian_results: BAYESIAN }), { bayesian_enabled: true });
+    await renderLoaded();
+    const box = screen.getByRole('group', { name: 'Bayesian results by variant' });
+    expect(box).toHaveAttribute('tabindex', '0');
+    expect(box).toContainElement(screen.getByTestId('bayesian-table'));
+    expect(box.className).toContain('overflow-x-auto');
+    expect(box.className).toContain('focus:ring-2');
+  });
+
   it.each(Object.entries(BAYESIAN_DECISION_LABELS))(
     'decision %s has its own fixed label',
     async (decision, label) => {
