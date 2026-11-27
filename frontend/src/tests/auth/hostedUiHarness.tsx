@@ -121,6 +121,10 @@ export function logoutHits(): string[] {
 }
 
 let assignSpy: jest.SpyInstance | null = null;
+let digestSpy: jest.SpyInstance | null = null;
+
+/** Web Crypto digests started and not yet answered; `settle()` waits for them. */
+const digestsInFlight = new Set<Promise<unknown>>();
 
 /** Call from `beforeEach`. */
 export function resetHarness(config: unknown = POOL_A): void {
@@ -144,11 +148,25 @@ export function resetHarness(config: unknown = POOL_A): void {
     assigned.push(url);
     timeline.push(`navigate ${new URL(url, 'http://localhost').pathname}`);
   });
+  // Counts each digest the page starts. The call goes to the platform's own
+  // digest, looked up when it is made.
+  const subtle = globalThis.crypto.subtle;
+  digestsInFlight.clear();
+  digestSpy?.mockRestore();
+  digestSpy = jest.spyOn(subtle, 'digest').mockImplementation((algorithm, data) => {
+    const answer = (Object.getPrototypeOf(subtle) as SubtleCrypto).digest.call(subtle, algorithm, data);
+    digestsInFlight.add(answer);
+    const done = () => digestsInFlight.delete(answer);
+    answer.then(done, done);
+    return answer;
+  });
 }
 
 export function restoreHarness(): void {
   assignSpy?.mockRestore();
   assignSpy = null;
+  digestSpy?.mockRestore();
+  digestSpy = null;
 }
 
 function Who() {
@@ -171,13 +189,25 @@ export function renderWithProviders(page: React.ReactElement): RenderResult {
   );
 }
 
-export async function settle(): Promise<void> {
-  // Web Crypto's digest settles on a later turn of the event loop, not in a
-  // microtask, so each round also waits one macrotask.
-  for (let i = 0; i < 12; i += 1) {
+async function turns(n: number): Promise<void> {
+  for (let i = 0; i < n; i += 1) {
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
+  }
+}
+
+export async function settle(): Promise<void> {
+  // Web Crypto's digest settles on a later turn of the event loop, not in a
+  // microtask, and Node answers it from its thread pool, so no fixed number
+  // of turns is enough on a loaded machine: wait for every digest the page
+  // started, then for what its answer sets off (a redirect, a render).
+  await turns(12);
+  for (let round = 0; round < 10 && digestsInFlight.size > 0; round += 1) {
+    await act(async () => {
+      await Promise.allSettled(Array.from(digestsInFlight));
+    });
+    await turns(12);
   }
 }
 
@@ -221,6 +251,7 @@ export function storedPending(): Record<string, unknown> | null {
 /** The Hosted UI's answer to the last authorize: `?code=<code>&state=<its state>`. */
 export function hostedUiReturns(code = 'code-1'): string {
   const hits = authorizeHits();
+  if (hits.length === 0) throw new Error('The browser was not sent to the Hosted UI');
   const last = hits[hits.length - 1];
   const state = new URL(last).searchParams.get('state') ?? '';
   return `?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state)}`;
