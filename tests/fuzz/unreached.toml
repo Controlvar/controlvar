@@ -351,6 +351,21 @@
 # them, which only a run can say. The lists are 127 for superuser, 201 for
 # viewer and 9 for sdk.
 
+# Then #2194 (#1934) gave the metrics of the experiment create and update
+# schemas conversion_window_hours. As #1607 found, a change to the requests
+# generated for one operation changes the ids Schemathesis reuses from
+# earlier answers in the operations after it: the superuser pass no longer
+# sends a GET /api/v1/bandit/{experiment_id} or
+# GET /api/v1/bandit/{experiment_id}/history that names a stored bandit
+# experiment, so it reaches neither, and both are listed. The fuzz.yml run on
+# main at 213e55c7 (45944980731) found the superuser pass reaching 143
+# operations, two fewer than at 8b495c8c (45848535842), with 2 unreached and
+# not listed; these two were named by fuzz_check's evaluation in a run on
+# #2192's head (134233b8 + a commit printing only the names, never merged,
+# 45949247258), whose counts equal that head's fuzz.yml run. The viewer and
+# sdk lists do not change. The lists are 129 for superuser, 201 for viewer
+# and 9 for sdk.
+
 # --- superuser: the seeded demo administrator's bearer token ----------------
 
 [[unreached]]
@@ -717,6 +732,16 @@ reason = "The handler refuses the generated values (400); invalid requests answe
 pass = "superuser"
 operation = "GET /api/v1/holdout/{holdout_id}/results"
 reason = "Generated ids never name a stored row (404); the other requests fail validation (422)."
+
+[[unreached]]
+pass = "superuser"
+operation = "GET /api/v1/bandit/{experiment_id}"
+reason = "No request names a stored bandit experiment: an id that names no stored row, or a fixed-allocation experiment, answers 404; the other requests fail validation (422)."
+
+[[unreached]]
+pass = "superuser"
+operation = "GET /api/v1/bandit/{experiment_id}/history"
+reason = "No request names a stored bandit experiment: an id that names no stored row, or a fixed-allocation experiment, answers 404; the other requests fail validation (422)."
 
 [[unreached]]
 pass = "superuser"
