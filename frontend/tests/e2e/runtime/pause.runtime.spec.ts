@@ -9,6 +9,13 @@ import { answering, calls, experiment, PREVIEW_PATH, previewAnswer, sitePage, VI
  * usual; a call that fails while the page is open still starts one. One tab
  * opens five pages in turn, each left once its load event has fired and its
  * call has reached the API, which answers none of them before the page goes.
+ *
+ * A refusal (a 401, 403 or 503) while the page is open pauses the tab, and the
+ * next page makes no call. A refusal held until the page has gone never
+ * reaches it: Chromium cuts the call off at pagehide, so the script sees only
+ * the rejection of a call cut off by leaving. That a refusal which does reach
+ * the page after pagehide still pauses the tab is checked only by the unit
+ * tests in sdk/visual/__tests__/pause.test.ts.
  */
 
 const TOKEN = "p".repeat(40) + "abc";
@@ -97,4 +104,26 @@ test.describe("a page left before its call is answered", () => {
     expect(failed, "calls").toBe(1);
     expect(await storageKeys(page), "storage keys").toContain("session:controlvar_backoff");
   });
+});
+
+test.describe("a refused answer", () => {
+  for (const status of [401, 403, 503]) {
+    test(`a ${status} answer while the page is open pauses the tab for 5 minutes: the next page makes no call`, async ({
+      page,
+      visualPackage,
+    }) => {
+      const site = await routeSite(page, visualPackage, {
+        pages: PAGES,
+        answer: answering({ experiments: [experiment("headline", HEADLINE)], status }),
+      });
+      await page.goto(`${SITE}/p/1`, { waitUntil: "load" });
+      await expect.poll(() => page.evaluate(() => sessionStorage.getItem("controlvar_backoff"))).not.toBeNull();
+      const left = await page.evaluate(() => Number(sessionStorage.getItem("controlvar_backoff")) - Date.now());
+      expect(left, "the pause, in ms").toBeGreaterThan(4 * 60 * 1000);
+      expect(left, "the pause, in ms").toBeLessThanOrEqual(5 * 60 * 1000);
+      await page.goto(`${SITE}/p/2`, { waitUntil: "load" });
+      expect(await arrived(() => calls(site, VISUAL_PATH).length, 2), "calls").toBe(1);
+      expect(await storageKeys(page), "storage keys").toContain("session:controlvar_backoff");
+    });
+  }
 });
