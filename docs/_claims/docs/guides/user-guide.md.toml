@@ -1310,7 +1310,10 @@ by = ["test:frontend/src/tests/components/SampleSizeMeter.test.tsx"]
 
 [[unit]]
 text = "The Planned sample card on the Overview shows the same progress, for the plan the tab shows before you change anything."
-by = ["test:frontend/src/tests/components/ResultsDashboard.test.tsx"]
+by = [
+    "test:frontend/src/tests/components/ResultsDashboard.test.tsx",
+    "test:frontend/src/tests/components/ExperimentSummary.test.tsx",
+]
 
 [[unit]]
 text = "The tab loads its numbers separately from the rest of the page."

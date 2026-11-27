@@ -14,11 +14,11 @@ enclosing function, with the way its account was reached:
   signed with a key only ``issue_handoff_code`` and ``redeem_handoff_code`` use.
 
 Any mention of a minter counts, not only a call, so one passed as a callback or
-imported under another name is a place too. A new place fails until it is added here. So does a new function
-that calls ``jwt.encode`` (under any name it is imported as): the five there
-are pinned in ``ENCODERS``. The refusal itself must stay in ``provision_user``,
-above the first line that reads or sets the account's role. Which functions may
-sign with ``SECRET_KEY`` at all is the core's
+imported under another name is a place too. A new place fails until it is added
+here. So does a new function that calls ``jwt.encode`` (under any name it is
+imported as): the five there are pinned in ``ENCODERS``. The refusal itself must
+stay in ``provision_user``, above the first line that reads or sets the
+account's role. Which functions may sign with ``SECRET_KEY`` at all is the core's
 ``backend/tests/unit/core/test_local_token_mint_sites.py``.
 """
 
