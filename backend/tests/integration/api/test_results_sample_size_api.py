@@ -247,6 +247,30 @@ def test_a_correction_plans_each_comparison_at_alpha_over_k_minus_1(
     )
 
 
+def test_nothing_typed_on_the_tab_is_saved(client, seed, db_session):
+    exp = seed([("control", True, 50, 40, 8), ("treatment", False, 50, 40, 9)])
+
+    def stored():
+        db_session.expire_all()
+        metrics = db_session.query(Metric).filter(Metric.experiment_id == exp.id).all()
+        rows = [exp, *exp.variants, *metrics]
+        return [
+            {c.key: getattr(row, c.key) for c in row.__table__.columns} for row in rows
+        ]
+
+    before = stored()
+    _get(
+        client,
+        exp.id,
+        baseline_conversion_rate=0.2,
+        mde=0.137,
+        confidence_level=0.9,
+        power_target=0.95,
+        correction_method="bonferroni",
+    )
+    assert stored() == before
+
+
 def test_every_input_is_honoured(client, seed):
     exp = seed([("control", True, 50, 40, 8), ("treatment", False, 50, 40, 9)])
     data = _get(client, exp.id, mde=0.137, confidence_level=0.9, power_target=0.95)
