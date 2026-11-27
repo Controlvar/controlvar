@@ -5,7 +5,7 @@ document = "docs/architecture/technical-guide.md"
 
 [[unit]]
 text = "Technical Guide"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Implementation reference for Controlvar: authentication, targeting rules, assignment, results, the background schedulers and caching."
@@ -17,19 +17,19 @@ by = ["exempt:navigation"]
 
 [[unit]]
 text = "Authentication System"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Two Authentication Methods"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "1."
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Bearer Token (JWT)"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Used by human users in the dashboard"
@@ -37,7 +37,7 @@ by = ["test:frontend/src/tests/services/experiments.test.ts::sends the bearer to
 
 [[unit]]
 text = "Obtained via POST /api/v1/auth/login"
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/api/test_local_auth.py::TestLoginEndpoint::test_login_success_shape"]
 
 [[unit]]
 text = "Validated by the API against its own accounts (AUTH_PROVIDER=local, the default); the other provider is described in AWS Cognito Integration"
@@ -72,19 +72,22 @@ by = ["docex:docs/architecture/technical-guide.md#Checkout Button Color"]
 
 [[unit]]
 text = "If it prints an error from jq instead, the login failed and $TOKEN holds no token."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/unit/api/test_local_auth.py::TestLoginEndpoint::test_wrong_password_401_generic_message",
+    "test:backend/tests/unit/api/test_local_auth.py::TestGetCurrentUserLocal::test_malformed_token_is_401",
+]
 
 [[unit]]
 text = "2."
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "API Key"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Used by SDKs and server-to-server tracking calls"
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestKeyAuthenticatesSdkTraffic::test_tracking_assign_with_created_key"]
 
 [[unit]]
 text = "Static key, stored hashed in DB"
@@ -118,11 +121,11 @@ by = ["docex:docs/architecture/technical-guide.md#eptk_"]
 
 [[unit]]
 text = "Then assign a user to the Quick Start stack's active checkout_button_color experiment with it."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "The body is JSON, so the request says so with Content-Type:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "User u1 is assigned the green_button variant (\"assigned\": true), and keeps it on every later call."
@@ -133,7 +136,7 @@ by = [
 
 [[unit]]
 text = "Role-Based Access Control (RBAC)"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Each role's permissions are listed in RBAC."
@@ -148,19 +151,26 @@ by = [
 
 [[unit]]
 text = "Permission checks in code (both return a bool; the caller raises the 403):"
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/unit/core/test_permissions.py::TestCheckPermission::test_the_answer_is_a_bool_whether_it_allows_or_refuses",
+    "test:backend/tests/unit/core/test_feature_flag_access_rule.py::test_the_role_matrix_is_checked_before_ownership",
+    "test:backend/tests/unit/api/test_permission_deps.py::TestFeatureFlagPermissions::test_unauthorized_attempts_return_403",
+]
 
 [[unit]]
 text = "Rules Engine"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The rules engine evaluates targeting rules to determine if a user should be included in an experiment or feature flag."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_native_targeting_rules_gate_new_users",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_dashboard_shaped_targeting_rules_gate_new_users",
+]
 
 [[unit]]
 text = "Rule Structure"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Rules are stored in the shape the dashboard's rule builder writes: a top-level logical_operator combining groups, each group combining its conditions."
@@ -171,7 +181,10 @@ by = [
 
 [[unit]]
 text = "An experiment's targeting_rules must use this shape; any other is refused with 422 on create and update."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/integration/api/test_experiment_targeting_create.py::test_invalid_rules_are_refused_on_create_and_nothing_is_written",
+    "test:backend/tests/integration/api/test_experiment_targeting_update.py::test_invalid_rules_are_refused_and_nothing_is_written",
+]
 
 [[unit]]
 text = "The operators a stored rule can use are listed under \"Targeting Rules\" in the API endpoints reference."
@@ -179,11 +192,11 @@ by = ["exempt:navigation"]
 
 [[unit]]
 text = "Assignment Algorithm"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "When a user calls /api/v1/tracking/assign:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Stored assignment: a user who already has one gets it back, unchanged"
@@ -202,7 +215,10 @@ by = [
 
 [[unit]]
 text = "An ineligible user gets the control variant with assigned: false, and no assignment is stored"
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_holdout_users_get_control_and_are_not_recorded",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_reason_order_is_holdout_then_mutual_exclusion_then_targeting",
+]
 
 [[unit]]
 text = "Traffic split: hash the user with the experiment's key (the first four bytes of MD5(\"{user_id}:{key}\"), little-endian, divided by 2^32: the hash every SDK implements, backend/app/core/consistent_hash.py) → bucket 0-99"
@@ -231,7 +247,7 @@ by = ["test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test
 
 [[unit]]
 text = "This means:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Assignment is sticky: the stored row is returned on every later call, even after the traffic allocation changes"
@@ -243,11 +259,11 @@ by = ["test:backend/tests/unit/core/test_consistent_hash.py"]
 
 [[unit]]
 text = "No session dependency"
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestKeyAuthenticatesSdkTraffic::test_tracking_assign_with_created_key"]
 
 [[unit]]
 text = "Results Engine"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The results engine computes:"
@@ -255,11 +271,11 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "Statistical Methods"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Conversion metrics (Fisher's exact test):"
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/services/test_binomial_effect_size.py::test_every_metric_is_a_fisher_test_on_conversions_with_cohens_h"]
 
 [[unit]]
 text = "Only a conversion metric is analysed as a proportion; a revenue, count, duration or custom metric is its mean per assigned user, compared with a permutation test of Welch's t"
@@ -274,7 +290,10 @@ by = [
 
 [[unit]]
 text = "Two-sided Fisher's exact test (scipy.stats.fisher_exact); the response's statistical_test_used is fisher_exact"
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/unit/services/test_binomial_effect_size.py::test_every_metric_is_a_fisher_test_on_conversions_with_cohens_h",
+    "test:backend/tests/unit/services/test_binomial_effect_size.py::test_the_p_value_is_scipys_two_sided_fisher_exact_on_the_two_by_two_table",
+]
 
 [[unit]]
 text = "Effect size: Cohen's h"
@@ -402,11 +421,11 @@ by = [
 
 [[unit]]
 text = "Effect size: Cohen's d"
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/services/test_mean_metric_result.py::test_mean_ci_d_power_match_raw_arrays"]
 
 [[unit]]
 text = "Multiple comparisons correction:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Each experiment stores a correction method and a confidence level: Benjamini-Hochberg (FDR) at 0.95 by default, Bonferroni or none on request."
@@ -418,11 +437,19 @@ by = [
 
 [[unit]]
 text = "The results, the sample-size plan, the export and the report use them; a results request may name another for itself."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/unit/api/test_results_stored_settings.py::test_both_routes_follow_a_stored_none_at_090",
+    "test:backend/tests/unit/api/test_results_stored_settings.py::test_a_request_naming_none_on_a_stored_bh_experiment_is_labelled_none",
+    "test:backend/tests/integration/api/test_experiment_correction_settings_api.py::test_the_sample_size_plan_uses_the_stored_settings",
+    "test:backend/tests/unit/services/test_results_correction_pins.py::test_the_variant_export_and_report_rows_are_the_stored_setting",
+]
 
 [[unit]]
 text = "Locked once the experiment leaves draft."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/integration/api/test_experiment_correction_settings_api.py::test_a_superuser_cannot_change_the_settings_once_out_of_draft",
+    "test:backend/tests/integration/api/test_experiment_correction_settings_api.py::test_a_developer_cannot_change_them_on_an_active_experiment_either",
+]
 
 [[unit]]
 text = "CUPED follows the stored level and correction; sequential testing does not follow the stored level."
@@ -433,7 +460,7 @@ by = [
 
 [[unit]]
 text = "REST Endpoints"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Sample Size"
@@ -445,7 +472,7 @@ by = ["exempt:navigation"]
 
 [[unit]]
 text = "Background Schedulers"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Five background jobs start with the API process (lifespan in backend/app/main.py):"
@@ -453,7 +480,7 @@ by = ["test:backend/tests/unit/core/test_lifespan_schedulers.py::test_lifespan_s
 
 [[unit]]
 text = "Scheduler | Default cycle | Responsibility"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Experiment scheduler | EXPERIMENT_SCHEDULER_INTERVAL_MINUTES (15) | Starts draft experiments at start_date, resumes paused ones at a scheduled resume_at, stops experiments at end_date"
@@ -490,11 +517,15 @@ by = ["test:backend/tests/unit/services/test_bandit_scheduler.py::TestDynamoDBCo
 
 [[unit]]
 text = "Experiment Scheduler (every EXPERIMENT_SCHEDULER_INTERVAL_MINUTES, default 15)"
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/core/test_experiment_scheduler_interval.py::test_the_default_is_15_minutes"]
 
 [[unit]]
 text = "Transitions experiments based on start_date, resume_at and end_date:"
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/integration/services/test_scheduler_pause_semantics.py::test_p2_scheduled_resume_is_recorded_and_fires",
+    "test:backend/tests/integration/services/test_scheduler_pause_semantics.py::test_p6_due_draft_activates",
+    "test:backend/tests/integration/services/test_scheduler_pause_semantics.py::test_p8_one_tick_starts_and_ends_only_what_is_due",
+]
 
 [[unit]]
 text = "DRAFT + start_date ≤ now → ACTIVE"
@@ -505,11 +536,14 @@ by = [
 
 [[unit]]
 text = "PAUSED + resume_at ≤ now → ACTIVE (the notification says \"resumed automatically\")"
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/services/test_scheduler_pause_semantics.py::test_p2_scheduled_resume_is_recorded_and_fires"]
 
 [[unit]]
 text = "ACTIVE + end_date ≤ now → COMPLETED"
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/unit/services/test_experiment_scheduler.py::test_scheduler_completes_experiments",
+    "test:backend/tests/integration/services/test_scheduler_pause_semantics.py::test_p8_one_tick_starts_and_ends_only_what_is_due",
+]
 
 [[unit]]
 text = "A paused experiment's start_date is when it first started and never resumes it: a PAUSED experiment with no resume_at stays paused, across ticks and restarts, until someone starts it."
@@ -521,11 +555,14 @@ by = [
 
 [[unit]]
 text = "PUT /schedule on a PAUSED experiment stores its start_date as resume_at and leaves the experiment's own start_date alone."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/services/test_scheduler_pause_semantics.py::test_p2_scheduled_resume_is_recorded_and_fires"]
 
 [[unit]]
 text = "Any change of status clears resume_at (an ORM listener on Experiment.status), and a database constraint (ck_experiments_resume_only_when_paused) refuses a resume_at on any status but PAUSED."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/integration/services/test_scheduler_pause_semantics.py::test_p5_status_change_clears_the_resume",
+    "test:backend/tests/integration/database/test_experiment_resume_at_migration.py::test_a_bulk_status_update_on_a_row_with_a_resume_time_is_refused",
+]
 
 [[unit]]
 text = "Rollout Scheduler (every ROLLOUT_CHECK_INTERVAL_MINUTES, default 15)"
@@ -533,7 +570,7 @@ by = ["test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::tes
 
 [[unit]]
 text = "Advances feature flag rollout stages:"
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/services/test_rollout_scheduler_row_isolation.py::test_a_met_min_stage_duration_advances_in_one_tick"]
 
 [[unit]]
 text = "Activates TIME_BASED stages once their start_date has passed (a stage never starts early, even when the previous stage has completed)"
@@ -552,7 +589,10 @@ by = [
 
 [[unit]]
 text = "Transitions stage status: PENDING → IN_PROGRESS → COMPLETED"
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/integration/services/test_rollout_scheduler_row_isolation.py::test_a_met_min_stage_duration_advances_in_one_tick",
+    "test:backend/tests/unit/core/test_rollout_stage_order.py::test_a_time_based_stage_starts_once_the_stage_before_it_is_complete",
+]
 
 [[unit]]
 text = "Safety Monitor (every SAFETY_CHECK_INTERVAL_MINUTES, default 5)"
@@ -602,7 +642,7 @@ by = ["exempt:navigation"]
 
 [[unit]]
 text = "Bandit Scheduler (every BANDIT_UPDATE_INTERVAL_MINUTES)"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Recomputes variant weights for multi-armed bandit experiments and persists them in bandit_state; POST /api/v1/tracking/assign routes new users by those weights."
@@ -613,11 +653,11 @@ by = [
 
 [[unit]]
 text = "See Multi-Armed Bandit."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Caching Architecture"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "What the API keeps in Redis is listed under \"Redis (ElastiCache)\" in the Architecture Overview."
@@ -625,11 +665,11 @@ by = ["exempt:navigation"]
 
 [[unit]]
 text = "Cache Invalidation"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Invalidate results cache for an experiment:"
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/api/test_results_api.py::TestInvalidateCache::test_invalidate_cache_returns_200"]
 
 [[unit]]
 text = "Feature flags need no invalidation: the API reads the flag list, a flag's detail and its evaluation from the database on every request."
@@ -663,7 +703,7 @@ by = [
 
 [[unit]]
 text = "Use Cases"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Targeting High-Value Users"
@@ -671,7 +711,7 @@ by = ["exempt:example"]
 
 [[unit]]
 text = "Scenario: Only run an experiment for users on a paid plan, in the US/EU, who have been active in the last 30 days."
-by = ["exempt:baseline"]
+by = ["exempt:example"]
 
 [[unit]]
 text = "An experiment's groups do not nest, so \"and either of these two\" is written as two groups joined by OR, each carrying the shared conditions:"
@@ -683,7 +723,7 @@ by = ["exempt:instruction"]
 
 [[unit]]
 text = "Performance Characteristics"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "What decides throughput today:"
@@ -706,7 +746,7 @@ by = [
 
 [[unit]]
 text = "Infrastructure (AWS)"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "What the AWS stacks create, and how a request reaches the API and the dashboard, is in Architecture on AWS."
@@ -714,7 +754,7 @@ by = ["exempt:navigation"]
 
 [[unit]]
 text = "Monitoring & Observability"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Metrics"
@@ -726,7 +766,7 @@ by = ["exempt:navigation"]
 
 [[unit]]
 text = "Log Structure"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The fields on each log line are in Logging Standards."
@@ -734,7 +774,7 @@ by = ["exempt:navigation"]
 
 [[unit]]
 text = "Dashboards"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Scheduler health: http://localhost:8000/api/v1/docs#/Scheduler%20Health"
