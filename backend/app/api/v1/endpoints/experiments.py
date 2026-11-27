@@ -1807,6 +1807,8 @@ async def start_experiment(
         )
 
         await _invalidate_experiment_cache(cache_control, experiment_id)
+        # The results cache's key does not name the status (#2206).
+        await results_endpoints.clear_cached_results(experiment_id)
 
         return ExperimentResponse.model_validate(started_experiment)
     except HTTPException:
@@ -1884,6 +1886,8 @@ async def pause_experiment(
         )
 
         await _invalidate_experiment_cache(cache_control, experiment_id)
+        # The results cache's key does not name the status (#2206).
+        await results_endpoints.clear_cached_results(experiment_id)
 
         # Serialise through the service so `metrics` comes from the
         # metric_definitions relationship (the ORM `metrics` column is JSONB).
@@ -2130,6 +2134,8 @@ async def complete_experiment(
         )
 
         await _invalidate_experiment_cache(cache_control, experiment_id)
+        # The results cache's key does not name the status (#2206).
+        await results_endpoints.clear_cached_results(experiment_id)
 
         # Serialise through the service so `metrics` comes from the
         # metric_definitions relationship (the ORM `metrics` column is JSONB).
@@ -2306,6 +2312,8 @@ async def archive_experiment(
         )
 
         await _invalidate_experiment_cache(cache_control, experiment_id)
+        # The results cache's key does not name the status (#2206).
+        await results_endpoints.clear_cached_results(experiment_id)
 
         # Serialise through the service so `metrics` comes from the
         # metric_definitions relationship (the ORM `metrics` column is JSONB).

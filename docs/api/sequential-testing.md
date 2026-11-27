@@ -280,8 +280,8 @@ It is cached with the rest of the results: for up to 5 minutes for a running exp
 and 24 hours otherwise. A change to `sequential_testing_enabled` or
 `sequential_testing_config`, which can be made only while the experiment is a draft
 (see [Permissions](#permissions)), therefore shows here only when the cached
-answer expires or
-`POST /api/v1/results/{experiment_id}/invalidate-cache` clears it, not immediately;
+answer is cleared or expires, not immediately: starting the experiment clears it,
+and so does `POST /api/v1/results/{experiment_id}/invalidate-cache`;
 `/sequential` is not cached. The request below passes `use_cache=false` for that reason:
 
 ```{.bash exec}

@@ -706,8 +706,15 @@ text = "Feature flags are not cached: the flag list and a flag's detail are read
 by = ["test:backend/tests/smoke/test_no_flag_cache.py::test_flag_routes_do_not_depend_on_the_cache"]
 
 [[unit]]
-text = "GET /api/v1/results/{experiment_id} and GET /api/v1/experiments/{experiment_id}/results are cached for 5 minutes while the experiment is running, and for 24 hours otherwise, whenever Redis is reachable"
+text = "GET /api/v1/results/{experiment_id} and GET /api/v1/experiments/{experiment_id}/results are cached for 5 minutes while the experiment is running, and for 24 hours otherwise, whenever Redis is reachable."
 by = ["test:backend/tests/unit/api/test_results_stored_settings.py::test_results_are_kept_300_seconds_while_running_and_86400_otherwise"]
+
+[[unit]]
+text = "Starting, pausing, resuming, completing or archiving the experiment, by hand or by the scheduler, clears its cached results"
+by = [
+    "test:backend/tests/integration/api/test_results_cache_status_change.py::test_a_status_change_through_the_routes_clears_the_cached_results",
+    "test:backend/tests/integration/api/test_results_cache_status_change.py::test_a_scheduled_status_change_clears_the_cached_results",
+]
 
 [[unit]]
 text = "Authentication Endpoints"
