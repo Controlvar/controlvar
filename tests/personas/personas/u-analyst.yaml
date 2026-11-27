@@ -116,11 +116,11 @@ day:
       - id: u-analyst.6.refusal-words
         kind: text_exact
         expect: >-
-          the page says the role cannot create experiments and links back to
-          the experiments
+          the page shows the 403 view: it names the account and the permission the
+          page requires, and links back to the experiments
         source:
-          path: frontend/src/components/experiments/new/createErrors.ts
-          anchor: "Your role can view experiments but not create them."
+          path: frontend/src/components/RequireAuth.tsx
+          anchor: "You do not have permission to access this page."
   - n: 7
     intent: try to change a feature flag
     layer: A

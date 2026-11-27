@@ -20,6 +20,39 @@ export interface RequireAuthProps {
   loading?: ReactNode;
 }
 
+export interface ForbiddenViewProps {
+  user: { email?: string | null; username?: string | null; role?: string | null };
+  /** What the page requires, in a phrase: "a superuser account", "permission to create experiments". */
+  requirement: string;
+  fallbackPath?: string;
+}
+
+/**
+ * The 403 view: one for every refused page, so each says which condition the
+ * account failed rather than a generic refusal.
+ */
+export function ForbiddenView({ user, requirement, fallbackPath = '/experiments' }: ForbiddenViewProps) {
+  return (
+    <div
+      data-testid="require-auth-forbidden"
+      className="flex flex-col items-center justify-center min-h-[40vh] gap-4 px-4 text-center"
+    >
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">403</p>
+      <p className="text-slate-700 text-lg">You do not have permission to access this page.</p>
+      <p className="text-sm text-slate-500">
+        Signed in as{' '}
+        <span className="font-medium">
+          {user.email || user.username || 'an account with no email address'}
+        </span>{' '}
+        ({user.role}). This page requires {requirement}.
+      </p>
+      <Link href={fallbackPath} className="text-blue-600 hover:underline" aria-label="Go to Home">
+        Go to Home
+      </Link>
+    </div>
+  );
+}
+
 /**
  * Client-side gate for protected pages (the API is the real enforcement).
  *
@@ -74,36 +107,14 @@ export function RequireAuth({ children, roles, superuser, fallbackPath = '/exper
     );
   }
 
-  // One 403 view, two gates. `requirement` is the only difference, so the
-  // page says which condition the account failed rather than a generic refusal.
-  const forbidden = (requirement: string) => (
-    <div
-      data-testid="require-auth-forbidden"
-      className="flex flex-col items-center justify-center min-h-[40vh] gap-4 px-4 text-center"
-    >
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">403</p>
-      <p className="text-slate-700 text-lg">You do not have permission to access this page.</p>
-      <p className="text-sm text-slate-500">
-        Signed in as{' '}
-        <span className="font-medium">
-          {user.email || user.username || 'an account with no email address'}
-        </span>{' '}
-        ({user.role}). This page requires {requirement}.
-      </p>
-      <Link href={fallbackPath} className="text-blue-600 hover:underline" aria-label="Go to Home">
-        Go to Home
-      </Link>
-    </div>
-  );
-
   // Superuser first: it is what the admin API actually enforces, so failing it
   // is the more specific answer when a page asks for both.
   if (superuser && user.is_superuser !== true) {
-    return forbidden('a superuser account');
+    return <ForbiddenView user={user} requirement="a superuser account" fallbackPath={fallbackPath} />;
   }
 
   if (roles && roles.length > 0 && !roles.includes(user.role)) {
-    return forbidden(roles.join(' or '));
+    return <ForbiddenView user={user} requirement={roles.join(' or ')} fallbackPath={fallbackPath} />;
   }
 
   return <>{children}</>;

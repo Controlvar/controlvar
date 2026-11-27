@@ -14,7 +14,7 @@ import path from 'path';
 import React from 'react';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import axe from 'axe-core';
-import NewExperimentPage, { ROLE_CANNOT_CREATE } from '@/pages/experiments/new';
+import NewExperimentPage from '@/pages/experiments/new';
 import { apiFetch } from '@/services/api';
 import { docsUrl } from '@/services/docs';
 import { STEP_HEADINGS } from '@/components/experiments/new/Wizard';
@@ -302,7 +302,8 @@ describe('who sees the switch', () => {
       expect(screen.getByTestId('analysis-sequential')).not.toBeChecked();
       expect(screen.queryByTestId('create-not-allowed')).not.toBeInTheDocument();
     } else {
-      expect(screen.getByTestId('create-not-allowed')).toHaveTextContent(ROLE_CANNOT_CREATE);
+      expect(screen.getByTestId('require-auth-forbidden')).toHaveTextContent('This page requires permission to create experiments.');
+      expect(screen.queryByTestId('create-not-allowed')).not.toBeInTheDocument();
       expect(screen.queryByTestId('analysis-sequential')).not.toBeInTheDocument();
     }
     // Showing (or refusing) the switch sends nothing.
@@ -322,7 +323,8 @@ describe('who sees the switch', () => {
       fireEvent.click(screen.getByTestId('analysis-sequential'));
       expect(sequential()).toBeChecked();
     } else {
-      expect(screen.getByTestId('create-not-allowed')).toHaveTextContent(ROLE_CANNOT_CREATE);
+      expect(screen.getByTestId('require-auth-forbidden')).toHaveTextContent('This page requires permission to create experiments.');
+      expect(screen.queryByTestId('create-not-allowed')).not.toBeInTheDocument();
       expect(screen.queryByTestId('guided-setup')).not.toBeInTheDocument();
       expect(screen.queryByTestId('analysis-sequential')).not.toBeInTheDocument();
     }

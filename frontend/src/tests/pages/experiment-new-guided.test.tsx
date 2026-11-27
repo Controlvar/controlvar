@@ -11,7 +11,7 @@ import React from 'react';
 import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import axe from 'axe-core';
-import NewExperimentPage, { ROLE_CANNOT_CREATE } from '@/pages/experiments/new';
+import NewExperimentPage from '@/pages/experiments/new';
 import { apiFetch } from '@/services/api';
 import { navigateHard } from '@/components/experiments/new/leaveGuard';
 import { FRESH_LOAD_NOTICE, STEP_HEADINGS } from '@/components/experiments/new/Wizard';
@@ -1138,7 +1138,8 @@ describe('who may create', () => {
         expect(screen.queryByTestId('create-not-allowed')).not.toBeInTheDocument();
         expect(screen.getByTestId(view === 'advanced' ? 'new-experiment-form' : 'guided-setup')).toBeInTheDocument();
       } else {
-        expect(screen.getByTestId('create-not-allowed')).toHaveTextContent(ROLE_CANNOT_CREATE);
+        expect(screen.getByTestId('require-auth-forbidden')).toHaveTextContent('This page requires permission to create experiments.');
+        expect(screen.queryByTestId('create-not-allowed')).not.toBeInTheDocument();
         expect(screen.queryByTestId('guided-setup')).not.toBeInTheDocument();
         expect(screen.queryByTestId('new-experiment-form')).not.toBeInTheDocument();
       }

@@ -180,15 +180,17 @@ describe.each(BOTH_STATES)('with demo mode %s', (state: DemoState) => {
     else expect(screen.queryByTestId('demo-note')).not.toBeInTheDocument();
   });
 
-  it(on ? '/experiments/new shows the demo note, not the role note' : '/experiments/new shows the role note', async () => {
+  it(on ? '/experiments/new shows the demo note, not the 403 view' : '/experiments/new shows the 403 view', async () => {
     mockRouter = makeRouter({ pathname: '/experiments/new', asPath: '/experiments/new' });
     render(<NewExperimentPage />);
-    const notice = await screen.findByTestId('create-not-allowed');
     if (on) {
+      const notice = await screen.findByTestId('create-not-allowed');
       expectDemoNote(DEMO_EXPERIMENTS_ACTION);
       expect(notice).not.toHaveTextContent(ROLE_CANNOT_CREATE);
     } else {
-      expect(notice).toHaveTextContent(ROLE_CANNOT_CREATE);
+      const forbidden = await screen.findByTestId('require-auth-forbidden');
+      expect(forbidden).toHaveTextContent('This page requires permission to create experiments.');
+      expect(screen.queryByTestId('create-not-allowed')).not.toBeInTheDocument();
       expect(screen.queryByTestId('demo-note')).not.toBeInTheDocument();
     }
   });
