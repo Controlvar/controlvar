@@ -115,6 +115,18 @@ describe('NotificationsAdminPage', () => {
     expect(screen.getByTestId('prefs-loading')).toBeInTheDocument();
   });
 
+  it('shows_the_error_in_place_of_loading_and_an_empty_log_when_a_read_fails', async () => {
+    mockGetMyNotificationPrefs.mockRejectedValue(new Error('prefs read failed'));
+    mockGetNotificationDeliveryLog.mockRejectedValue(new Error('log read failed'));
+    render(<NotificationsAdminPage />);
+    await waitFor(() => {
+      expect(screen.getByTestId('prefs-error')).toHaveTextContent('prefs read failed');
+    });
+    expect(screen.getByTestId('log-error')).toHaveTextContent('log read failed');
+    expect(screen.queryByTestId('prefs-loading')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('delivery-log-table')).not.toBeInTheDocument();
+  });
+
   it('send_test_button_shows_result_message', async () => {
     render(<NotificationsAdminPage />);
     await waitFor(() => {

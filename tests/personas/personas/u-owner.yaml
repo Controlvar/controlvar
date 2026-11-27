@@ -114,9 +114,6 @@ day:
         source:
           path: docs/api/audit-logging.md
           anchor: "`POST /safety/settings` saves the global safety settings; one entry per save"
-  # Step 5: what the page shows when a read fails is not checked. Today both
-  # failures are hidden: "Loading preferences..." stays, and the log says "No
-  # delivery log entries found." The check lands with the fix.
   - n: 5
     intent: change one's own notification preferences
     layer: A
@@ -131,6 +128,15 @@ day:
         source:
           path: docs/api/alerting.md
           anchor: "Each user can store which events they want to be notified about"
+      - id: u-owner.5.error-shown
+        kind: text_exact
+        expect: >-
+          when the preferences and the delivery log requests answer 503, the
+          page shows the server error for each in place of "Loading
+          preferences..." and of "No delivery log entries found."
+        source:
+          path: frontend/src/services/api.ts
+          anchor: "Something went wrong on the server (HTTP"
   - n: 6
     intent: read the scheduler health
     layer: A

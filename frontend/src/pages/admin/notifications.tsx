@@ -10,15 +10,17 @@ export function NotificationsAdminPage() {
   const [prefs, setPrefs] = useState<NotificationPreference | null>(null);
   const [logs, setLogs] = useState<NotificationDeliveryLog[]>([]);
   const [logsLoading, setLogsLoading] = useState(true);
+  const [prefsError, setPrefsError] = useState<string | null>(null);
+  const [logsError, setLogsError] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<string | null>(null);
 
   useEffect(() => {
     AdminService.getMyNotificationPrefs()
       .then(setPrefs)
-      .catch(() => {});
+      .catch(err => setPrefsError((err as Error).message || 'Failed to load preferences'));
     AdminService.getNotificationDeliveryLog({ limit: 20 })
       .then(r => setLogs(r.items))
-      .catch(() => {})
+      .catch(err => setLogsError((err as Error).message || 'Failed to load the delivery log'))
       .finally(() => setLogsLoading(false));
   }, []);
 
@@ -46,6 +48,8 @@ export function NotificationsAdminPage() {
         <h2 className="text-lg font-semibold text-slate-800 mb-4">My Preferences</h2>
         {prefs ? (
           <NotificationPrefsForm prefs={prefs} onSave={handleSave} />
+        ) : prefsError ? (
+          <p className="text-red-600" data-testid="prefs-error">{prefsError}</p>
         ) : (
           <p className="text-slate-500" data-testid="prefs-loading">Loading preferences...</p>
         )}
@@ -65,7 +69,11 @@ export function NotificationsAdminPage() {
         {testResult && (
           <p data-testid="test-result" className="text-sm text-slate-600 mb-2">{testResult}</p>
         )}
-        <DeliveryLogTable logs={logs} loading={logsLoading} />
+        {!logsLoading && logsError ? (
+          <p className="text-red-600" data-testid="log-error">{logsError}</p>
+        ) : (
+          <DeliveryLogTable logs={logs} loading={logsLoading} />
+        )}
       </section>
     </div>
   );
