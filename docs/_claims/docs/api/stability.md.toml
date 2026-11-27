@@ -1836,3 +1836,15 @@ by = [
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
 ]
+
+[[unit]]
+text = "GET /api/v1/metrics/summary, GET /api/v1/metrics/aggregated, GET /api/v1/metrics/errors, POST /api/v1/metrics/aggregate | 0.49.0 | These operations require an active account: an inactive one answers 400 Inactive user on all four. With local sign-in it already did; with Cognito sign-in, an inactive account linked to its Cognito user was answered as an active one. Only a superuser may start an aggregation: POST /api/v1/metrics/aggregate answers 403 Not enough permissions to every other account, ADMIN included, where it answered every role. The three reads still answer every active account, whatever its role. The OpenAPI document does not change."
+by = [
+    "test:backend/tests/integration/api/test_metrics_routes_access.py::test_an_inactive_local_account_is_refused_on_the_four_metrics_routes",
+    "test:backend/tests/integration/api/test_metrics_routes_access.py::test_an_inactive_cognito_account_is_refused_on_the_four_metrics_routes",
+    "test:backend/tests/integration/api/test_metrics_routes_access.py::test_only_a_superuser_may_start_an_aggregation",
+    "test:backend/tests/integration/api/test_metrics_routes_access.py::test_a_superuser_starts_an_aggregation",
+    "test:backend/tests/integration/api/test_metrics_routes_access.py::test_every_active_account_reads_the_three_metrics_routes",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]

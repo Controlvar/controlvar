@@ -383,6 +383,13 @@
 # route, so the sdk pass selects none. With #2194's two entries above, the
 # lists are 132 for superuser, 204 for viewer and 9 for sdk.
 
+# Then only a superuser may start an aggregation: POST
+# /api/v1/metrics/aggregate answers 403 to every other account. The viewer
+# pass reached it, so it is listed for that pass, from that reasoning before
+# the pull request's own fuzz run. Its requests do not change, the superuser
+# pass still reaches it, and it is not an SDK route. The lists are 132 for
+# superuser, 205 for viewer and 9 for sdk.
+
 # --- superuser: the seeded demo administrator's bearer token ----------------
 
 [[unreached]]
@@ -1486,6 +1493,11 @@ reason = "Generated ids never name a stored row (404); the other requests fail v
 pass = "viewer"
 operation = "POST /api/v1/rollout-schedules/stages/{stage_id}/advance"
 reason = "Generated ids never name a stored row (404); the other requests fail validation (422)."
+
+[[unreached]]
+pass = "viewer"
+operation = "POST /api/v1/metrics/aggregate"
+reason = "Only a superuser may start an aggregation, so the check answers 403."
 
 [[unreached]]
 pass = "viewer"

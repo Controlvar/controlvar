@@ -15,7 +15,7 @@ from pydantic import AfterValidator
 from sqlalchemy.orm import Session
 
 from backend.app.api.datetime_bounds import storable_offset
-from backend.app.api.deps import get_current_user, get_db
+from backend.app.api.deps import get_current_active_user, get_current_superuser, get_db
 from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.api.query_params import MAX_OFFSET, describe_as_int64
 from backend.app.models.user import User
@@ -86,7 +86,7 @@ def get_metrics_summary(
         AggregationPeriod.DAY, description="Aggregation period"
     ),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
 ) -> MetricsSummary:
     """
     Get a summary of metrics for analysis and dashboards.
@@ -153,7 +153,7 @@ def get_aggregated_metrics(
         100, ge=1, le=1000, description="Maximum number of records to return"
     ),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
 ) -> List[AggregatedMetricResponse]:
     """
     Get aggregated metrics for analysis and dashboards.
@@ -211,7 +211,7 @@ def get_error_logs(
         100, ge=1, le=1000, description="Maximum number of records to return"
     ),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
 ) -> List[ErrorLogResponse]:
     """
     Get error logs for debugging and monitoring.
@@ -259,7 +259,7 @@ def trigger_aggregation(
         AfterValidator(storable_offset),
     ] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_superuser),
 ) -> Dict[str, Any]:
     """
     Manually trigger the aggregation of raw metrics data.
