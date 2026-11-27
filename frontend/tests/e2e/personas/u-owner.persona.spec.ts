@@ -519,6 +519,36 @@ test("U-OWNER: the owner's day", async ({ browser, request }) => {
           shown,
         },
       );
+      // The same page when both reads fail, in a second tab of the owner's own
+      // browser with no watcher on it: the failure there is the point.
+      const failing = await page.context().newPage();
+      try {
+        for (const path of ["**/api/v1/notifications/preferences", "**/api/v1/notifications/delivery-log**"]) {
+          await failing.route(path, (route) =>
+            route.fulfill({ status: 503, contentType: "text/plain", body: "Service Unavailable" }),
+          );
+        }
+        await failing.goto("/admin/notifications");
+        await expect(failing.getByTestId("notifications-admin-page")).toBeVisible({ timeout: 15_000 });
+        await expect(failing.getByTestId("loading-indicator")).toHaveCount(0, { timeout: 15_000 });
+        const shownText = async (testId: string) => {
+          const found = failing.getByTestId(testId);
+          return (await found.count()) === 1 ? (await found.innerText()).trim() : null;
+        };
+        decide(
+          "u-owner.5.error-shown",
+          "text_exact",
+          { prefs: SERVER_ERROR_503, log: SERVER_ERROR_503, loading: 0, empty: 0 },
+          {
+            prefs: await shownText("prefs-error"),
+            log: await shownText("log-error"),
+            loading: await failing.getByTestId("prefs-loading").count(),
+            empty: await failing.getByTestId("empty-state").count(),
+          },
+        );
+      } finally {
+        await failing.close();
+      }
       await watch.step();
     });
 
