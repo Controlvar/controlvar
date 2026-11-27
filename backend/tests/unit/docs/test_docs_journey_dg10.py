@@ -477,14 +477,14 @@ def test_the_results_page_is_read_for_the_numbers_the_api_answered_last():
     assert seen == [
         (
             arm_row,
-            "Purchaseprimary",
+            "Purchase primary",
             "Sample Size",
             f"metrics.0.variants.{_arm_index(arm)}.sample_size",
             0,
         ),
         (
             other,
-            "Purchaseprimary",
+            "Purchase primary",
             "Sample Size",
             f"metrics.0.variants.{_arm_index(other)}.sample_size",
             0,
@@ -516,17 +516,21 @@ def _table_labels() -> Dict[str, str]:
     return dict(re.findall(r"\['(\w+)', '([^']+)'\]", body))
 
 
-def _drawn_after(name: str, flag: str) -> str:
+def _drawn_after(name: str, flag: str, spaced: bool = False) -> str:
     """The words the results table draws right after ``{name}`` when ``flag``
     holds. Only a line break may come between the two (JSX drops it), so the
-    cell's text is the name and the words with no space: ``standard(control)``."""
+    cell's text is the name and the words with no space: ``standard(control)``.
+    With ``spaced`` the words follow an sr-only space (``Purchase primary``)."""
     source = RESULTS_TABLE.read_text(encoding="utf-8")
+    gap = r'<>\s*<span className="sr-only"> </span>\s*' if spaced else ""
     pattern = (
         r"\{"
         + re.escape(name)
         + r"\}\n[ ]*\{"
         + re.escape(flag)
-        + r" && \(\s*<span[^>]*>([^<{]+)</span>"
+        + r" && \(\s*"
+        + gap
+        + r"<span[^>]*>([^<{]+)</span>"
     )
     return _found(pattern, source, RESULTS_TABLE)
 
@@ -543,7 +547,7 @@ def test_the_results_cells_are_found_by_the_tables_own_words():
         field = saved[cell["delta"]["since"]].rsplit(".", 1)[1]
         assert labels.get(field) == cell["column"], (field, labels)
     control = _drawn_after("variant.variant_name", "variant.is_control")
-    primary = _drawn_after("metric.metric_name", "metric.is_primary")
+    primary = _drawn_after("metric.metric_name", "metric.is_primary", spaced=True)
     assert (control, primary) == ("(control)", "primary")
     (control_arm,) = [
         v["name"] for v in _experiment(CHECKOUT)["variants"] if v["is_control"]
@@ -555,7 +559,7 @@ def test_the_results_cells_are_found_by_the_tables_own_words():
     assert rows.count(f"{control_arm}{control}") == 2
     assert rows.count(_other_arm()) == 1
     alsos = [cell["also"] for cell in cells]
-    assert alsos.count(f"{primary_metric}{primary}") == 2
+    assert alsos.count(f"{primary_metric} {primary}") == 2
     (other_metric,) = [
         m["name"] for m in _experiment(CHECKOUT)["metrics"] if not m["is_primary"]
     ]

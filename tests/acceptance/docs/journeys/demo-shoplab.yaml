@@ -1023,7 +1023,7 @@ steps:
           - 'heading "ShopLab: Checkout flow — 3 steps vs one page" [level=2]'
       cells:
         - row: standard(control)
-          also: Purchaseprimary
+          also: Purchase primary
           column: Sample Size
           delta:
             since: standard-users-after
@@ -1031,7 +1031,7 @@ steps:
           quote: false
           reason: the results table's row for the standard arm (the control) of the Purchase metric, as the page labels them
         - row: one_page
-          also: Purchaseprimary
+          also: Purchase primary
           column: Sample Size
           delta:
             since: one-page-users-after

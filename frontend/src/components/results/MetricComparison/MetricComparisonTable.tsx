@@ -564,14 +564,20 @@ export function MetricComparisonTable({
                 <td className="px-4 py-3 font-medium text-slate-800">
                   {metric.metric_name}
                   {metric.is_primary && (
-                    <span className="ml-1.5 text-xs text-blue-700 font-normal">primary</span>
+                    <>
+                      <span className="sr-only"> </span>
+                      <span className="ml-1.5 text-xs text-blue-700 font-normal">primary</span>
+                    </>
                   )}
                   {metricLowerIsBetter(metric) === true && (
-                    <span className="ml-1.5 text-xs text-slate-600 font-normal">lower is better</span>
+                    <>
+                      <span className="sr-only"> </span>
+                      <span className="ml-1.5 text-xs text-slate-600 font-normal">lower is better</span>
+                    </>
                   )}
-                  {/* The tag is set apart by margin only: the sr-only space
-                      makes the cell's name end "... within 7 days", not
-                      "...primarywithin 7 days". */}
+                  {/* The tags are set apart by margin only: each sr-only space
+                      makes the cell's name read "Purchase primary within
+                      7 days", not "Purchaseprimarywithin 7 days". */}
                   {typeof metric.conversion_window_hours === 'number' && (
                     <>
                       <span className="sr-only"> </span>
