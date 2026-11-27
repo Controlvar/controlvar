@@ -52,6 +52,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
 from backend.tests.integration.database import tree_profiles
+from backend.tests.integration.database.lock_capture import until_the_pid_waits
 from backend.tests.integration.database.metric_window_column import (
     without_the_metric_window,
 )
@@ -89,7 +90,6 @@ from backend.tests.integration.database.test_flag_split_migration import (
     _refusal,
     _split_columns,
     _table_lock,
-    _until_the_pid_waits,
 )
 from backend.tests.integration.database.tree_profiles import CORE, FULL
 
@@ -673,7 +673,7 @@ def test_a_deadlock_ends_the_upgrade_with_the_refusal_and_applies_nothing(
             )
             reading = threading.Thread(target=read_the_keys)
             reading.start()
-            waited_for = _until_the_pid_waits(test_db, pid)
+            waited_for = until_the_pid_waits(test_db, pid)
             stderr = process.communicate(timeout=PROCESS_SECONDS)[1]
             reading.join(timeout=PROCESS_SECONDS)
         transaction.rollback()
@@ -756,7 +756,7 @@ def test_an_sdk_request_waits_with_the_run_and_is_answered_once_it_ends(
                 )
                 reading = threading.Thread(target=read_a_key)
                 reading.start()
-                waited_for = _until_the_pid_waits(test_db, pid)
+                waited_for = until_the_pid_waits(test_db, pid)
                 stderr = process.communicate(timeout=PROCESS_SECONDS)[1]
                 reading.join(timeout=PROCESS_SECONDS)
             transaction.rollback()

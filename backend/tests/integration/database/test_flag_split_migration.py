@@ -95,6 +95,7 @@ from backend.scripts.generate_ruleset_vectors import (
     VECTORS_PATH,
 )
 from backend.tests.integration.database import tree_profiles
+from backend.tests.integration.database.lock_capture import until_the_pid_waits
 from backend.tests.integration.database.metric_window_column import (
     without_the_metric_window,
 )
@@ -370,25 +371,6 @@ def _table_lock(schema: str, table: str):
         return request[1:] == ("AccessExclusiveLock", f"{schema}.{table}")
 
     return wanted
-
-
-def _until_the_pid_waits(engine, pid: int) -> str:
-    """The table that backend *pid* waits for a lock on, once it waits."""
-    deadline = time.monotonic() + 60
-    while time.monotonic() < deadline:
-        with engine.connect() as conn:
-            waiting = conn.execute(
-                text(
-                    "SELECT relation::regclass::text FROM pg_locks "
-                    "WHERE pid = :p AND NOT granted"
-                ),
-                {"p": pid},
-            ).scalar()
-            conn.rollback()
-        if waiting:
-            return waiting
-        time.sleep(0.01)
-    raise AssertionError(f"backend {pid} never waited")
 
 
 def _reading(schema: str, table: str) -> str:
@@ -1367,7 +1349,7 @@ def test_a_deadlock_ends_the_upgrade_with_the_refusal_and_applies_nothing(
             )
             reading = threading.Thread(target=read_the_keys)
             reading.start()
-            waited_for = _until_the_pid_waits(test_db, pid)
+            waited_for = until_the_pid_waits(test_db, pid)
             stderr = process.communicate(timeout=PROCESS_SECONDS)[1]
             reading.join(timeout=PROCESS_SECONDS)
         transaction.rollback()
@@ -1987,7 +1969,7 @@ def test_a_one_run_downgrade_met_by_an_sdk_request_that_waits_first_runs_through
                 test_db, process, name, _table_lock(scratch_schema, SETTINGS)
             )
             request.start_reading_the_flags()
-            waited_for = _until_the_pid_waits(test_db, request.pid)
+            waited_for = until_the_pid_waits(test_db, request.pid)
             reading.rollback()
             stderr = process.communicate(timeout=PROCESS_SECONDS)[1]
         request.finish()

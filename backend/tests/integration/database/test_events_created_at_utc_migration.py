@@ -24,7 +24,7 @@ The gates, by the plan's numbers (``launch-readiness/events-utc-579``):
 * 8   a concurrent INSERT and a DELETE of a rewritten row are not blocked;
 * 8b  from the previous release (``271f03a31742``), through the bootstrap and
       raw alembic: while the rewrite runs, ``a89544fb1075`` is recorded and no
-      lock on ``feature_flags`` or ``users`` is held (a planted pause, no timing);
+      lock on any table of the schema is held (a planted pause, no timing);
 * 9   the readers -- event windows and order, the export count, the first
       conversion and its day -- are wrong before and right after;
 * 13-15 the profile transitions;
@@ -68,7 +68,7 @@ from backend.app.services.event_matching import (
 )
 from backend.app.services.event_service import EventService
 from backend.app.services.export_service import ExportService
-from backend.tests.integration.database import tree_profiles
+from backend.tests.integration.database import lock_capture, tree_profiles
 from backend.tests.integration.database.tree_profiles import CORE, FULL
 from backend.tests.unit.db.test_events_created_at_utc_normaliser import (
     CORPUS,
@@ -638,19 +638,6 @@ def test_an_insert_and_a_delete_of_a_rewritten_row_are_not_blocked(
 # ---------------------------------------------------------------------------
 # 8b. From the previous release: no earlier revision's lock during the rewrite
 # ---------------------------------------------------------------------------
-def _held_locks(conn, schema: str) -> list[tuple]:
-    return conn.execute(
-        text(
-            "SELECT c.relname, l.mode FROM pg_locks l "
-            "JOIN pg_class c ON c.oid = l.relation "
-            "JOIN pg_namespace n ON n.oid = c.relnamespace "
-            "WHERE n.nspname = :s AND c.relname IN ('feature_flags', 'users') "
-            "AND l.pid <> pg_backend_pid() ORDER BY 1, 2"
-        ),
-        {"s": schema},
-    ).all()
-
-
 @pytest.mark.regression
 @pytest.mark.parametrize("command", ["bootstrap", "alembic"])
 def test_no_earlier_revisions_lock_is_held_while_events_are_rewritten(
@@ -733,7 +720,9 @@ def test_no_earlier_revisions_lock_is_held_while_events_are_rewritten(
                     text(f'SELECT version_num FROM "{scratch_schema}".alembic_version')
                 )
             }
-            locks = _held_locks(watcher, scratch_schema)
+            # Every table of the schema, every backend but this one: a list of
+            # tables to look at sees nothing outside it.
+            locks = lock_capture.locks_held(watcher, scratch_schema)
             rewritten = watcher.execute(
                 text(
                     f'SELECT count(*) FROM "{scratch_schema}".events '
@@ -749,8 +738,9 @@ def test_no_earlier_revisions_lock_is_held_while_events_are_rewritten(
                 process.kill()
                 process.wait()
 
-    print(f"[{command}] while paused: recorded={recorded} locks={locks}")
-    assert locks == [], f"held during the rewrite: {locks}"
+    held = lock_capture.describe(locks)
+    print(f"[{command}] while paused: recorded={recorded} locks={held}")
+    assert locks == {}, f"held during the rewrite: {held}"
     assert recorded == {PARENT}
     # The first batch is committed and visible to another session.
     assert rewritten == 2
