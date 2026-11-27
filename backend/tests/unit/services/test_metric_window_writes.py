@@ -29,6 +29,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from pydantic import ValidationError
 
+from backend.app.core.stats_engine import ENGINE_VERSION
 from backend.app.models import experiment as experiment_models
 from backend.app.models.audit_log import EntityType
 from backend.app.models.experiment import (
@@ -337,11 +338,11 @@ async def test_a_change_to_the_metrics_drops_every_cached_result(monkeypatch):
 
     experiment_id, other = uuid.uuid4(), uuid.uuid4()
     keys = {
-        f"experiment_daily_results:{experiment_id}",
-        f"experiment_daily_results:{experiment_id}:{uuid.uuid4()}",
-        f"experiment_segmented_results:{experiment_id}:country",
-        f"experiment_daily_results:{other}",
-        f"experiment_segmented_results:{other}:country",
+        f"experiment_daily_results:{experiment_id}:{ENGINE_VERSION}",
+        f"experiment_daily_results:{experiment_id}:{ENGINE_VERSION}:{uuid.uuid4()}",
+        f"experiment_segmented_results:{experiment_id}:{ENGINE_VERSION}:country",
+        f"experiment_daily_results:{other}:{ENGINE_VERSION}",
+        f"experiment_segmented_results:{other}:{ENGINE_VERSION}:country",
         f"experiment:{experiment_id}",
     }
 
@@ -365,8 +366,8 @@ async def test_a_change_to_the_metrics_drops_every_cached_result(monkeypatch):
     )
     assert cleared == [experiment_id]
     assert keys == {
-        f"experiment_daily_results:{other}",
-        f"experiment_segmented_results:{other}:country",
+        f"experiment_daily_results:{other}:{ENGINE_VERSION}",
+        f"experiment_segmented_results:{other}:{ENGINE_VERSION}:country",
         f"experiment:{experiment_id}",
     }
 

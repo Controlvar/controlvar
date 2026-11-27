@@ -57,6 +57,7 @@ from backend.app.core.permissions import (
     get_permission_error_message,
 )
 from backend.app.core.scheduler import experiment_scheduler
+from backend.app.core.stats_engine import ENGINE_VERSION
 from backend.app.models.audit_log import ActionType, EntityType
 from backend.app.models.compliance_audit_event import AuditAction, AuditOutcome
 from backend.app.models.experiment import (
@@ -318,6 +319,30 @@ async def _invalidate_experiment_cache(
             await cache_control.redis.delete(*keys)
     except Exception as cache_error:
         logger.warning("Experiment cache invalidation failed: %s", cache_error)
+
+
+def _daily_results_cache_key(experiment_id: UUID, metric_id: Optional[UUID]) -> str:
+    """The key of one ``GET /{experiment_id}/daily-results`` answer.
+
+    The statistics engine version follows the experiment id, so an answer an
+    earlier engine computed is not served after an upgrade (the new engine
+    misses it), and ``_computed_results_patterns`` still matches the key.
+    """
+    metric_part = f":{metric_id}" if metric_id else ""
+    return f"experiment_daily_results:{experiment_id}:{ENGINE_VERSION}{metric_part}"
+
+
+def _segmented_results_cache_key(
+    experiment_id: UUID, segment_by: str, metric_id: Optional[UUID]
+) -> str:
+    """The key of one ``GET /{experiment_id}/segmented-results/{segment_by}``
+    answer, with the engine version after the experiment id as in
+    ``_daily_results_cache_key``."""
+    metric_part = f":{metric_id}" if metric_id else ""
+    return (
+        f"experiment_segmented_results:{experiment_id}:{ENGINE_VERSION}:"
+        f"{segment_by}{metric_part}"
+    )
 
 
 def _computed_results_patterns(experiment_id: UUID) -> List[str]:
@@ -2493,8 +2518,7 @@ async def get_daily_experiment_results(
         db.close()
         await run_in_threadpool(_admit_results_read, experiment_id, refusal, db)
 
-        metric_part = f":{metric_id}" if metric_id else ""
-        cache_key = f"experiment_daily_results:{experiment_id}{metric_part}"
+        cache_key = _daily_results_cache_key(experiment_id, metric_id)
         cached_data = await _cache_get(cache_control, cache_key)
         if cached_data:
             return json.loads(cached_data)
@@ -2632,10 +2656,7 @@ async def get_segmented_experiment_results(
                 status_code=status.HTTP_400_BAD_REQUEST, detail=NUL_IN_DIMENSION
             )
 
-        metric_part = f":{metric_id}" if metric_id else ""
-        cache_key = (
-            f"experiment_segmented_results:{experiment_id}:{segment_by}{metric_part}"
-        )
+        cache_key = _segmented_results_cache_key(experiment_id, segment_by, metric_id)
         cached_data = await _cache_get(cache_control, cache_key)
         if cached_data:
             return json.loads(cached_data)

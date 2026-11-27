@@ -21,6 +21,7 @@ import pytest
 from backend.app.api import deps
 from backend.app.api.v1.endpoints import experiments
 from backend.app.core.config import DevSettings, ProdSettings, TestSettings
+from backend.app.core.stats_engine import ENGINE_VERSION
 
 pytestmark = [pytest.mark.unit]
 
@@ -78,8 +79,8 @@ def test_a_change_clears_the_detail_and_leaves_the_daily_and_segmented_results()
     experiment_id = uuid.uuid4()
     redis = _Redis()
     detail = f"experiment:{experiment_id}"
-    daily = f"experiment_daily_results:{experiment_id}"
-    segmented = f"experiment_segmented_results:{experiment_id}:country"
+    daily = f"experiment_daily_results:{experiment_id}:{ENGINE_VERSION}"
+    segmented = f"experiment_segmented_results:{experiment_id}:{ENGINE_VERSION}:country"
     for key in (detail, daily, segmented):
         redis.store[key] = "{}"
     asyncio.run(

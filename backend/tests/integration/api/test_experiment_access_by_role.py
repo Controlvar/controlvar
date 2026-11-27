@@ -38,6 +38,7 @@ from backend.app.api import deps
 from backend.app.api.v1.endpoints.auth import create_local_access_token
 from backend.app.core.config import settings
 from backend.app.core.permissions import ROLE_PERMISSIONS, Action, ResourceType
+from backend.app.core.stats_engine import ENGINE_VERSION
 from backend.app.main import app
 from backend.app.models.compliance_audit_event import (
     AuditAction,
@@ -202,8 +203,10 @@ CACHED_CELLS = [(row, column) for row in READ_ROUTES for column in COLUMNS]
 def _cache_keys(redis_handle, row, experiment_id):
     pattern = {
         "results": f"results:{experiment_id}:*",
-        "daily_results": f"experiment_daily_results:{experiment_id}",
-        "segmented_results": f"experiment_segmented_results:{experiment_id}:country",
+        "daily_results": f"experiment_daily_results:{experiment_id}:{ENGINE_VERSION}",
+        "segmented_results": (
+            f"experiment_segmented_results:{experiment_id}:{ENGINE_VERSION}:country"
+        ),
     }[row]
     return list(redis_handle.scan_iter(match=pattern))
 

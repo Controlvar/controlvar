@@ -71,6 +71,7 @@ from backend.app.api.v1.endpoints import results as results_endpoints
 from backend.app.core.config import settings
 from backend.app.core.permissions import ROLE_PERMISSIONS, Action, ResourceType
 from backend.app.core.security import create_local_access_token, get_password_hash
+from backend.app.core.stats_engine import ENGINE_VERSION
 from backend.app.main import app
 from backend.app.models.api_key import APIKey
 from backend.app.models.assignment import Assignment
@@ -658,8 +659,8 @@ BREAKDOWNS = {
 }
 #: route -> the cache key of an experiment's answer (no metric_id).
 BREAKDOWN_CACHE_KEYS = {
-    "daily": "experiment_daily_results:{id}",
-    "segmented": "experiment_segmented_results:{id}:country",
+    "daily": "experiment_daily_results:{id}:" + ENGINE_VERSION,
+    "segmented": "experiment_segmented_results:{id}:" + ENGINE_VERSION + ":country",
 }
 #: route -> the sentence of its 500.
 BREAKDOWN_FAILURES = {
