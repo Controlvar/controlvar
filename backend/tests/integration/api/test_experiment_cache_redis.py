@@ -46,6 +46,8 @@ import pytest
 import redis as sync_redis
 import redis.asyncio as async_redis
 from fastapi.testclient import TestClient
+from redis.backoff import NoBackoff
+from redis.retry import Retry
 from sqlalchemy import text
 from sqlalchemy.orm import sessionmaker
 
@@ -79,6 +81,9 @@ def redis_server(monkeypatch):
         db=CACHE_DB,
         decode_responses=True,
         socket_connect_timeout=2,
+        # One attempt: redis-py's default retries made every test that
+        # needs Redis wait seconds before it skipped.
+        retry=Retry(NoBackoff(), 0),
     )
     try:
         handle.ping()
@@ -91,6 +96,28 @@ def redis_server(monkeypatch):
     yield handle
     handle.flushdb()
     handle.close()
+
+
+def test_without_redis_the_fixture_skips_after_one_connect(request, monkeypatch):
+    """``redis_server`` gives up on a refused Redis after one connect: with
+    redis-py's default retries each test that needs Redis spent seconds
+    before it skipped. A count, not a timing. The fixture skips, or fails
+    where the job requires Redis; either way it has given up."""
+    from redis.connection import Connection
+
+    monkeypatch.setattr(settings, "REDIS_HOST", "127.0.0.1")
+    monkeypatch.setattr(settings, "REDIS_PORT", 1)
+    ports = []
+    real_connect = Connection._connect
+
+    def counting_connect(conn):
+        ports.append(conn.port)
+        return real_connect(conn)
+
+    monkeypatch.setattr(Connection, "_connect", counting_connect)
+    with pytest.raises((pytest.skip.Exception, pytest.fail.Exception)):
+        request.getfixturevalue("redis_server")
+    assert ports == [1], f"{len(ports)} connect attempts against a refused Redis"
 
 
 def _cached_client_for(db_session, user, monkeypatch, cache_enabled=True):
