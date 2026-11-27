@@ -64,7 +64,7 @@ text = "Set a feature flag's per-flag safety config (error-rate and latency thre
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
-text = "Manage users and their roles | Dashboard | Authentication user guide"
+text = "Invite users, change their role and whether they are active | Dashboard | Authentication user guide"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
@@ -192,7 +192,7 @@ text = "Split-URL experiments (full profile) | Dashboard | Split URL testing"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
-text = "CUPED-adjusted results (beta) | Dashboard | CUPED"
+text = "Read CUPED-adjusted results (beta), once CUPED is on | Dashboard | CUPED"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
@@ -221,4 +221,96 @@ by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
 text = "Turn sequential testing (beta) on or off for an existing draft, and set its alpha | API only | Sequential testing"
+by = ["mechanism:dashboard-and-api"]
+
+[[unit]]
+text = "Set another user's password; change their name, email, username and superuser flag | API only | Authentication user guide"
+by = ["mechanism:dashboard-and-api"]
+
+[[unit]]
+text = "Turn CUPED on, and choose its covariate and lookback | API only | CUPED"
+by = ["mechanism:dashboard-and-api"]
+
+[[unit]]
+text = "Read the change history of one flag, experiment or person | API only | Audit logging"
+by = ["mechanism:dashboard-and-api"]
+
+[[unit]]
+text = "Write notes and learnings on an experiment | API only | Running experiments"
+by = ["mechanism:dashboard-and-api"]
+
+[[unit]]
+text = "See a feature flag's evaluations, latency and client error log | API only | Safety monitoring"
+by = ["mechanism:dashboard-and-api"]
+
+[[unit]]
+text = "Check one user id against the global holdout | API only | Mutual exclusion groups and global holdout"
+by = ["mechanism:dashboard-and-api"]
+
+[[unit]]
+text = "See every user's notification settings | API only | Slack & Email Alerting"
+by = ["mechanism:dashboard-and-api"]
+
+[[unit]]
+text = "Send a test notification through the scheduler's webhook | API only | API endpoints"
+by = ["mechanism:dashboard-and-api"]
+
+[[unit]]
+text = "Add tags to feature flags and experiments | API only | Creating feature flags"
+by = ["mechanism:dashboard-and-api"]
+
+[[unit]]
+text = "Plan the sample size for a mean metric (revenue, count or duration) | API only | Power analysis"
+by = ["mechanism:dashboard-and-api"]
+
+[[unit]]
+text = "LLM experiments | API only | LLM evaluation"
+by = ["mechanism:dashboard-and-api"]
+
+[[unit]]
+text = "AI design suggestions, results interpretation and templates | API only | The MCP server and the AI endpoints"
+by = ["mechanism:dashboard-and-api"]
+
+[[unit]]
+text = "Compliance reports | API only | Compliance audit trail"
+by = ["mechanism:dashboard-and-api"]
+
+[[unit]]
+text = "Preview a split-URL experiment (full profile) | API only | Split URL testing"
+by = ["mechanism:dashboard-and-api"]
+
+[[unit]]
+text = "HIPAA administration (full profile) | API only | HIPAA compliance"
+by = ["mechanism:dashboard-and-api"]
+
+[[unit]]
+text = "Integrations (full profile) | API only | Third-party integrations"
+by = ["mechanism:dashboard-and-api"]
+
+[[unit]]
+text = "Custom roles and direct permission grants (full profile) | API only | RBAC API reference"
+by = ["mechanism:dashboard-and-api"]
+
+[[unit]]
+text = "Delete a workspace (full profile) | API only | Team workspaces"
+by = ["mechanism:dashboard-and-api"]
+
+[[unit]]
+text = "Erase one app user's data | API only | Erase one app user's data"
+by = ["mechanism:dashboard-and-api"]
+
+[[unit]]
+text = "Delete a rollout schedule | API only | Gradual rollouts"
+by = ["mechanism:dashboard-and-api"]
+
+[[unit]]
+text = "Configure single sign-on | API only | SSO guide"
+by = ["mechanism:dashboard-and-api"]
+
+[[unit]]
+text = "Edit a page with the visual editor | API only | Visual experiments"
+by = ["mechanism:dashboard-and-api"]
+
+[[unit]]
+text = "Read audit statistics and the live stream of audit entries | API only | Audit logging"
 by = ["mechanism:dashboard-and-api"]

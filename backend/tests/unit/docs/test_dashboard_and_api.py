@@ -74,7 +74,7 @@ WITNESSES: Dict[str, str] = {
     # page any route reaches.
     "Set a feature flag's per-flag safety config (error-rate and latency "
     "thresholds, rollback percentage)": "safety-config-editor",
-    "Manage users and their roles": "user-management-page",
+    "Invite users, change their role and whether they are active": "user-management-page",
     "Change your own password (local sign-in)": "change-password-page",  # #503
     "Read the audit log, and download it as CSV or JSON": "audit-log-page",  # #915
     # The #442 slice before launch: B (#882), one toggle per variant.
@@ -143,7 +143,7 @@ WITNESSES: Dict[str, str] = {
     # refused or error); membership is on each group's page.
     "Mutual exclusion groups": "exclusion-groups-page",
     "Split-URL experiments (full profile)": "split-url-config",
-    "CUPED-adjusted results (beta)": "cuped-results",
+    "Read CUPED-adjusted results (beta), once CUPED is on": "cuped-results",
     "The interaction scan and the pair test (beta)": "interactions-page",
     "Download results as CSV": "results-export-csv",
     "The effect size in the metric comparison table": "effect-size-column",
@@ -157,6 +157,41 @@ WITNESSES: Dict[str, str] = {
     # screen planned.
     "Turn sequential testing (beta) on or off for an existing draft, and set its "
     "alpha": "experiment-sequential-settings",
+    # Reserved (#2285): the screen is not built; the id is not in any source file.
+    # A pull request that builds one adds the id and flips its row.
+    "Set another user's password; change their name, email, username and superuser flag": (
+        "user-edit-form"
+    ),
+    "Turn CUPED on, and choose its covariate and lookback": ("cuped-settings-form"),
+    "Read the change history of one flag, experiment or person": ("item-history-link"),
+    "Write notes and learnings on an experiment": ("experiment-notes"),
+    "See a feature flag's evaluations, latency and client error log": (
+        "flag-evaluations-section"
+    ),
+    "Check one user id against the global holdout": ("holdout-check-form"),
+    "See every user's notification settings": ("notification-settings-all"),
+    "Send a test notification through the scheduler's webhook": (
+        "scheduler-test-webhook"
+    ),
+    "Add tags to feature flags and experiments": ("tags-input"),
+    "Plan the sample size for a mean metric (revenue, count or duration)": (
+        "power-calculator-mean"
+    ),
+    "LLM experiments": ("llm-experiments-page"),
+    "AI design suggestions, results interpretation and templates": (
+        "ai-design-suggestions"
+    ),
+    "Compliance reports": ("compliance-reports-page"),
+    "Preview a split-URL experiment (full profile)": ("split-url-preview"),
+    "HIPAA administration (full profile)": ("hipaa-admin-page"),
+    "Integrations (full profile)": ("integrations-page"),
+    "Custom roles and direct permission grants (full profile)": ("custom-roles-page"),
+    "Delete a workspace (full profile)": ("workspace-delete"),
+    "Erase one app user's data": ("app-user-erase"),
+    "Delete a rollout schedule": ("rollout-schedule-delete"),
+    "Configure single sign-on": ("sso-config-page"),
+    "Edit a page with the visual editor": ("visual-editor-page"),
+    "Read audit statistics and the live stream of audit entries": ("audit-stats-page"),
 }
 
 #: Files the scans must have read. A scan rooted in the wrong place, or a

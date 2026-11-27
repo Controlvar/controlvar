@@ -17,7 +17,7 @@ The table lists each capability and where you do it today:
 | See a flag's rollout schedule and its stages | Dashboard | [Gradual rollouts](../feature-flags/rollouts.md) |
 | Roll a feature flag back from the safety page | Dashboard | [Safety monitoring](../feature-flags/safety.md) |
 | Set a feature flag's per-flag safety config (error-rate and latency thresholds, rollback percentage) | API only | [Safety monitoring](../feature-flags/safety.md#configuring-per-flag-safety) |
-| Manage users and their roles | Dashboard | [Authentication user guide](../auth/auth-user-guide.md) |
+| Invite users, change their role and whether they are active | Dashboard | [Authentication user guide](../auth/auth-user-guide.md) |
 | Change your own password (local sign-in) | Dashboard | [Authentication user guide](../auth/auth-user-guide.md#changing-your-password) |
 | Read the audit log, and download it as CSV or JSON | Dashboard | [Audit logging](../api/audit-logging.md) |
 | Give each variant a configuration (a JSON payload) when creating an experiment | Dashboard | [Running experiments](user-guide.md) |
@@ -49,7 +49,7 @@ The table lists each capability and where you do it today:
 | Global holdouts: create and activate; read their results (beta) | Dashboard | [Mutual exclusion groups and global holdout](../api/mutual-exclusion-groups.md) |
 | Mutual exclusion groups | Dashboard | [Mutual exclusion groups and global holdout](../api/mutual-exclusion-groups.md) |
 | Split-URL experiments (full profile) | Dashboard | [Split URL testing](../api/split-url.md) |
-| CUPED-adjusted results (beta) | Dashboard | [CUPED](../api/cuped.md) |
+| Read CUPED-adjusted results (beta), once CUPED is on | Dashboard | [CUPED](../api/cuped.md) |
 | The interaction scan and the pair test (beta) | Dashboard | [Interaction detection](../api/interaction-detection.md) |
 | Download results as CSV | Dashboard | [Exporting results](user-guide.md#exporting-results) |
 | The effect size in the metric comparison table | Dashboard | [Running experiments](user-guide.md) |
@@ -57,3 +57,26 @@ The table lists each capability and where you do it today:
 | Bayesian priors, loss threshold and credible level | Dashboard | [Bayesian analysis](../api/bayesian.md) |
 | Turn on sequential testing (beta) when creating an experiment | Dashboard | [Sequential testing](../api/sequential-testing.md#turning-it-on) |
 | Turn sequential testing (beta) on or off for an existing draft, and set its alpha | API only | [Sequential testing](../api/sequential-testing.md#turning-it-on) |
+| Set another user's password; change their name, email, username and superuser flag | API only | [Authentication user guide](../auth/auth-user-guide.md) |
+| Turn CUPED on, and choose its covariate and lookback | API only | [CUPED](../api/cuped.md) |
+| Read the change history of one flag, experiment or person | API only | [Audit logging](../api/audit-logging.md) |
+| Write notes and learnings on an experiment | API only | [Running experiments](user-guide.md) |
+| See a feature flag's evaluations, latency and client error log | API only | [Safety monitoring](../feature-flags/safety.md) |
+| Check one user id against the global holdout | API only | [Mutual exclusion groups and global holdout](../api/mutual-exclusion-groups.md#global-holdout) |
+| See every user's notification settings | API only | [Slack & Email Alerting](../api/alerting.md) |
+| Send a test notification through the scheduler's webhook | API only | [API endpoints](../api/endpoints.md) |
+| Add tags to feature flags and experiments | API only | [Creating feature flags](../feature-flags/create.md) |
+| Plan the sample size for a mean metric (revenue, count or duration) | API only | [Power analysis](../statistics/power-analysis.md) |
+| LLM experiments | API only | [LLM evaluation](../llm-evaluation/overview.md) |
+| AI design suggestions, results interpretation and templates | API only | [The MCP server and the AI endpoints](../mcp-server.md) |
+| Compliance reports | API only | [Compliance audit trail](../api/compliance.md) |
+| Preview a split-URL experiment (full profile) | API only | [Split URL testing](../api/split-url.md) |
+| HIPAA administration (full profile) | API only | [HIPAA compliance](../hipaa/overview.md) |
+| Integrations (full profile) | API only | [Third-party integrations](../api/integrations.md) |
+| Custom roles and direct permission grants (full profile) | API only | [RBAC API reference](../api/rbac.md) |
+| Delete a workspace (full profile) | API only | [Team workspaces](../workspaces/overview.md) |
+| Erase one app user's data | API only | [Erase one app user's data](../api/erase-user-data.md) |
+| Delete a rollout schedule | API only | [Gradual rollouts](../feature-flags/rollouts.md) |
+| Configure single sign-on | API only | [SSO guide](../auth/sso.md) |
+| Edit a page with the visual editor | API only | [Visual experiments](../sdk/visual.md) |
+| Read audit statistics and the live stream of audit entries | API only | [Audit logging](../api/audit-logging.md) |
