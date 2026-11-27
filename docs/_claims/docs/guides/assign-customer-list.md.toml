@@ -5,11 +5,11 @@ document = "docs/guides/assign-customer-list.md"
 
 [[unit]]
 text = "Assign a customer list to an experiment"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Use this when you know who will see an experiment before they arrive (an email campaign, a CRM export, a list from your warehouse) and need each person's variant now."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "POST /api/v1/tracking/assign/batch (beta) assigns up to 1,000 users in one request."
@@ -28,27 +28,27 @@ by = [
 
 [[unit]]
 text = "The full contract and every error are in the API reference."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "The examples run against the Quick Start stack and its demo data."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "What you need"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Sign in as the demo administrator:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "It prints \"ADMIN\"."
-by = ["exempt:baseline"]
+by = ["docex:docs/guides/assign-customer-list.md#\"ADMIN\""]
 
 [[unit]]
 text = "An ACTIVE experiment."
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "This creates one for an email campaign, with two subject lines and a targeting rule that admits customers in the US only, and starts it:"
@@ -56,7 +56,7 @@ by = ["docex:docs/guides/assign-customer-list.md#active"]
 
 [[unit]]
 text = "It prints active."
-by = ["exempt:baseline"]
+by = ["docex:docs/guides/assign-customer-list.md#active"]
 
 [[unit]]
 text = "An API key with the sdk:ruleset scope, created by an ADMIN or a DEVELOPER."
@@ -71,7 +71,7 @@ by = ["test:backend/tests/smoke/test_sdk_scoped_routes.py"]
 
 [[unit]]
 text = "This creates one and saves it in $KEY:"
-by = ["exempt:baseline"]
+by = ["docex:docs/guides/assign-customer-list.md#eptk_"]
 
 [[unit]]
 text = "It prints eptk_."
@@ -79,7 +79,7 @@ by = ["docex:docs/guides/assign-customer-list.md#eptk_"]
 
 [[unit]]
 text = "Send the list"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Each user has a user_id and, optionally, a context: the attributes the experiment's targeting rules read, as on POST /api/v1/tracking/assign."
@@ -87,7 +87,7 @@ by = ["docex:docs/guides/assign-customer-list.md#\"assigned\":2"]
 
 [[unit]]
 text = "This sends three customers, two in the US and one in Germany, and saves the response in $RESULT:"
-by = ["exempt:baseline"]
+by = ["docex:docs/guides/assign-customer-list.md#\"assigned\":2"]
 
 [[unit]]
 text = "It prints {\"assigned\":2,\"holdout\":0,\"mutual_exclusion\":0,\"targeting\":1}."
@@ -99,7 +99,7 @@ by = ["docex:docs/guides/assign-customer-list.md#\"cust-003\",\"control\",false"
 
 [[unit]]
 text = "Read who was not enrolled"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "It prints cust-003 and targeting."
@@ -111,7 +111,7 @@ by = ["docex:docs/guides/assign-customer-list.md#\"cust-003\",\"control\",false"
 
 [[unit]]
 text = "reason | What it means | What to do"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "holdout | The user is in the global holdout, which sees no experiment | Nothing: show the control"
@@ -130,7 +130,7 @@ by = ["docex:docs/guides/assign-customer-list.md#cust-003"]
 
 [[unit]]
 text = "Join variants to your list"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "It prints one line per customer: the id, the variant's name and whether they were enrolled."
@@ -138,15 +138,15 @@ by = ["docex:docs/guides/assign-customer-list.md#\"cust-003\",\"control\",false"
 
 [[unit]]
 text = "cust-003 is \"cust-003\",\"control\",false; the other two are enrolled in control or urgent."
-by = ["exempt:baseline"]
+by = ["docex:docs/guides/assign-customer-list.md#\"cust-003\",\"control\",false"]
 
 [[unit]]
 text = "Retries"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Send the same request again."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Users already assigned keep their variant and no second assignment is recorded:"
@@ -154,7 +154,7 @@ by = ["test:backend/tests/integration/api/test_tracking_assign_batch.py::TestRes
 
 [[unit]]
 text = "It prints true: the same answers as the first time."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_tracking_assign_batch.py::TestResend::test_a_resend_returns_the_same_and_adds_no_rows"]
 
 [[unit]]
 text = "A 409 (the experiment was paused or completed during the request) or a 500 may come after some users were assigned; sending the same request again is safe for the same reason."
@@ -173,7 +173,7 @@ by = [
 
 [[unit]]
 text = "When they arrive"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "When a customer reaches your site or app, call POST /api/v1/tracking/assign (an SDK's get_assignment / getAssignment) as usual."
@@ -185,15 +185,15 @@ by = ["test:backend/tests/integration/api/test_tracking_assign_batch.py::TestRes
 
 [[unit]]
 text = "It prints true."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_tracking_assign_batch.py::TestResend::test_a_later_single_call_returns_the_same_variant_and_records_the_view"]
 
 [[unit]]
 text = "More than 1,000 users"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Send the list in chunks of 1,000, one request at a time."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "The route allows 60 requests a minute from one address; over that it answers 429 with a Retry-After header, in seconds, and the loop below waits that long and sends the same chunk again."
@@ -204,11 +204,11 @@ by = [
 
 [[unit]]
 text = "It stops at any other error; run it again from the start, which is safe because assignments are sticky."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "This writes 2,500 customer ids to a file in a scratch directory, sends them in three chunks, and appends each answer to assignments.csv:"
-by = ["exempt:baseline"]
+by = ["docex:docs/guides/assign-customer-list.md#2500"]
 
 [[unit]]
 text = "It prints 2500, one line per customer."
@@ -224,7 +224,7 @@ by = ["test:backend/tests/unit/api/test_assign_batch_contract.py::test_the_61st_
 
 [[unit]]
 text = "What counts in results"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Every enrolled user counts in the experiment's results from the moment they are assigned, whether or not they open the email."
@@ -232,7 +232,7 @@ by = ["test:backend/tests/integration/api/test_cuped_results_api.py::test_s6_siz
 
 [[unit]]
 text = "If only some of them will ever see the experience, analyse it as an intent-to-treat experiment, or assign only the users you will contact."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "For a bandit experiment, each enrolled user also counts as a pull of their variant."
