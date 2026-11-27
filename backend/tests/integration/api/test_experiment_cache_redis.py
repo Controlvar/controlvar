@@ -55,6 +55,7 @@ from backend.app.api import deps
 from backend.app.api.v1.endpoints import experiments as experiments_endpoint
 from backend.app.core.config import settings
 from backend.app.core.permissions import Action, ResourceType
+from backend.app.core.stats_engine import ENGINE_VERSION
 from backend.app.main import app
 from backend.app.models.experiment import Experiment
 from backend.app.models.mutual_exclusion_group import MutualExclusionGroup
@@ -274,13 +275,19 @@ def test_a_caller_refused_the_detail_is_refused_it_from_the_cache(
     assert "from-cache" not in cached.text
 
 
-# name -> (path suffix under the experiment, cache key suffix)
+# name -> (path suffix under the experiment, cache key, with {version} the
+# statistics engine's)
 RESULTS = {
-    "daily": ("/daily-results", "experiment_daily_results:{id}"),
+    "daily": ("/daily-results", "experiment_daily_results:{id}:{version}"),
     "segmented": (
         "/segmented-results/country",
-        "experiment_segmented_results:{id}:country",
+        "experiment_segmented_results:{id}:{version}:country",
     ),
+}
+#: name -> the key the answer had before the engine version was in it.
+UNVERSIONED = {
+    "daily": "experiment_daily_results:{id}",
+    "segmented": "experiment_segmented_results:{id}:country",
 }
 
 
@@ -290,10 +297,16 @@ def test_results_are_cached_and_served_from_the_cache(
 ):
     suffix, key_shape = RESULTS[kind]
     exp = _started(cached_client)
+    # An answer an earlier release cached, under the key it used, and one
+    # cached by another engine version: neither is served.
+    stale = [{"from": "an earlier engine"}] if kind == "daily" else {"stale": 1}
+    redis_server.set(UNVERSIONED[kind].format(id=exp["id"]), json.dumps(stale))
+    redis_server.set(key_shape.format(id=exp["id"], version="0.0.1"), json.dumps(stale))
     first = cached_client.get(f"{BASE}/{exp['id']}{suffix}")
     assert first.status_code == 200, first.text
+    assert first.json() != stale, "an answer cached by another engine was served"
 
-    key = key_shape.format(id=exp["id"])
+    key = key_shape.format(id=exp["id"], version=ENGINE_VERSION)
     stored = redis_server.get(key)
     assert stored is not None, f"the {kind} results were not written to the cache"
     assert json.loads(stored) == first.json()
@@ -386,9 +399,9 @@ def test_a_change_to_a_draft_s_metrics_drops_its_cached_results(
         keys = [
             f"results:{experiment_id}:1.14.0:0.95:benjamini_hochberg:",
             f"results:{experiment_id}:1.14.0:0.9:none:country",
-            f"experiment_daily_results:{experiment_id}",
-            f"experiment_daily_results:{experiment_id}:{uuid.uuid4()}",
-            f"experiment_segmented_results:{experiment_id}:country",
+            f"experiment_daily_results:{experiment_id}:{ENGINE_VERSION}",
+            f"experiment_daily_results:{experiment_id}:{ENGINE_VERSION}:{uuid.uuid4()}",
+            f"experiment_segmented_results:{experiment_id}:{ENGINE_VERSION}:country",
         ]
         for key in keys:
             redis_server.set(key, "{}")
