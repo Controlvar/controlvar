@@ -1225,7 +1225,7 @@ Roll back all migrations (to the empty database state):
 docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrade base
 ```
 
-**Note**: Not all migrations are safely reversible. If a migration deletes a column, the downgrade drops data. Review the `downgrade()` function in each migration file before rolling back in production. A migration that rewrites data may not be able to undo it at all: see [`1ab99332f0ba` rewrites stored event times to UTC](#1ab99332f0ba-rewrites-stored-event-times-to-utc).
+**Note**: Not all migrations are safely reversible. If a migration deletes a column, the upgrade drops its data, which no downgrade restores. Review the `downgrade()` function in each migration file before rolling back in production. A migration that rewrites data may not be able to undo it at all: see [`1ab99332f0ba` rewrites stored event times to UTC](#1ab99332f0ba-rewrites-stored-event-times-to-utc).
 
 ---
 
@@ -1319,7 +1319,7 @@ It prints `UTC`.
 ### Do Not
 
 - Edit migration files that have already been applied to production
-- Use bare revision IDs in `down_revision` — always use the actual ID string, not a migration name
+- Put a migration name in `down_revision` — it takes the revision ID of the migration it follows
 - Delete migration files from the versions directory
 - Apply migrations without setting the correct `POSTGRES_SCHEMA` environment variable (the schema namespace will be wrong)
 
@@ -1509,8 +1509,8 @@ What this means for you:
   ([rollback runbook, Database Rollback Procedure](../deployment/rollback-runbook.md#database-rollback-procedure),
   [Step 2](../deployment/rollback-runbook.md#step-2-run-migration-downgrade-via-github-actions)). Once the API has been rolled back, the workflow
   can no longer undo it; the emergency route is then a point-in-time restore to
-  a new cluster, which the API tasks cannot pick up today
-  (the same procedure, Step 3).
+  a new cluster, which a redeploy does not pick up; `scripts/restore_repoint.sh`
+  points the application at it (the same procedure, Step 3).
   Some data cannot come back without such a restore: `modules_0002_warehouse_analysis`,
   which shipped in 0.11.0, drops the earlier `warehouse_connections` table with
   its rows, and neither a rollback nor a downgrade restores them. And
