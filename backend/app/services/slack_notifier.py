@@ -37,6 +37,20 @@ except ImportError:  # pragma: no cover
     SlackApiError = Exception  # type: ignore[assignment,misc]
 
 
+def escape_text(value: object) -> str:
+    """``value`` escaped for Slack message text, so it is shown as typed:
+    ``&`` becomes ``&amp;`` first, then ``<`` and ``>`` become ``&lt;`` and
+    ``&gt;``.
+
+    Slack reads ``&`` as the start of an entity and ``<...>`` as markup in
+    message text, so a name holding them is shown changed or not at all.
+    Every free-text value the notifier puts in a message goes through here;
+    the notifier's own markup (``*Flag:*``) and a generic alert's message,
+    which its caller writes as mrkdwn, do not.
+    """
+    return str(value).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
 # ---------------------------------------------------------------------------
 # Service
 # ---------------------------------------------------------------------------
@@ -132,13 +146,13 @@ class SlackNotifier:
         ``value`` and ``threshold`` arrive formatted with their unit; without
         a metric the alert shows the flag and the reason only.
         """
-        fields = [{"type": "mrkdwn", "text": f"*Flag:*\n{flag_name}"}]
+        fields = [{"type": "mrkdwn", "text": f"*Flag:*\n{escape_text(flag_name)}"}]
         if metric_label:
             fields += [
                 {"type": "mrkdwn", "text": f"*{metric_label.title()}:*\n{value}"},
                 {"type": "mrkdwn", "text": f"*Threshold:*\n{threshold}"},
             ]
-        fields.append({"type": "mrkdwn", "text": f"*Reason:*\n{reason}"})
+        fields.append({"type": "mrkdwn", "text": f"*Reason:*\n{escape_text(reason)}"})
         return [
             {
                 "type": "header",
@@ -159,13 +173,18 @@ class SlackNotifier:
     ) -> List[dict]:
         """Build Block Kit blocks for an experiment lifecycle notification."""
         fields = [
-            {"type": "mrkdwn", "text": f"*Experiment:*\n{name}"},
+            {"type": "mrkdwn", "text": f"*Experiment:*\n{escape_text(name)}"},
             {"type": "mrkdwn", "text": f"*Status:*\n{status}"},
         ]
 
         if details:
             for key, value in details.items():
-                fields.append({"type": "mrkdwn", "text": f"*{key.title()}:*\n{value}"})
+                fields.append(
+                    {
+                        "type": "mrkdwn",
+                        "text": f"*{key.title()}:*\n{escape_text(value)}",
+                    }
+                )
 
         return [
             {
@@ -220,11 +239,14 @@ class SlackNotifier:
             )
             if metric_label:
                 text = (
-                    f"Safety Rollback: '{flag_name}' rolled back — "
+                    f"Safety Rollback: '{escape_text(flag_name)}' rolled back — "
                     f"{metric_label} {value} {relation} threshold {threshold}."
                 )
             else:
-                text = f"Safety Rollback: '{flag_name}' rolled back. Reason: {reason}"
+                text = (
+                    f"Safety Rollback: '{escape_text(flag_name)}' rolled back. "
+                    f"Reason: {escape_text(reason)}"
+                )
             return self._send_message(channel=channel, blocks=blocks, text=text)
         except Exception as exc:
             logger.error("Error in send_safety_rollback_alert: %s", exc)
@@ -252,7 +274,7 @@ class SlackNotifier:
                 status="started",
                 details=details if details else None,
             )
-            text = f"Experiment '{experiment_name}' has started."
+            text = f"Experiment '{escape_text(experiment_name)}' has started."
             return self._send_message(channel=channel, blocks=blocks, text=text)
         except Exception as exc:
             logger.error("Error in send_experiment_started: %s", exc)
@@ -280,9 +302,9 @@ class SlackNotifier:
                 status="completed",
                 details=details if details else None,
             )
-            text = f"Experiment '{experiment_name}' has completed."
+            text = f"Experiment '{escape_text(experiment_name)}' has completed."
             if winner:
-                text += f" Winner: {winner}."
+                text += f" Winner: {escape_text(winner)}."
             return self._send_message(channel=channel, blocks=blocks, text=text)
         except Exception as exc:
             logger.error("Error in send_experiment_completed: %s", exc)
@@ -303,7 +325,7 @@ class SlackNotifier:
             True on success, False on any failure (exceptions swallowed).
         """
         try:
-            stage_label = f" (stage: {stage_name})" if stage_name else ""
+            stage_label = f" (stage: {escape_text(stage_name)})" if stage_name else ""
             blocks = [
                 {
                     "type": "header",
@@ -315,13 +337,21 @@ class SlackNotifier:
                 {
                     "type": "section",
                     "fields": [
-                        {"type": "mrkdwn", "text": f"*Flag:*\n{flag_name}"},
+                        {
+                            "type": "mrkdwn",
+                            "text": f"*Flag:*\n{escape_text(flag_name)}",
+                        },
                         {
                             "type": "mrkdwn",
                             "text": f"*Progress:*\n{from_pct}% → {to_pct}%",
                         },
                         *(
-                            [{"type": "mrkdwn", "text": f"*Stage:*\n{stage_name}"}]
+                            [
+                                {
+                                    "type": "mrkdwn",
+                                    "text": f"*Stage:*\n{escape_text(stage_name)}",
+                                }
+                            ]
                             if stage_name
                             else []
                         ),
@@ -330,7 +360,7 @@ class SlackNotifier:
                 {"type": "divider"},
             ]
             text = (
-                f"Rollout for '{flag_name}' advanced from {from_pct}% to "
+                f"Rollout for '{escape_text(flag_name)}' advanced from {from_pct}% to "
                 f"{to_pct}%{stage_label}."
             )
             return self._send_message(channel=channel, blocks=blocks, text=text)
@@ -362,7 +392,10 @@ class SlackNotifier:
                 {
                     "type": "section",
                     "fields": [
-                        {"type": "mrkdwn", "text": f"*Flag:*\n{flag_name}"},
+                        {
+                            "type": "mrkdwn",
+                            "text": f"*Flag:*\n{escape_text(flag_name)}",
+                        },
                         {
                             "type": "mrkdwn",
                             "text": f"*Final Rollout:*\n{final_pct}%",
@@ -371,7 +404,10 @@ class SlackNotifier:
                 },
                 {"type": "divider"},
             ]
-            text = f"Rollout for '{flag_name}' is complete at {final_pct}% of users."
+            text = (
+                f"Rollout for '{escape_text(flag_name)}' is complete at "
+                f"{final_pct}% of users."
+            )
             return self._send_message(channel=channel, blocks=blocks, text=text)
         except Exception as exc:
             logger.error("Error in send_rollout_completed: %s", exc)

@@ -13,6 +13,7 @@ Tests cover:
 - All methods return False when Slack is disabled
 """
 
+import json
 from unittest.mock import MagicMock, call, patch
 
 import pytest
@@ -525,3 +526,89 @@ class TestSlackDisabledAllMethodsReturnFalse:
         )
         assert notifier.send_rollout_completed(flag_name="f") is False
         assert notifier.send_generic_alert(title="T", message="M") is False
+
+
+# ---------------------------------------------------------------------------
+# Free text is shown as typed
+# ---------------------------------------------------------------------------
+
+TYPED = "R&D <beta> <!channel>"
+SHOWN = "R&amp;D &lt;beta&gt; &lt;!channel&gt;"
+
+
+def _posted(method: str, **kwargs) -> dict:
+    """The keyword arguments ``method`` passes to ``chat_postMessage``."""
+    client = MagicMock()
+    with patch("backend.app.services.slack_notifier.WebClient", return_value=client):
+        assert getattr(_make_notifier(), method)(**kwargs) is True
+    return client.chat_postMessage.call_args.kwargs
+
+
+def _field_texts(blocks: list) -> list:
+    return [field["text"] for block in blocks for field in block.get("fields", [])]
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "method,kwargs,label",
+    [
+        ("send_safety_rollback_alert", {"flag_name": TYPED, "reason": "r"}, "Flag"),
+        ("send_safety_rollback_alert", {"flag_name": "f", "reason": TYPED}, "Reason"),
+        (
+            "send_safety_rollback_alert",
+            {
+                "flag_name": TYPED,
+                "reason": "r",
+                "metric_label": "error rate",
+                "value": "7.1%",
+                "threshold": "5%",
+            },
+            "Flag",
+        ),
+        ("send_experiment_started", {"experiment_name": TYPED}, "Experiment"),
+        (
+            "send_experiment_started",
+            {"experiment_name": "E", "owner_email": TYPED},
+            "Owner",
+        ),
+        (
+            "send_experiment_completed",
+            {"experiment_name": "E", "winner": TYPED},
+            "Winner",
+        ),
+        (
+            "send_rollout_advanced",
+            {"flag_name": TYPED, "from_pct": 0, "to_pct": 10},
+            "Flag",
+        ),
+        (
+            "send_rollout_advanced",
+            {"flag_name": "f", "from_pct": 0, "to_pct": 10, "stage_name": TYPED},
+            "Stage",
+        ),
+        ("send_rollout_completed", {"flag_name": TYPED}, "Flag"),
+    ],
+)
+def test_free_text_is_shown_as_typed(method, kwargs, label):
+    """``&``, ``<`` and ``>`` in a name or a reason reach Slack as entities,
+    so the message shows the text as it was typed."""
+    posted = _posted(method, **kwargs)
+    assert f"*{label}:*\n{SHOWN}" in _field_texts(posted["blocks"])
+    # Nothing typed reaches the message unescaped, the fallback text included.
+    assert "<" not in json.dumps(posted["blocks"]) + posted["text"]
+
+
+@pytest.mark.regression
+def test_the_fallback_text_shows_free_text_as_typed():
+    posted = _posted("send_experiment_completed", experiment_name=TYPED, winner=TYPED)
+    assert posted["text"] == f"Experiment '{SHOWN}' has completed. Winner: {SHOWN}."
+
+
+def test_the_notifiers_own_markup_is_sent_unchanged():
+    """Its bold labels, and a generic alert's message, which its caller
+    writes as mrkdwn: a link there still renders as a link."""
+    link = "<https://example.com/flags/1|the flag> & *its rollout*"
+    posted = _posted("send_generic_alert", title="Check", message=link)
+    assert posted["blocks"][1]["text"]["text"] == link
+    started = _posted("send_experiment_started", experiment_name="Checkout")
+    assert _field_texts(started["blocks"])[0] == "*Experiment:*\nCheckout"
