@@ -5,15 +5,18 @@ document = "docs/integrations/github.md"
 
 [[unit]]
 text = "GitHub Integration"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Part of the integrations module"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Third-party integrations is one of the optional modules -- present in the full profile, absent from the core one."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/smoke/test_core_boundary.py::test_register_core_routers_mounts_no_module_route",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
 
 [[unit]]
 text = "A core deployment does not serve these routes."
@@ -21,7 +24,7 @@ by = ["test:backend/tests/smoke/test_core_boundary.py::test_register_core_router
 
 [[unit]]
 text = "See Modules and profiles for what each profile includes and how to run the full one."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "The GitHub integration receives your repository's webhook deliveries and checks each one's signature."
@@ -36,11 +39,11 @@ by = [
 
 [[unit]]
 text = "What the Integration Does"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Inbound (GitHub → Platform): Receive webhook events from GitHub (push, pull_request, issues)."
-by = ["exempt:baseline"]
+by = ["test:modules/backend/tests/unit/api/test_integrations_api.py::TestWebhookEndpoints::test_github_webhook_with_a_valid_signature_is_processed"]
 
 [[unit]]
 text = "The platform checks each delivery's HMAC-SHA256 signature and answers it."
@@ -55,7 +58,7 @@ by = [
 
 [[unit]]
 text = "Outbound (Platform → GitHub): not wired yet."
-by = ["exempt:baseline"]
+by = ["test:modules/backend/tests/unit/services/test_integration_wiring.py::test_nothing_calls_jira_salesforce_or_github"]
 
 [[unit]]
 text = "Nothing in the platform calls GitHub, so the token and the repository are stored but not used."
@@ -63,23 +66,23 @@ by = ["test:modules/backend/tests/unit/services/test_integration_wiring.py::test
 
 [[unit]]
 text = "Prerequisites"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Before creating the integration, you need:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "A GitHub Personal Access Token (PAT) with appropriate repository scopes, or a GitHub App installation token"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "A strong webhook secret that you will configure both in the platform and in the GitHub webhook settings"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "A GitHub repository where you will configure the webhook"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "The GitHub token"
@@ -91,7 +94,7 @@ by = ["test:modules/backend/tests/unit/api/test_integrations_api.py::TestReceive
 
 [[unit]]
 text = "Creating the Integration"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Creating, changing and deleting an integration needs an ADMIN bearer token; an ADMIN or a DEVELOPER can read it."
@@ -106,31 +109,31 @@ by = ["test:modules/backend/tests/unit/api/test_integration_config_rules.py::tes
 
 [[unit]]
 text = "The examples on this page run against a local full-profile stack (see Modules and profiles); on your own deployment, use its URL instead of localhost:8000."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Sign in as the stack's administrator, which saves a token in $TOKEN:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "It prints \"ADMIN\"."
-by = ["exempt:baseline"]
+by = ["docex:docs/integrations/github.md#\"ADMIN\""]
 
 [[unit]]
 text = "If it prints null, the sign-in failed and $TOKEN holds no token."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "This generates a webhook secret, keeps it in $WEBHOOK_SECRET, and creates the integration with it."
-by = ["exempt:baseline"]
+by = ["docex:docs/integrations/github.md#\"integration_type\": \"github\""]
 
 [[unit]]
 text = "The token and the repository are examples: use your own."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Response: 201 Created"
-by = ["exempt:baseline"]
+by = ["test:modules/backend/tests/integration/api/test_integrations_api.py::TestCreateIntegration::test_admin_can_create_github_integration"]
 
 [[unit]]
 text = "There is one GitHub configuration, and it is addressed by its type, github, not by the id: GET, PUT and DELETE use /api/v1/integrations/github, and the webhook URL below has no id in it either."
@@ -141,15 +144,15 @@ by = [
 
 [[unit]]
 text = "The request and response are described in Create Integration."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Configuration Fields"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Field | Type | Required | Description"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "token | string | Yes | GitHub PAT or GitHub App installation token, stored for calls to GitHub, which nothing in the platform makes yet."
@@ -183,7 +186,7 @@ by = ["test:modules/backend/tests/integration/api/test_integrations_api.py::Test
 
 [[unit]]
 text = "Configuring the Webhook in GitHub"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Add a webhook to your GitHub repository (Settings → Webhooks → Add webhook)"
@@ -191,35 +194,35 @@ by = ["exempt:third-party"]
 
 [[unit]]
 text = "Set the Payload URL to:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Set Content type to application/json"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Set the Secret to the same value you used as webhook_secret when creating the integration (printf '%s\\n' \"$WEBHOOK_SECRET\" prints it)"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Under Which events would you like to trigger this webhook?, select:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Individual events: Push, Pull requests, Issues"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Or \"Send me everything\" if you want all events"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Ensure Active is checked and click Add webhook"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Webhook Endpoint"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Headers"
@@ -250,7 +253,7 @@ by = ["test:modules/backend/tests/unit/api/test_integration_config_rules.py::tes
 
 [[unit]]
 text = "HMAC-SHA256 Signature Validation"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The platform validates every incoming webhook using the X-Hub-Signature-256 header."
@@ -258,7 +261,7 @@ by = ["docex:docs/integrations/github.md#{\"status\":\"received\"}"]
 
 [[unit]]
 text = "The validation algorithm:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Requests with a missing or invalid X-Hub-Signature-256 header receive 401 Unauthorized and are not processed."
@@ -282,15 +285,15 @@ by = [
 
 [[unit]]
 text = "Sending a signed delivery"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "GitHub signs each delivery for you."
-by = ["exempt:baseline"]
+by = ["exempt:third-party"]
 
 [[unit]]
 text = "To see the check pass, sign one the same way, with the secret created above: the HMAC-SHA256 of the raw body, keyed with the webhook_secret, in hex, after sha256=:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "It prints {\"status\":\"received\"}."
@@ -298,11 +301,11 @@ by = ["docex:docs/integrations/github.md#{\"status\":\"received\"}"]
 
 [[unit]]
 text = "printf '%s' adds no newline and --data-binary sends the body byte for byte, so the signature covers exactly what is sent."
-by = ["exempt:baseline"]
+by = ["exempt:third-party"]
 
 [[unit]]
 text = "openssl dgst prints the digest as the last field of its line (after SHA2-256(stdin)= with OpenSSL 3, on its own with LibreSSL), which awk keeps."
-by = ["exempt:baseline"]
+by = ["exempt:third-party"]
 
 [[unit]]
 text = "The same signature on a body with one byte changed (43 for 42) is refused, and so is the body with no signature:"
@@ -310,15 +313,15 @@ by = ["docex:docs/integrations/github.md#{\"detail\":\"Webhook authentication fa
 
 [[unit]]
 text = "Each prints {\"detail\":\"Webhook authentication failed\"}."
-by = ["exempt:baseline"]
+by = ["docex:docs/integrations/github.md#{\"detail\":\"Webhook authentication failed\"}"]
 
 [[unit]]
 text = "Supported Event Types"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Push Events"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "An example push delivery:"
@@ -326,7 +329,7 @@ by = ["exempt:example"]
 
 [[unit]]
 text = "Pull Request Events"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "An example pull_request delivery:"
@@ -334,7 +337,7 @@ by = ["exempt:example"]
 
 [[unit]]
 text = "Issues Events"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "An example issues delivery:"
@@ -342,7 +345,7 @@ by = ["exempt:example"]
 
 [[unit]]
 text = "Response: 200 OK"
-by = ["exempt:baseline"]
+by = ["test:modules/backend/tests/unit/api/test_integrations_api.py::TestWebhookEndpoints::test_github_webhook_with_a_valid_signature_is_processed"]
 
 [[unit]]
 text = "A delivery from an authenticated sender is answered 200 even when the platform could not process the event: the failure is logged, so the provider does not retry something it cannot fix."
@@ -361,27 +364,30 @@ by = ["test:modules/backend/tests/unit/services/test_integration_wiring.py::test
 
 [[unit]]
 text = "Troubleshooting"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "401 Unauthorized"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Symptom: GitHub's delivery log shows status 401 and the body {\"detail\": \"Webhook authentication failed\"}."
-by = ["exempt:baseline"]
+by = ["docex:docs/integrations/github.md#{\"detail\":\"Webhook authentication failed\"}"]
 
 [[unit]]
 text = "Every refused delivery is answered the same way, so the status does not say which of these it is:"
-by = ["exempt:baseline"]
+by = [
+    "test:modules/backend/tests/unit/api/test_integrations_api.py::TestWebhookEndpoints::test_github_webhook_without_a_signature_is_refused",
+    "test:modules/backend/tests/unit/api/test_integrations_api.py::TestWebhookEndpoints::test_github_webhook_without_an_integration_is_refused",
+]
 
 [[unit]]
 text = "Secret mismatch: The webhook_secret in the platform does not match the secret in GitHub's webhook settings."
-by = ["exempt:baseline"]
+by = ["test:modules/backend/tests/unit/api/test_integrations_api.py::TestWebhookEndpoints::test_github_webhook_rejects_an_invalid_signature"]
 
 [[unit]]
 text = "Set it again with the recipe in Rotating the Webhook Secret and use the same value in GitHub."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "As a last resort you can DELETE /api/v1/integrations/github and create the integration again, but that removes the stored token and repository settings too, so you send them again."
@@ -400,7 +406,11 @@ by = ["exempt:third-party"]
 
 [[unit]]
 text = "Not active, or no webhook_secret stored: GET /api/v1/integrations/github must show \"is_active\": true and list webhook_secret in stored_secrets."
-by = ["exempt:baseline"]
+by = [
+    "test:modules/backend/tests/unit/api/test_integration_config_rules.py::test_a_new_configuration_is_inactive_and_only_an_active_one_answers",
+    "test:modules/backend/tests/unit/api/test_integrations_api.py::TestWebhookEndpoints::test_github_webhook_with_no_configured_secret_is_refused",
+    "test:modules/backend/tests/integration/api/test_integrations_api.py::TestStoredSecretsAreNotReturned::test_reads_return_no_stored_secret_value",
+]
 
 [[unit]]
 text = "The platform log also names an active integration that has no secret, once per process."
@@ -411,55 +421,55 @@ by = [
 
 [[unit]]
 text = "Encoding issue: Ensure the secret does not contain leading or trailing whitespace."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Copy-paste carefully."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "400 Bad Request"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Symptom: GitHub's delivery log shows status 400 with the body {\"detail\": \"Invalid JSON payload\"}."
-by = ["docex:docs/integrations/salesforce.md#{\"detail\":\"Webhook authentication failed\"}"]
+by = ["test:modules/backend/tests/unit/api/test_integrations_api.py::TestWebhookEndpoints::test_github_webhook_signed_body_that_is_not_a_json_object_is_400"]
 
 [[unit]]
 text = "The signature was accepted, but the body is not a JSON object."
-by = ["exempt:baseline"]
+by = ["test:modules/backend/tests/unit/api/test_integrations_api.py::TestWebhookEndpoints::test_github_webhook_signed_body_that_is_not_a_json_object_is_400"]
 
 [[unit]]
 text = "Confirm the webhook's Content type is application/json, not application/x-www-form-urlencoded."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Webhook Deliveries Not Reaching the Platform"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Confirm the webhook payload URL is reachable from the public internet"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Check GitHub's webhook delivery logs: Repository → Settings → Webhooks → [Your Webhook] → Recent Deliveries"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Verify the integration is active: GET /api/v1/integrations/github (an ADMIN or a DEVELOPER can call it) and check that is_active is true"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Check the platform's application logs for any processing errors"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Rotating the Webhook Secret"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "If you need to rotate the webhook secret:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Step 1: Set a new secret in the platform."
@@ -467,7 +477,7 @@ by = ["docex:docs/api/integrations.md#New webhook_secret for jira:"]
 
 [[unit]]
 text = "Use the recipe in Upgrading an integration created before webhook authentication with TYPE=github and an ADMIN token."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "It sends one PUT /api/v1/integrations/github that carries only the new webhook_secret; the stored token and repository settings are kept, and it prints the new secret."
