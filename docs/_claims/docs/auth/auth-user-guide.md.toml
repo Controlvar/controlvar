@@ -5,15 +5,15 @@ document = "docs/auth/auth-user-guide.md"
 
 [[unit]]
 text = "Authentication User Guide"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "This guide explains how to use the authentication features of Controlvar, including registration, login, password management, and security best practices."
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Cognito only"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The password-reset and token-refresh endpoints (POST /api/v1/auth/forgot-password, /reset-password and /refresh) are available only when AUTH_PROVIDER=cognito."
@@ -59,7 +59,7 @@ by = ["test:modules/backend/tests/unit/services/test_sso_settings_checks_and_mes
 
 [[unit]]
 text = "Account Registration"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Only with COGNITO_SELF_SIGNUP_ENABLED=true and a user pool that allows self sign-up; otherwise see Adding a user."
@@ -70,11 +70,11 @@ by = [
 
 [[unit]]
 text = "Registration Requirements"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "To create an account on Controlvar, you will need to provide:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Username: 3 to 50 characters"
@@ -85,7 +85,7 @@ by = [
 
 [[unit]]
 text = "Email: A valid email address you can access for verification"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Password: Must satisfy the following requirements:"
@@ -129,7 +129,7 @@ by = ["test:backend/tests/unit/api/test_sign_in_and_account_rules.py::test_regis
 
 [[unit]]
 text = "Registration Process"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The dashboard has no registration page and no sign-up link: registration is through the API only, and only with COGNITO_SELF_SIGNUP_ENABLED=true."
@@ -152,7 +152,7 @@ by = [
 
 [[unit]]
 text = "Cognito emails a verification code to the address."
-by = ["exempt:baseline"]
+by = ["exempt:third-party"]
 
 [[unit]]
 text = "POST /api/v1/auth/confirm with username and the confirmation_code from the email."
@@ -167,19 +167,19 @@ by = [
 
 [[unit]]
 text = "Email Verification"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "If you don't receive a verification code, check your spam folder"
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Login Process"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Standard Login"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Navigate to the login page at /login"
@@ -192,11 +192,11 @@ by = [
 
 [[unit]]
 text = "Enter your email address and password"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Click \"Sign in\""
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "This is the sign-in for AUTH_PROVIDER=local."
@@ -214,7 +214,7 @@ by = [
 
 [[unit]]
 text = "Login Security Features"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Session Management: A sign-in lasts 12 hours by default (LOCAL_AUTH_TOKEN_TTL_MINUTES); then you sign in again"
@@ -232,11 +232,11 @@ by = [
 
 [[unit]]
 text = "After Login"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Once logged in successfully:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "You will be redirected to the dashboard"
@@ -252,11 +252,11 @@ by = ["test:frontend/src/tests/services/api.test.ts::adds the bearer header when
 
 [[unit]]
 text = "Password Management"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Password Reset Process"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The dashboard has no reset page and no reset link, under any AUTH_PROVIDER."
@@ -292,7 +292,7 @@ by = ["test:backend/tests/integration/api/test_own_password_change.py::test_own_
 
 [[unit]]
 text = "With AUTH_PROVIDER=cognito the password lives in the Cognito user pool, and either of these works:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "an administrator sets it with aws cognito-idp admin-set-user-password ..."
@@ -300,7 +300,9 @@ by = ["test:backend/tests/integration/auth/test_cognito_onboarding.py"]
 
 [[unit]]
 text = "--permanent, as in step 3 of Adding a user;"
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/integration/auth/test_cognito_onboarding.py",
+]
 
 [[unit]]
 text = "you reset it yourself through the API, if your account's email address is verified (email_verified=true): POST /api/v1/auth/forgot-password with {\"username\": \"...\"} emails you a code, and POST /api/v1/auth/reset-password with username, confirmation_code and new_password sets the new password."
@@ -308,11 +310,11 @@ by = ["test:backend/tests/integration/auth/test_password_reset.py"]
 
 [[unit]]
 text = "Then sign in with POST /api/v1/auth/token."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Password Reset Notes"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "New passwords must meet the same requirements as registration"
@@ -324,7 +326,7 @@ by = ["test:backend/tests/unit/api/test_route_surface_rules.py::test_a_password_
 
 [[unit]]
 text = "Changing Your Password"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "With the default local provider, open More in the dashboard's top navigation and choose Change password (in a window narrower than 1280 px, open the menu button first)."
@@ -402,7 +404,7 @@ by = [
 
 [[unit]]
 text = "Using Authentication Tokens"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The platform uses JWT (JSON Web Tokens) for authentication."
@@ -410,11 +412,11 @@ by = ["test:backend/tests/unit/api/test_local_auth.py"]
 
 [[unit]]
 text = "Here's how they work:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Token Types"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "With AUTH_PROVIDER=local (the default), POST /api/v1/auth/login returns one access token, valid for 12 hours by default; there is no ID token and no refresh token."
@@ -432,15 +434,15 @@ by = [
 
 [[unit]]
 text = "Sample Token Usage"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "When making API requests, include the access token in the Authorization header:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Token Refresh"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Under cognito, when your access token expires, use the refresh token to get a new one:"
@@ -451,7 +453,7 @@ by = [
 
 [[unit]]
 text = "Managing users in the dashboard"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The dashboard's Admin → Users page (/admin/users) lists every account and lets you invite, edit and delete them."
@@ -541,7 +543,7 @@ by = [
 
 [[unit]]
 text = "Rules the page and the API both apply:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "You can't change your own role or deactivate yourself; ask another administrator."
@@ -619,15 +621,15 @@ by = ["test:frontend/src/tests/admin/EditUserModal.test.tsx::after a 404, closin
 
 [[unit]]
 text = "Common Error Scenarios and Solutions"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Registration Errors"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Error | Cause | Solution"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 count = 3
 
 [[unit]]
@@ -640,11 +642,11 @@ by = ["test:backend/tests/integration/auth/test_signup.py::TestSignupValidation:
 
 [[unit]]
 text = "Login Errors"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "What the dashboard's sign-in form shows (AUTH_PROVIDER=local):"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "\"Email or password is incorrect.\" | No account has this email, the password does not match, or the account is deactivated. The API answers 401 the same way for all three | Check both. An administrator can reset the password or reactivate the account"
@@ -680,7 +682,7 @@ by = ["test:frontend/src/tests/pages/login.test.tsx::a sign-in the API does not 
 
 [[unit]]
 text = "Token Errors"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "401 \"Could not validate credentials\" | The access token has expired, or is malformed or altered, or your password was changed after it was issued | Log in again (under cognito, you can also refresh the token)"
@@ -692,7 +694,7 @@ by = [
 
 [[unit]]
 text = "Password Reset Errors"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "These come from the Cognito API routes only."
@@ -704,55 +706,59 @@ by = ["test:backend/tests/integration/auth/test_password_reset.py"]
 
 [[unit]]
 text = "Error in the message | Cause | Solution"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "CodeMismatchException | The code does not match the one emailed | Check the code, or request a new one"
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/integration/auth/test_password_reset.py::TestConfirmForgotPassword::test_wrong_code_returns_400",
+]
 
 [[unit]]
 text = "ExpiredCodeException | The code has expired | Request a new code with /auth/forgot-password"
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/integration/auth/test_password_reset.py::TestConfirmForgotPassword::test_expired_code_returns_400",
+]
 
 [[unit]]
 text = "InvalidPasswordException | The new password does not meet the pool's policy | Follow the pool's password requirements"
-by = ["exempt:baseline"]
+by = ["exempt:third-party"]
 
 [[unit]]
 text = "LimitExceededException | Too many attempts | Wait before trying again"
-by = ["exempt:baseline"]
+by = ["exempt:third-party"]
 
 [[unit]]
 text = "Security Best Practices"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "To keep your account secure:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Password Security"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Use a unique password not used on other websites"
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Consider using a password manager"
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Change your password if you think someone else may know it"
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Never share your password with anyone"
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Account Protection"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "With local sign-in, turn on two-step sign-in and keep its recovery codes somewhere safe"
@@ -760,43 +766,43 @@ by = ["exempt:advice"]
 
 [[unit]]
 text = "Don't share your verification codes with anyone"
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Log out when using shared or public computers"
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Check for HTTPS in the browser address bar before logging in"
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Device Security"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Keep your devices and browsers updated"
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Use antivirus software on your computers"
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Be cautious when logging in from public networks"
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Clear browser cookies and storage after using public computers"
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Suspicious Activity"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "If you notice suspicious activity on your account:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Change your password (POST /api/v1/users/me/password), or ask an administrator to reset it; that signs out your other sessions."
