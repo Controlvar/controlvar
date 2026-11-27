@@ -227,6 +227,7 @@ def test_an_older_release_refuses_a_database_a_newer_release_migrated(
         ]
         assert next_revision in result.stderr
         assert f"({version})" in result.stderr
+        assert "Run the newer release that migrated it" in result.stderr
         assert "restore the backup taken before that upgrade" in result.stderr
         assert "full profile being opened by a core build" not in result.stderr
         # The refusal's own sentence, not the traceback around it.

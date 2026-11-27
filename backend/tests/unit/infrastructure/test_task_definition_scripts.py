@@ -379,6 +379,14 @@ def test_a_successful_migration(aws):
     # The log stream the awslogs driver writes: <prefix>/<container>/<task id>.
     (logs,) = [c for c in calls if c[:2] == ["logs", "get-log-events"]]
     assert logs[logs.index("--log-stream-name") + 1] == "migrate/backend/0abc"
+    # The last 100 lines, as text: one tab-separated line in the step's log.
+    # A list of the messages alone; without the query, text output is one
+    # line per event with its timestamps.
+    assert logs[logs.index("--limit") + 1] == "100"
+    assert "--query" in logs, logs
+    assert logs[logs.index("--query") + 1] == "events[].message"
+    assert logs[logs.index("--output") + 1] == "text"
+    assert "--start-from-head" not in logs
     assert "Running upgrade a -> b" in out
 
 
@@ -406,6 +414,9 @@ def test_a_migration_still_running_at_the_deadline_is_not_rerun(aws):
     )
     assert code == 1
     assert "still running" in out and "Do not re-run it" in out
+    # The error names the task, and its log group and stream.
+    assert "Migration task 0abc is still running" in out
+    assert f"Watch {LOG_GROUP}, stream migrate/backend/0abc." in out
     assert len([c for c in calls if c[1] == "run-task"]) == 1
 
 

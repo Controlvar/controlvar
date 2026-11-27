@@ -178,6 +178,9 @@ def test_a_core_database_switched_to_full_by_the_documented_command(
     assert _rows(test_db, scratch_schema) == FULL_HEADS
     assert _workspace_fks(test_db, scratch_schema) == WORKSPACE_FKS
     assert len(_module_tables(test_db, scratch_schema)) == MODULE_TABLE_COUNT
+    # And a WARNING says so.
+    assert "creating them from the models" in upgrade.stderr, upgrade.stderr[-3000:]
+    assert "Added missing foreign key(s)" in upgrade.stderr, upgrade.stderr[-3000:]
     # Exactly what a fresh full bootstrap builds: the module tables and nothing
     # else.
     assert _tables(test_db, scratch_schema) - core_only == _module_tables(

@@ -129,3 +129,37 @@ def test_the_bundled_postgres_keeps_the_official_images_utc_default():
     template = (CHART / "templates" / "postgres.yaml").read_text(encoding="utf-8")
     assert "image: {{ .Values.postgresql.image }}" in template
     assert not _TIME_ZONE.search(template)
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "path", [QUICK_START, PRODUCTION], ids=["quick-start", "production"]
+)
+def test_the_api_health_check_gives_a_start_ten_minutes_in_both_compose_files(path):
+    """The API container migrates on start and serves once it has finished.
+    Compose reports it unhealthy after the start period and then that many
+    failed checks, 600 s in all, and a service that waits for a healthy API
+    then fails ``docker compose up``."""
+    services = _services(path)
+    check = services["api"]["healthcheck"]
+
+    def seconds(value) -> int:
+        assert re.fullmatch(r"\d+s", str(value)), value
+        return int(str(value)[:-1])
+
+    window = seconds(check["start_period"]) + check["retries"] * seconds(
+        check["interval"]
+    )
+    assert window == 600, (check["start_period"], check["retries"], check["interval"])
+
+    def waits_for_a_healthy_api(service: dict) -> bool:
+        # The short form, a list of names, waits only for the start.
+        depends_on = service.get("depends_on") or {}
+        if not isinstance(depends_on, dict):
+            return False
+        return (depends_on.get("api") or {}).get("condition") == "service_healthy"
+
+    waiting = sorted(
+        name for name, service in services.items() if waits_for_a_healthy_api(service)
+    )
+    assert waiting, "no service waits for a healthy API"
