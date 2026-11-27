@@ -106,7 +106,7 @@ The browser returns to `<dashboard>/login?sso_error=<code>` and the sign-in page
 | `sso_email` | the provider sent no usable email address, or one longer than 100 characters |
 | `sso_unverified` | the provider has not verified the email address (see [Accounts and email addresses](#jit-user-provisioning)) |
 | `sso_domain` | the email address is not in the configuration's domain |
-| `sso_account` | the account needs an administrator: more than one account has the email, the identity is already linked to another account, or the provider's identifier for the account (`sub`, or the SAML Name ID) is longer than 255 characters or not valid text |
+| `sso_account` | the account needs an administrator: more than one account has the email, the identity is already linked to another account, or the provider's identifier for the account (`sub`, or the SAML Name ID) is longer than 255 characters or not valid text; or the account is a superuser account, which signs in with a password. A superuser account with no password must have one set by another superuser (`PUT /api/v1/admin/users/{id}`) before it can sign in. |
 | `sso_inactive` | the account is deactivated |
 | `sso_not_configured` | no active OIDC configuration for the domain, or more than one; or the configuration was deactivated or deleted during the sign-in |
 | `sso_saml_only` | the domain's only active configuration is SAML |
@@ -265,7 +265,7 @@ The email address is taken from GitHub's list of the user's verified addresses (
 
 Users who authenticate via SSO for the first time are provisioned with a platform account automatically. There is no setting to turn this off; to stop sign-ins through a configuration, set its `is_active` to `false`.
 
-A sign-in is accepted only for an email address in the configuration's `org_domain`, exactly: `bob@acme.com` for `acme.com`, but not `bob@eu.acme.com` or `bob@acme.io`. Use one configuration per domain. The comparison ignores case and surrounding spaces. An existing account is matched by email address, ignoring case; if more than one account matches, the sign-in is refused.
+A sign-in is accepted only for an email address in the configuration's `org_domain`, exactly: `bob@acme.com` for `acme.com`, but not `bob@eu.acme.com` or `bob@acme.io`. Use one configuration per domain. The comparison ignores case and surrounding spaces. An existing account is matched by email address, ignoring case; if more than one account matches, the sign-in is refused. Single sign-on does not sign in superuser accounts; they sign in with a password.
 
 The email address must be one the identity provider has verified:
 

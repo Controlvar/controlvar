@@ -43,6 +43,7 @@ from backend.app.core.config import settings as core_settings
 from backend.app.db.session import get_db as _session_get_db
 from backend.app.main import app
 from backend.app.middleware.rate_limiter import RATE_LIMIT_CONFIG
+from backend.app.models.audit_log import AuditLog
 from backend.app.models.user import User, UserRole
 from backend.tests.integration.email_lower_index import (
     # A session-scoped autouse fixture: imported, it takes effect here.
@@ -1128,3 +1129,72 @@ def test_a_case_variant_email_change_does_not_stop_the_next_sso_sign_in(
     again = _exchange(browser, _sign_in(browser, config.org_domain))
     assert again["id"] == first["id"]
     assert changed.status_code == 403, changed.text
+
+
+# ---------------------------------------------------------------------------
+# A superuser account signs in with a password, not through SSO
+# ---------------------------------------------------------------------------
+
+
+def _account(db_session: Session, email: str, role: UserRole, superuser: bool) -> User:
+    user = User(
+        username=f"acct-{uuid.uuid4().hex[:8]}",
+        email=email,
+        hashed_password="x",
+        is_active=True,
+        is_superuser=superuser,
+        role=role,
+    )
+    db_session.add(user)
+    db_session.commit()
+    db_session.refresh(user)
+    return user
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    ("role_mapping", "groups"),
+    [({}, ""), ({"readers": "viewer"}, "readers")],
+    ids=["no-group-mapped", "group-mapped-to-viewer"],
+)
+def test_a_superuser_account_is_sso_account_and_is_left_as_it_was(
+    browser, config, dashboard, db_session, email, caplog, role_mapping, groups
+):
+    """No hand-off code, whether or not a group is mapped; a mapped group is
+    not applied, so the role and the superuser flag are as they were, and no
+    audit entry is written. The API log says why."""
+    root = _account(db_session, email, UserRole.ADMIN, superuser=True)
+
+    with caplog.at_level(logging.WARNING):
+        resp = _sign_in(browser, config.org_domain)
+
+    params = _error_of(resp)
+    assert params["sso_error"] == "sso_account"
+    assert params["request_id"]
+    assert "#code=" not in resp.headers["location"]
+    db_session.expire_all()
+    row = db_session.get(User, root.id)
+    assert (row.role, row.is_superuser) == (UserRole.ADMIN, True)
+    assert db_session.query(AuditLog).filter(AuditLog.entity_id == root.id).all() == []
+    assert any(
+        str(root.id) in r.getMessage() and "superuser" in r.getMessage()
+        for r in caplog.records
+        if r.levelno == logging.WARNING
+    ), caplog.text
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("role_mapping", [{"readers": "viewer"}])
+@pytest.mark.parametrize("groups", ["readers"])
+@pytest.mark.parametrize("role", [UserRole.ADMIN, UserRole.VIEWER])
+def test_an_admin_or_a_viewer_in_the_domain_still_signs_in(
+    browser, config, dashboard, db_session, email, role_mapping, groups, role
+):
+    """The control: the same sign-in for an account that is not a superuser."""
+    account = _account(db_session, email, role, superuser=False)
+
+    signed_in = _exchange(browser, _sign_in(browser, config.org_domain))
+
+    assert (signed_in["id"], signed_in["email"]) == (str(account.id), email)
+    # The mapped group applies to them.
+    assert signed_in["role"] == "VIEWER"

@@ -104,14 +104,23 @@ def test_a_mapped_group_still_sets_the_role(db_session: Session):
 
 
 def test_superuser_is_never_changed(db_session: Session):
+    """A superuser account is not signed in through SSO: the sign-in is refused
+    before a mapped group is applied, so the account is as it was."""
     domain = _domain()
     cfg = _config(db_session, domain, role_mapping={"readers": "viewer"})
     root = _user(db_session, f"root@{domain}", role=UserRole.ADMIN, superuser=True)
 
-    sso_service.provision_user(db_session, _info(f"root@{domain}", ["readers"]), cfg)
+    with pytest.raises(sso_service.SSORefusal) as exc_info:
+        sso_service.provision_user(
+            db_session, _info(f"ROOT@{domain}", ["readers"]), cfg
+        )
 
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail == sso_service.SUPERUSER_ACCOUNT_DETAIL
+    assert exc_info.value.sso_error == sso_service.SSO_ACCOUNT
     db_session.expire_all()
-    assert db_session.get(User, root.id).is_superuser is True
+    row = db_session.get(User, root.id)
+    assert (row.is_superuser, row.role) == (True, UserRole.ADMIN)
 
 
 # ---------------------------------------------------------------------------
