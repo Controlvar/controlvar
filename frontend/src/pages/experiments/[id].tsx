@@ -810,6 +810,8 @@ export default function ExperimentDetailPage() {
                               // Text only: React escapes it, so a configuration holding markup shows as written.
                               <pre
                                 tabIndex={0}
+                                role="group"
+                                aria-label={`Configuration of ${variant.name}`}
                                 className="max-h-40 max-w-xs overflow-auto whitespace-pre-wrap break-all rounded bg-slate-50 p-2 font-mono text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-600"
                                 data-testid={`variant-configuration-view-${index}`}
                               >
@@ -915,7 +917,12 @@ export default function ExperimentDetailPage() {
               ) : null}{' '}
               to <code className="font-mono">/api/v1/tracking/track</code>.
             </p>
-            <pre className="bg-slate-900 text-slate-100 text-xs rounded-md p-3 overflow-x-auto">
+            <pre
+              tabIndex={0}
+              role="group"
+              aria-label="Example request"
+              className="bg-slate-900 text-slate-100 text-xs rounded-md p-3 overflow-x-auto focus:outline-none focus:ring-2 focus:ring-blue-600"
+            >
               {`curl -X POST "$API_URL/api/v1/tracking/assign" \\
   -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \\
   -d '{"experiment_key": "${experiment.key}", "user_id": "user-123"}'`}
