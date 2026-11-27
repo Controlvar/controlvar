@@ -257,7 +257,7 @@ steps:
               - heading "All Metrics" [level=3]
       cells:
         - row: control(control)
-          also: Hero CTA click-throughprimary
+          also: Hero CTA click-through primary
           column: Sample Size
           delta:
             since: control-users-after
@@ -265,7 +265,7 @@ steps:
           quote: false
           reason: the results table's row for the control arm of the primary metric, as the page labels them
         - row: video_hero
-          also: Hero CTA click-throughprimary
+          also: Hero CTA click-through primary
           column: Sample Size
           delta:
             since: video-users-after

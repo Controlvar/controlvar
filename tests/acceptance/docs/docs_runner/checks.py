@@ -163,7 +163,7 @@ def _moved(delta) -> str:
 
 def cell_row(cell) -> str:
     """The row a cell is read in, for the log: ``"one_page"``, or with
-    ``also`` ``"one_page" / "Purchaseprimary"`` (one row per metric)."""
+    ``also`` ``"one_page" / "Purchase primary"`` (one row per metric)."""
     if cell.also is None:
         return f'"{cell.row}"'
     return f'"{cell.row}" / "{cell.also}"'

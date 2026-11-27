@@ -397,13 +397,11 @@ describe('the notice, from answers the API gave', () => {
     // jsdom's name computation puts a space between inline elements, which a
     // browser does not: the tags are set apart by margin only, and Chromium's
     // accessibility tree read "Purchaseprimarywithin 7 days". So the text the
-    // browser concatenates is pinned too. "Purchaseprimary" is the table's
-    // older run-together name, which the docs journeys find the row by; only
-    // the window tag is set apart here.
+    // browser concatenates is pinned too: each tag carries an sr-only space.
     const cells = (name: string) => screen.getAllByRole('cell', { name });
     for (const [name, text] of [
-      ['Purchase primary within 7 days', 'Purchaseprimary within 7 days'],
-      ['Refund lower is better within 36 hours', 'Refundlower is better within 36 hours'],
+      ['Purchase primary within 7 days', 'Purchase primary within 7 days'],
+      ['Refund lower is better within 36 hours', 'Refund lower is better within 36 hours'],
       ['Visit', 'Visit'],
     ] as const) {
       expect(cells(name)).toHaveLength(2);
