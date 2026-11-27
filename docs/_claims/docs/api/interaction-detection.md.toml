@@ -5,19 +5,19 @@ document = "docs/api/interaction-detection.md"
 
 [[unit]]
 text = "Experiment Interaction Detection"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Two experiments that run at the same time usually share users."
-by = ["exempt:baseline"]
+by = ["exempt:theory"]
 
 [[unit]]
 text = "That is normal and harmless unless they interact: one experiment's effect is different depending on which variant of the other a user sees."
-by = ["exempt:baseline"]
+by = ["exempt:theory"]
 
 [[unit]]
 text = "This page shows how to measure the overlap and how to test for an interaction."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "GET /api/v1/interactions/scan (stable) lists the pairs of active experiments that share many users."
@@ -66,19 +66,19 @@ by = ["test:backend/tests/integration/api/test_metric_window_results.py::test_th
 
 [[unit]]
 text = "An interaction does not mean either experiment is wrong."
-by = ["exempt:baseline"]
+by = ["exempt:theory"]
 
 [[unit]]
 text = "Each experiment's own result is still a valid average over the other's current split; it may change once the other experiment ships one of its variants."
-by = ["exempt:baseline"]
+by = ["exempt:theory"]
 
 [[unit]]
 text = "What gets detected"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Issue | Description | In this release"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "User overlap | Users assigned to both experiments | Measured, on both routes"
@@ -101,23 +101,23 @@ by = ["test:backend/tests/unit/services/test_interaction_detection_service.py::T
 
 [[unit]]
 text = "Two overlapping experiments"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Run the commands on this page in one terminal, in order, against the stack from the Quick Start."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Each uses the shell variables set by the ones before it."
-by = ["exempt:baseline"]
+by = ["docex:docs/api/interaction-detection.md#\"shared_users\":40"]
 
 [[unit]]
 text = "Log in first:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "It prints \"ADMIN\"."
-by = ["exempt:baseline"]
+by = ["docex:docs/api/interaction-detection.md#\"ADMIN\""]
 
 [[unit]]
 text = "The demo data's running experiments share no users, so this creates two experiments that will, and starts them."
@@ -125,19 +125,19 @@ by = ["docex:docs/api/interaction-detection.md#\"shared_users\":0"]
 
 [[unit]]
 text = "This saves their ids in $PRICING_ID and $ONBOARDING_ID:"
-by = ["exempt:baseline"]
+by = ["docex:docs/api/interaction-detection.md#active"]
 
 [[unit]]
 text = "It prints active twice."
-by = ["exempt:baseline"]
+by = ["docex:docs/api/interaction-detection.md#active"]
 
 [[unit]]
 text = "Then the same 40 users enter both, through the tracking API."
-by = ["exempt:baseline"]
+by = ["docex:docs/api/interaction-detection.md#80 true"]
 
 [[unit]]
 text = "That takes an API key, which this saves in $KEY."
-by = ["exempt:baseline"]
+by = ["docex:docs/api/interaction-detection.md#80 true"]
 
 [[unit]]
 text = "The key has the sdk:ruleset scope, which the batch assignment below needs; keep such a key on a server:"
@@ -149,7 +149,7 @@ by = ["docex:docs/api/interaction-detection.md#80 true"]
 
 [[unit]]
 text = "GET /api/v1/interactions/scan"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Checks every pair of active experiments and returns the pairs whose overlap is above 0.3, with a count of the high-risk ones:"
@@ -176,7 +176,7 @@ by = ["test:backend/tests/unit/services/test_interaction_detection_service.py::T
 
 [[unit]]
 text = "To test one pair, call the pair route."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "The scan lists only pairs whose Jaccard overlap is above 0.3, so a small experiment that sits entirely inside a large one has a low overlap and is not listed."
@@ -191,7 +191,7 @@ by = [
 
 [[unit]]
 text = "GET /api/v1/interactions/{exp_a_id}/"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The overlap of two experiments, in any status, and the interaction test (beta)."
@@ -199,7 +199,7 @@ by = ["test:backend/tests/integration/api/test_interaction_pair_any_status.py::t
 
 [[unit]]
 text = "With only the 40 shared users, nothing can be tested yet:"
-by = ["exempt:baseline"]
+by = ["docex:docs/api/interaction-detection.md#\"reasons\":[\"too_few_shared_users\",\"too_few_shared_users\"]"]
 
 [[unit]]
 text = "It prints an overlap of 1 and 40 shared users, and both rows say too_few_shared_users: the 40 users split about 10 per combination of variants, and a row is tested only when every combination has at least min_users_per_cell (100) users."
@@ -207,7 +207,7 @@ by = ["docex:docs/api/interaction-detection.md#\"shared_users\":40"]
 
 [[unit]]
 text = "This enrols 1,000 more visitors in both experiments, in one request per experiment (Assign a customer list to an experiment), and saves the two answers in $PRICING and $ONBOARDING:"
-by = ["exempt:baseline"]
+by = ["docex:docs/api/interaction-detection.md#{\"assigned\":1000,\"holdout\":0,\"mutual_exclusion\":0,\"targeting\":0}"]
 
 [[unit]]
 text = "It prints \"assigned\":1000 for each experiment."
@@ -215,27 +215,27 @@ by = ["docex:docs/api/interaction-detection.md#{\"assigned\":1000,\"holdout\":0,
 
 [[unit]]
 text = "Now plant an interaction: annual-first pricing lifts signups only for visitors who did not get the checklist, and the checklist lifts signups whatever the pricing."
-by = ["exempt:baseline"]
+by = ["exempt:example"]
 
 [[unit]]
 text = "Signup rates:"
-by = ["exempt:baseline"]
+by = ["exempt:example"]
 
 [[unit]]
 text = "pricing: 30% for annual_first visitors who are in onboarding's control, 10% for everyone else;"
-by = ["exempt:baseline"]
+by = ["exempt:example"]
 
 [[unit]]
 text = "onboarding: 20% for checklist visitors, 10% for everyone else."
-by = ["exempt:baseline"]
+by = ["exempt:example"]
 
 [[unit]]
 text = "Each signup is tagged with the experiment it counts for."
-by = ["exempt:baseline"]
+by = ["docex:docs/api/interaction-detection.md#true"]
 
 [[unit]]
 text = "This joins the two batch answers by position, picks every visitor's signups, and sends them 100 at a time:"
-by = ["exempt:baseline"]
+by = ["docex:docs/api/interaction-detection.md#true"]
 
 [[unit]]
 text = "It prints true: more than 250 signups were stored."
@@ -243,7 +243,7 @@ by = ["docex:docs/api/interaction-detection.md#true"]
 
 [[unit]]
 text = "Ask the pair route again, and print each row's experiment, treatment and decision:"
-by = ["exempt:baseline"]
+by = ["docex:docs/api/interaction-detection.md#[\"pricing-page\",\"annual_first\",true]"]
 
 [[unit]]
 text = "It prints [\"pricing-page\",\"annual_first\",true]: annual-first pricing's lift differs across the onboarding variants, as planted."
@@ -251,7 +251,7 @@ by = ["docex:docs/api/interaction-detection.md#[\"pricing-page\",\"annual_first\
 
 [[unit]]
 text = "And [\"onboarding-flow\",\"checklist\",false]: the checklist's lift is about the same whatever the pricing."
-by = ["exempt:baseline"]
+by = ["docex:docs/api/interaction-detection.md#[\"onboarding-flow\",\"checklist\",false]"]
 
 [[unit]]
 text = "The p-values themselves vary a little from one stack to another, because which visitor lands in which variant depends on the order the variants are read in; the two decisions do not."
@@ -259,7 +259,7 @@ by = ["docex:docs/api/interaction-detection.md#[\"pricing-page\",\"annual_first\
 
 [[unit]]
 text = "The pricing row of the response looks like this when the variants are read in the order they were created (numbers rounded; arms shortened to its first entry, onboarding's control: +22.2 percentage points there, -0.7 in checklist):"
-by = ["exempt:baseline"]
+by = ["exempt:example"]
 
 [[unit]]
 text = "Two experiments with no shared users still answer: the demo data's two running experiments, looked up by their keys, give one row each with no_shared_users:"
@@ -271,11 +271,11 @@ by = ["docex:docs/api/interaction-detection.md#\"shared_users\":0"]
 
 [[unit]]
 text = "What the test measures"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "For one treatment of experiment A, take the users who are in both experiments, and split them by A's control or treatment and by B's variant."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/services/test_interaction_page_claims.py::test_a_change_in_who_enters_a_can_read_as_an_interaction"]
 
 [[unit]]
 text = "In each of B's variants the treatment's lift is its conversion rate minus the control's, in percentage points (effect in each entry of arms; 0.05 is 5 percentage points)."
@@ -283,11 +283,14 @@ by = ["test:backend/tests/unit/services/test_interaction_golden.py::test_the_con
 
 [[unit]]
 text = "The test asks whether that lift is the same in every variant of B."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/services/test_interaction_golden.py::test_no_interaction_on_the_difference_scale_gives_x2_zero"]
 
 [[unit]]
 text = "It fits the model in which it is (one baseline rate per variant of B plus one common lift) by maximum likelihood, and compares the counts with that model: statistic is Pearson's X² and degrees_of_freedom is the number of B's variants minus one."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/unit/services/test_interaction_analysis.py::test_s1_hard_matches_the_profile_likelihood",
+    "test:backend/tests/unit/services/test_interaction_analysis.py::test_s1_matches_statsmodels_on_mild_tables",
+]
 
 [[unit]]
 text = "Because the lift is measured in percentage points, a constant relative lift is an interaction."
@@ -309,7 +312,7 @@ by = ["test:backend/tests/unit/services/test_interaction_golden.py::test_the_con
 
 [[unit]]
 text = "The decision"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "p_value is the test's p-value, uncorrected."
@@ -324,7 +327,7 @@ by = [
 
 [[unit]]
 text = "It is null under none."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/services/test_interaction_pair_analysis.py::test_correction_none_leaves_corrected_null_and_decides_on_p"]
 
 [[unit]]
 text = "is_significant is true when the corrected p-value (the p-value under none) is below 1 − confidence_level, the experiment's stored level."
@@ -358,7 +361,7 @@ by = ["test:backend/tests/unit/services/test_interaction_page_claims.py::test_th
 
 [[unit]]
 text = "Rows that are not tested"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Every treatment of both experiments has a row; a row that cannot be tested is listed with an unavailable_reason and null results, never dropped."
@@ -369,11 +372,11 @@ by = [
 
 [[unit]]
 text = "The first reason that applies wins, in this order:"
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/services/test_interaction_pair_analysis.py::test_the_reason_order_is_published"]
 
 [[unit]]
 text = "unavailable_reason | Applies to | Meaning"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "mutual_exclusion_group | the experiment | Both experiments are in the same mutual exclusion group now (mutual_exclusion_group_id), whatever the group's status. The overlap is still reported."
@@ -427,11 +430,11 @@ by = [
 
 [[unit]]
 text = "When an interaction is found"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Read the lift in each of B's variants in arms, and consider deciding B first: A's result is still a valid average over B's current split, but it may change once B ships one variant."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "The test can also flag an interaction that is not there when one experiment changes who enters the other, for example when B's treatment sends more visitors to A's page."
@@ -439,7 +442,7 @@ by = ["test:backend/tests/unit/services/test_interaction_page_claims.py::test_a_
 
 [[unit]]
 text = "Check it by comparing, for each of B's variants, the share of its users who are also in A."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "In A's row, add n_control and n_treatment of that variant's entry in arms (for an A with more than one treatment, add each row's n_treatment and the control once), and divide by that variant's sample_size in GET /api/v1/results/{exp_b_id}: the primary metric's entry in metrics, under variants."
@@ -447,23 +450,23 @@ by = ["docex:docs/api/interaction-detection.md#{\"control\":1,\"checklist\":1}"]
 
 [[unit]]
 text = "Shares that differ between B's variants mean B changed who entered A."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/services/test_interaction_page_claims.py::test_a_change_in_who_enters_a_can_read_as_an_interaction"]
 
 [[unit]]
 text = "A ramp-up or a bandit changes those shares by design."
-by = ["exempt:baseline"]
+by = ["exempt:theory"]
 
 [[unit]]
 text = "On the pair above, every user is in both experiments, so each share is 1:"
-by = ["exempt:baseline"]
+by = ["docex:docs/api/interaction-detection.md#{\"control\":1,\"checklist\":1}"]
 
 [[unit]]
 text = "Errors"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Status | When | detail"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "403 | a VIEWER | Interaction analysis needs the ANALYST, DEVELOPER or ADMIN role."
@@ -489,7 +492,7 @@ by = [
 
 [[unit]]
 text = "Overlap"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Both routes compute the overlap from the experiments' assignments, using Jaccard similarity:"
@@ -504,7 +507,7 @@ by = ["test:backend/tests/unit/services/test_interaction_pair_analysis.py::test_
 
 [[unit]]
 text = "For a small experiment inside a large one the overlap is low and share_of_a is 1."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/services/test_interaction_pair_analysis.py::test_a_small_experiment_inside_a_large_one_reports_its_real_overlap"]
 
 [[unit]]
 text = "has_significant_overlap means an overlap above 0.3, not a statistical test."
@@ -515,7 +518,7 @@ by = [
 
 [[unit]]
 text = "Risk levels"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "/scan's overall_risk describes how much two experiments share users, not whether they interact."
@@ -523,11 +526,11 @@ by = ["test:backend/tests/integration/api/test_analysis_beta_labels.py"]
 
 [[unit]]
 text = "The pair route does not return it."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/services/test_interaction_pair_analysis.py::test_a_small_experiment_inside_a_large_one_reports_its_real_overlap"]
 
 [[unit]]
 text = "Level | Overlap"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "low | 0.3 or less"
@@ -543,11 +546,11 @@ by = ["test:backend/tests/unit/core/test_analysis_status.py"]
 
 [[unit]]
 text = "Permissions"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Action | Who"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Scan and pair analysis | ADMIN, DEVELOPER or ANALYST"
