@@ -73,7 +73,7 @@ const ACTION_META: Record<
     label: 'Archive',
     pending: 'Archiving…',
     className: 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50',
-    confirm: 'Archive this experiment? It will be hidden from the default list.',
+    confirm: 'Archive this experiment? Its status becomes Archived.',
   },
 };
 
