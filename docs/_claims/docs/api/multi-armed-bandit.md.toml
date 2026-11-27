@@ -5,7 +5,7 @@ document = "docs/api/multi-armed-bandit.md"
 
 [[unit]]
 text = "Multi-Armed Bandit"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Multi-armed bandit (MAB) experiments dynamically reallocate traffic toward better-performing variants as data accumulates, rather than maintaining fixed allocations throughout the experiment."
@@ -16,7 +16,7 @@ by = [
 
 [[unit]]
 text = "Algorithms"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Each algorithm turns every variant's pulls and successes into a weight; the weights add up to 1 and decide where new users go (see How the weights affect traffic)."
@@ -49,7 +49,7 @@ by = [
 
 [[unit]]
 text = "UCB1 (Upper Confidence Bound)"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Each variant's score is mean + sqrt(2 ln(total_pulls) / variant_pulls), and its weight is its score divided by the sum of the scores, so every variant keeps some traffic."
@@ -61,7 +61,7 @@ by = ["test:backend/tests/integration/api/test_bandit_weights_routes.py::test_uc
 
 [[unit]]
 text = "Epsilon-Greedy"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The variant with the highest conversion rate gets the weight 0.9 + 0.1 / n, and each of the other variants 0.1 / n, for n variants: epsilon is 0.1, and it is not a setting."
@@ -73,7 +73,7 @@ by = [
 
 [[unit]]
 text = "Creating a MAB Experiment"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "To create one in the dashboard, choose Bandit as the experiment type on the new-experiment form (guided setup or the single-page form) and pick the Optimization algorithm."
@@ -88,11 +88,11 @@ by = ["exempt:navigation"]
 
 [[unit]]
 text = "Run the commands on this page in one terminal, in order, against the stack from the Quick Start."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Each uses the shell variables set by the ones before it."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Log in first; creating an experiment takes permission to create experiments, such as the DEVELOPER or ADMIN role:"
@@ -103,7 +103,7 @@ by = [
 
 [[unit]]
 text = "It prints \"ADMIN\"."
-by = ["exempt:baseline"]
+by = ["docex:docs/api/multi-armed-bandit.md#\"ADMIN\""]
 
 [[unit]]
 text = "Set optimization_type to one of thompson_sampling, ucb1 or epsilon_greedy when you create the experiment."
@@ -115,7 +115,7 @@ by = ["test:backend/tests/integration/services/test_bandit_scheduler_db.py::test
 
 [[unit]]
 text = "This saves the experiment's id in $EXP_ID:"
-by = ["exempt:baseline"]
+by = ["docex:docs/api/multi-armed-bandit.md#\"name\": \"CTA Button Bandit\""]
 
 [[unit]]
 text = "The experiment is created in draft."
@@ -130,11 +130,11 @@ by = [
 
 [[unit]]
 text = "API Reference"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "GET /api/v1/bandit/"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Returns the current bandit state: the algorithm, and each variant's weight, pulls, successes and conversion rate."
@@ -151,7 +151,7 @@ by = [
 
 [[unit]]
 text = "This also saves each variant's id, for the weight override further down:"
-by = ["exempt:baseline"]
+by = ["docex:docs/api/multi-armed-bandit.md#\"algorithm\": \"thompson_sampling\""]
 
 [[unit]]
 text = "Before any update has run, every variant has an equal weight."
@@ -159,15 +159,15 @@ by = ["test:backend/tests/unit/api/test_bandit_endpoints.py::TestGetBanditStatus
 
 [[unit]]
 text = "With traffic, a response looks like this:"
-by = ["exempt:baseline"]
+by = ["exempt:example"]
 
 [[unit]]
 text = "Response Fields"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Field | Description"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "algorithm | The experiment's optimization_type"
@@ -220,7 +220,7 @@ by = ["test:backend/tests/unit/api/test_bandit_endpoints.py::TestGetBanditStatus
 
 [[unit]]
 text = "POST /api/v1/bandit/{experiment_id}/update"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Recalculates the weights now, outside the scheduler cycle."
@@ -247,7 +247,7 @@ by = ["docex:docs/api/multi-armed-bandit.md#\"n_samples\": 10000"]
 
 [[unit]]
 text = "PUT /api/v1/bandit/{experiment_id}/weights"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Overrides the variant weights."
@@ -344,7 +344,7 @@ by = ["test:frontend/src/tests/pages/experiment-detail-bandit-history.test.tsx::
 
 [[unit]]
 text = "Scheduler"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The bandit scheduler (BanditSchedulerRunner in backend/app/core/bandit_scheduler.py) starts with the API process and recalculates weights for every ACTIVE experiment whose optimization_type is not fixed."
@@ -364,15 +364,18 @@ by = ["test:backend/tests/unit/services/test_bandit_scheduler.py::TestBanditSche
 
 [[unit]]
 text = "Where the counts come from"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "For each variant the scheduler needs pulls (assignments) and successes (conversions)."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/services/test_bandit_scheduler_db.py::test_postgres_fallback_counts_converting_users_as_results_does"]
 
 [[unit]]
 text = "Sources are tried in order:"
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/unit/services/test_bandit_scheduler.py::TestDynamoDBCompleteness::test_dynamodb_used_when_postgres_has_no_pulls",
+    "test:backend/tests/unit/services/test_bandit_scheduler.py::TestDynamoDBCompleteness::test_dynamodb_unavailable_falls_through_to_postgres",
+]
 
 [[unit]]
 text = "PostgreSQL: pulls = assignments rows per variant; successes = converting users, counted exactly as /results counts them: users assigned to the variant with at least one event, tagged with that variant, whose event_name matches the experiment's primary metric (see the event-matching rule in the tracking API docs), inside the primary metric's conversion window when it has one (Conversion window)."
@@ -460,7 +463,7 @@ by = ["test:backend/tests/unit/services/test_bandit_scheduler.py::TestBanditSche
 
 [[unit]]
 text = "How the weights affect traffic"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "POST /api/v1/tracking/assign reads the latest BanditState for bandit experiments and routes new users according to the current weights (a deterministic hash of the user id is looked up in the cumulative weight distribution, so repeated calls agree before the assignment row exists)."
@@ -486,11 +489,11 @@ by = ["test:backend/tests/unit/services/test_bandit_routing.py::TestBanditChoose
 
 [[unit]]
 text = "Permissions"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Action | Minimum Role"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "View bandit status | VIEWER"
