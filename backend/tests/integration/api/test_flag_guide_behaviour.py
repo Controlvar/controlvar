@@ -33,6 +33,7 @@ from backend.tests.integration.api.route_helpers import (
 pytestmark = [pytest.mark.integration, pytest.mark.regression]
 
 FLAGS = "/api/v1/feature-flags"
+ROLLOUT_KEY = "guide-rollout"
 
 
 @pytest.fixture(autouse=True)
@@ -100,7 +101,10 @@ def _enabled(client, key, flag_key, users):
 
 def test_raising_the_rollout_adds_users_and_takes_none_away(client, admin):
     key = api_key(client, admin)
-    flag = _flag(client, admin, rollout_percentage=5, is_active=True)
+    # A fixed flag key: which users a percentage turns on follows from the
+    # flag's key, so with a new key on every run the counts were a random draw
+    # that fell outside the bounds below about once in 3,900 runs.
+    flag = _flag(client, admin, key=ROLLOUT_KEY, rollout_percentage=5, is_active=True)
     users = [f"rollout-user-{i}" for i in range(600)]
     seen = {}
     for percentage in (5, 50, 100):
@@ -116,6 +120,9 @@ def test_raising_the_rollout_adds_users_and_takes_none_away(client, admin):
     assert seen[5] <= seen[50] <= seen[100] == set(users)
     assert 0.02 * len(users) < len(seen[5]) < 0.09 * len(users)
     assert 0.42 * len(users) < len(seen[50]) < 0.58 * len(users)
+    # This key's counts: the users whose percent_bucket("<user>:<key>") is
+    # below 5, and below 50.
+    assert (len(seen[5]), len(seen[50])) == (32, 304)
 
 
 def test_only_the_first_problem_in_the_rules_is_reported(client, admin):
