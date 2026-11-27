@@ -14,6 +14,7 @@ import {
   configurationProblems,
   createInitialFormState,
   experimentFormReducer,
+  metricWindowProblem,
   splitUrlProblem,
   validateForm,
 } from '@/components/experiments/new/formState';
@@ -92,6 +93,11 @@ export default function NewExperimentPage() {
       setError({ message: problem });
       if (configurationProblems(state.variants).some((p) => p !== null)) {
         setRevealProblems((n) => n + 1);
+      }
+      // A conversion window that cannot be saved: its box takes focus, where the view shows it.
+      const windowProblem = metricWindowProblem(state.metrics);
+      if (windowProblem && windowProblem.message === problem) {
+        document.querySelector<HTMLElement>(`[data-testid="metric-window-${windowProblem.index}"]`)?.focus();
       }
       return;
     }

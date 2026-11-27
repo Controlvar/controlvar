@@ -160,6 +160,14 @@ export interface VariantResult {
   incremental_impact?: number | null;
   /** `absolute_difference_ci` times `sample_size`, not adjusted; null when it is. */
   incremental_impact_ci?: [number, number] | null;
+  /**
+   * Of this variant's users, how many had less than the metric's conversion
+   * window (beta, #1934) when the results were computed, or before a
+   * completed experiment ended. Null when the metric has no window, and for a
+   * paused experiment or an archived one with no end. Absent from a server
+   * older than the field: the page then says nothing about the window.
+   */
+  open_window_users?: number | null;
 }
 
 /**
@@ -188,6 +196,12 @@ export interface MetricResult {
    * (`analysedAsMean`).
    */
   analysis?: MetricAnalysis;
+  /**
+   * The conversion window (beta, #1934) the numbers were counted with: only
+   * events in this many hours from each user's assignment count. Null with no
+   * window; absent from a server older than the field.
+   */
+  conversion_window_hours?: number | null;
   variants: VariantResult[];
 }
 

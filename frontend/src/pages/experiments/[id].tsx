@@ -36,6 +36,7 @@ import { DemoNote } from '@/components/DemoNote';
 import { DEMO_EXPERIMENTS_ACTION } from '@/utils/demoMode';
 import { correctionName, formatConfidence } from '@/components/results/shared/analysisSettings';
 import { parseApiTimestamp } from '@/utils/apiTimestamp';
+import { windowPageLine } from '@/utils/conversionWindow';
 
 /** Lifecycle transitions exposed per status (mirrors the backend guards). */
 export type LifecycleAction = 'start' | 'pause' | 'complete' | 'archive';
@@ -851,6 +852,11 @@ export default function ExperimentDetailPage() {
                           event <code className="font-mono text-slate-700">{metric.event_name}</code>
                         </span>
                         <span>{METRIC_TYPE_LABELS[metric.metric_type as MetricType] ?? metric.metric_type}</span>
+                        {typeof metric.conversion_window_hours === 'number' && (
+                          <span data-testid="metric-window-line">
+                            {windowPageLine(metric.conversion_window_hours)}
+                          </span>
+                        )}
                       </div>
                     </li>
                   ))}

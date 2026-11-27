@@ -127,6 +127,8 @@ export interface MetricInput {
   expected_effect?: number;
   event_value_path?: string;
   lower_is_better?: boolean;
+  /** Sent only when the form has a window; without it the metric has none. */
+  conversion_window_hours?: number;
 }
 
 /**

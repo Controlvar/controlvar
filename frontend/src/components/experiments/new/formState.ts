@@ -28,6 +28,7 @@ import {
   DEFAULT_CONFIDENCE_LEVEL,
   DEFAULT_CORRECTION_METHOD,
 } from '@/components/results/shared/analysisSettings';
+import { parseWindowHours, windowRefusal } from '@/utils/conversionWindow';
 import { plannedEffectFraction, plannedEffectProblem } from './estimate';
 import {
   balanceStateFromStored,
@@ -78,6 +79,13 @@ export interface MetricFormData {
    */
   lower_is_better?: boolean;
   /**
+   * The conversion window in hours (beta, #1934), as typed. Absent or blank
+   * means none: a create then carries no `conversion_window_hours` key, and the
+   * design edit sends null. Otherwise it must be a whole number from 1 to
+   * 8,760 (`parseWindowHours`), sent as a number.
+   */
+  conversion_window_text?: string;
+  /**
    * The stored fields this form does not show, kept as they were read so the
    * design edit sends them back unchanged (`buildDesignPayload`). Set only by
    * `formStateFromExperiment`; a metric added in the form has none. The
@@ -103,12 +111,6 @@ export interface MetricCarried {
    */
   expected_effect: number | null;
   event_value_path: string | null;
-  /**
-   * The metric's conversion window in hours (beta, #1934), as stored. No
-   * editor shows it yet; carried so a save does not clear it, since a PUT
-   * that leaves it out removes the window.
-   */
-  conversion_window_hours: number | null;
 }
 
 export interface ExperimentFormState {
@@ -474,7 +476,18 @@ export function checkMetrics(metrics: MetricFormData[]): string | null {
   const names = metrics.map((m) => m.name.trim());
   if (new Set(names).size !== names.length) return 'Metric names must be unique.';
   if (!metrics.some((m) => m.is_primary)) return 'Choose a primary metric.';
-  return null;
+  return metricWindowProblem(metrics)?.message ?? null;
+}
+
+/**
+ * The first metric whose conversion window cannot be saved, and the refusal
+ * that names it, or null. `checkMetrics` returns the same words last, after
+ * every other metric check, so a view that focuses the box compares its
+ * message with this one.
+ */
+export function metricWindowProblem(metrics: MetricFormData[]): { index: number; message: string } | null {
+  const index = metrics.findIndex((m) => !parseWindowHours(m.conversion_window_text).ok);
+  return index < 0 ? null : { index, message: windowRefusal(metrics[index].name.trim()) };
 }
 
 /** Client-side mirror of the `ExperimentCreate` validators; returns the first problem. */
@@ -666,6 +679,9 @@ export function buildCreatePayload(state: ExperimentFormState): CreateExperiment
       if (m.is_primary && plannedEffect !== undefined) metric.expected_effect = plannedEffect;
       // Sent only when true; without it the API stores false.
       if (m.lower_is_better === true) metric.lower_is_better = true;
+      // Sent only when set, as a number; blank is no window, and no key.
+      const typed = parseWindowHours(m.conversion_window_text);
+      if (typed.ok && typed.hours !== null) metric.conversion_window_hours = typed.hours;
       return metric;
     }),
     confidence_level: state.confidenceLevel,
@@ -733,13 +749,14 @@ function metricFromStored(metric: ExperimentMetric, holdsPlannedEffect: boolean)
     metric_type: metric.metric_type as MetricType,
     is_primary: metric.is_primary,
     lower_is_better: metric.lower_is_better === true,
+    // Shown in its box, so a save sends it back unless it is changed there.
+    conversion_window_text: metric.conversion_window_hours == null ? '' : String(metric.conversion_window_hours),
     carried: {
       description: metric.description ?? null,
       aggregation_method: metric.aggregation_method ?? null,
       minimum_sample_size: metric.minimum_sample_size ?? null,
       expected_effect: holdsPlannedEffect ? null : (metric.expected_effect ?? null),
       event_value_path: metric.event_value_path ?? null,
-      conversion_window_hours: metric.conversion_window_hours ?? null,
     },
   };
 }
@@ -771,7 +788,8 @@ export function formStateFromExperiment(experiment: Experiment): ExperimentFormS
  * - A metric carries what the editor shows, plus `carried` as it was read.
  *   `aggregation_method` and `minimum_sample_size` are left out when they
  *   have no value (the API refuses null there and stores its default); the
- *   Optional fields are sent as null.
+ *   Optional fields are sent as null, `conversion_window_hours` (#1934)
+ *   among them when its box is blank.
  * - The primary metric's `expected_effect` is `designPlannedEffect`, so it
  *   moves to a new primary, as `buildCreatePayload` puts the planned effect on
  *   the primary only. With no stored primary, each metric keeps its own.
@@ -794,6 +812,8 @@ export function buildDesignPayload(state: ExperimentFormState): ExperimentDesign
   const metrics = state.metrics.map((m): DesignMetric => {
     const carried = m.carried;
     const takesPlan = m.is_primary && state.designPlannedEffect !== undefined;
+    // Validation (`checkDesign`) refuses a window that does not parse before this is called.
+    const typed = parseWindowHours(m.conversion_window_text);
     const metric: DesignMetric = {
       name: m.name.trim(),
       description: carried?.description ?? null,
@@ -804,7 +824,7 @@ export function buildDesignPayload(state: ExperimentFormState): ExperimentDesign
       event_value_path: carried?.event_value_path ?? null,
       lower_is_better: m.lower_is_better === true,
       // Every save carries it: a PUT that leaves it out clears the stored window.
-      conversion_window_hours: carried?.conversion_window_hours ?? null,
+      conversion_window_hours: typed.ok ? typed.hours : null,
     };
     if (carried?.aggregation_method != null) metric.aggregation_method = carried.aggregation_method;
     if (carried?.minimum_sample_size != null) metric.minimum_sample_size = carried.minimum_sample_size;
@@ -826,7 +846,10 @@ export const ONE_PRIMARY = 'Only one metric can be the primary metric.';
 export type DesignField =
   | { list: 'variants' | 'metrics'; index: -1; field: 'add' }
   | { list: 'variants'; index: number; field: 'name' | 'traffic_allocation' | 'is_control' | 'configuration' }
-  | { list: 'metrics'; index: number; field: 'name' | 'event_name' | 'is_primary' };
+  | { list: 'metrics'; index: number; field: MetricField };
+
+/** A metric row's controls a refusal can be about. */
+export type MetricField = 'name' | 'event_name' | 'is_primary' | 'conversion_window_hours';
 
 export interface DesignProblem {
   message: string;
@@ -859,6 +882,9 @@ function metricProblemField(metrics: MetricFormData[]): DesignField {
   const names = metrics.map((m) => m.name.trim());
   const repeat = names.findIndex((name, i) => names.indexOf(name) !== i);
   if (repeat >= 0) return { list: 'metrics', index: repeat, field: 'name' };
+  if (!metrics.some((m) => m.is_primary)) return { list: 'metrics', index: 0, field: 'is_primary' };
+  const windowProblem = metricWindowProblem(metrics);
+  if (windowProblem) return { list: 'metrics', index: windowProblem.index, field: 'conversion_window_hours' };
   return { list: 'metrics', index: 0, field: 'is_primary' };
 }
 

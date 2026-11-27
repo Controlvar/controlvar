@@ -55,6 +55,11 @@ experiment in five steps:
   number.
 - With **Balance the split within groups** on, the Review step's **Variants** row ends **Balance:
   within** what you chose, such as `Platform (ios, android, web)`, or **Balance: off**.
+- On **Details**, each metric's **Conversion window in hours (beta, optional)** takes a whole
+  number from 1 to 8,760, or blank for none; **Next** refuses anything else, naming the metric, and
+  focuses the box. With a window on the primary metric, the **Estimate** step says that the
+  estimate counts users, not their windows. The Review step's line for a metric with a window
+  names it, as *conversion window 7 days*.
 - Only users who may create experiments see the form: ADMIN and DEVELOPER users,
   superusers, and in the full profile anyone whose custom role or direct grant gives
   `experiment (create)`. Anyone else sees a note saying so instead.

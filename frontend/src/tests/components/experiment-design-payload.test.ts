@@ -156,13 +156,13 @@ describe('formStateFromExperiment', () => {
         metric_type: 'revenue',
         is_primary: true,
         lower_is_better: true,
+        conversion_window_text: '168',
         carried: {
           description: 'Order value',
           aggregation_method: 'sum',
           minimum_sample_size: 500,
           expected_effect: null,
           event_value_path: 'amount',
-          conversion_window_hours: 168,
         },
       },
       {
@@ -171,13 +171,13 @@ describe('formStateFromExperiment', () => {
         metric_type: 'count',
         is_primary: false,
         lower_is_better: true,
+        conversion_window_text: '36',
         carried: {
           description: 'Client errors',
           aggregation_method: 'median',
           minimum_sample_size: 250,
           expected_effect: 0.03,
           event_value_path: 'count',
-          conversion_window_hours: 36,
         },
       },
     ]);
