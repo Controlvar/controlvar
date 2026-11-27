@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import os
 import re
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -799,8 +800,16 @@ def _run_step(
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir(exist_ok=True)
     for name in ("python3", "python"):
-        if not (bin_dir / name).exists():
-            (bin_dir / name).symlink_to(sys.executable)
+        # A shim, not a symlink: a virtualenv's python started through a
+        # link in another directory finds no pyvenv.cfg beside it, so it runs
+        # as the base interpreter, without the virtualenv's packages.
+        shim = bin_dir / name
+        if not shim.exists():
+            shim.write_text(
+                f'#!/bin/sh\nexec {shlex.quote(sys.executable)} "$@"\n',
+                encoding="utf-8",
+            )
+            shim.chmod(0o755)
     output = tmp_path / "github_output"
     output.touch()
     runner_temp = tmp_path / "runner_temp"
