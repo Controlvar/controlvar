@@ -1,0 +1,246 @@
+# U-OWNER: admin@demo.com, the Admin role and a superuser: the person who runs
+# the install for the team. The owner's day is people and access: an account
+# added, its role changed, an API key rotated, the global safety settings and
+# the owner's own notifications changed, the schedulers read, the audit log
+# filtered, and, in the full profile, a custom role and a workspace invitation;
+# the day ends by deactivating the account it added.
+#
+# Every change is made on its dashboard page (the custom role is given through
+# the RBAC API, as the Roles page says) and decided by what the API holds
+# afterwards. The account the day adds signs in, in a browser of its own, with
+# the temporary password the page showed, so its own session sees each change.
+# The day removes the account, keys, flag, custom role and workspace it made;
+# the global safety settings are put back as found, and the owner's
+# notification preferences keep what the day saved.
+id: U-OWNER
+role: ADMIN
+account: admin@demo.com
+goals:
+  - Give the right people the right access, and take it away.
+  - Rotate the team's API keys without a service losing access.
+  - Prove who changed what.
+day:
+  - n: 1
+    intent: add a user with the Developer role
+    layer: A
+    writes: true
+    oracles:
+      - id: u-owner.1.user-added
+        kind: api_state
+        expect: >-
+          Invite User sends POST /api/v1/users/, answered 201, and shows a
+          temporary password; the account reads back with that email, the
+          Developer role, no superuser flag and active, and the Users table
+          lists it so
+        source:
+          path: docs/auth/auth-user-guide.md
+          anchor: "creates an account with a temporary password, shown once"
+      - id: u-owner.1.creation-audited
+        kind: audit_entry
+        expect: >-
+          the audit log holds one user_create entry for the account, by the
+          owner
+        source:
+          path: docs/api/audit-logging.md
+          anchor: "`POST /users/`; `DELETE /users/{id}` and `DELETE /admin/users/{id}`"
+  - n: 2
+    intent: change the user's role to Analyst
+    layer: A
+    writes: true
+    oracles:
+      - id: u-owner.2.role-changed
+        kind: api_state
+        expect: >-
+          the user, signed in with the temporary password, is offered New
+          Experiment; Edit's Save sends PATCH /api/v1/admin/users/{id},
+          answered 200; the account reads back as an Analyst, the user's own
+          GET /api/v1/auth/me says ANALYST, and the next page the user opens
+          offers no New Experiment
+        source:
+          path: docs/auth/auth-user-guide.md
+          anchor: "**Edit** changes an account's role, whether it is active, or both."
+      - id: u-owner.2.change-audited
+        kind: audit_entry
+        expect: >-
+          the audit log holds one role_assign entry for the account, by the
+          owner, from DEVELOPER to ANALYST
+        source:
+          path: docs/api/audit-logging.md
+          anchor: "| `role_assign` | `user` | A superuser changes a user's role or superuser flag"
+  - n: 3
+    intent: create an API key, rotate it and revoke the old one
+    layer: A
+    writes: true
+    security: true
+    oracles:
+      - id: u-owner.3.old-key-refused
+        kind: api_state
+        expect: >-
+          two keys of one name are created on the API Keys page, each shown
+          once and each answered 200 by flag evaluation; after the old one is
+          revoked there, evaluation answers it 401 and the new one 200, and
+          the page lists only the new one, active
+        source:
+          path: docs/security/api-keys.md
+          anchor: "Create a new API key with the same name, scopes and environment as the old key."
+      - id: u-owner.3.keys-audited
+        kind: audit_entry
+        expect: >-
+          the audit log holds an api_key_create entry for each key and an
+          api_key_revoke entry for the old one, all by the owner
+        source:
+          path: docs/api/audit-logging.md
+          anchor: "| `api_key_create`, `api_key_revoke` | `api_key` | `POST /api-keys`, `DELETE /api-keys/{id}` |"
+  - n: 4
+    intent: change the global safety settings
+    layer: A
+    writes: true
+    oracles:
+      - id: u-owner.4.settings-saved
+        kind: api_state
+        expect: >-
+          Save sends POST /api/v1/safety/settings, answered 200; GET
+          /api/v1/safety/settings holds the typed error-rate and latency
+          thresholds and the automatic-rollback switch as it was, and the form
+          shows them after a reload
+        source:
+          path: docs/feature-flags/safety.md
+          anchor: "Global settings hold the automatic-rollback switch and the default metric thresholds"
+      - id: u-owner.4.save-audited
+        kind: audit_entry
+        expect: >-
+          the audit log holds one more safety_config_update entry, by the
+          owner, with the typed thresholds
+        source:
+          path: docs/api/audit-logging.md
+          anchor: "`POST /safety/settings` saves the global safety settings; one entry per save"
+  # Step 5: what the page shows when a read fails is not checked. Today both
+  # failures are hidden: "Loading preferences..." stays, and the log says "No
+  # delivery log entries found." The check lands with the fix.
+  - n: 5
+    intent: change one's own notification preferences
+    layer: A
+    writes: true
+    oracles:
+      - id: u-owner.5.preferences-saved
+        kind: api_state
+        expect: >-
+          Save sends PUT /api/v1/notifications/preferences, answered 200; GET
+          /api/v1/notifications/preferences holds the four choices, the Slack
+          channel and the email typed, and the form shows them after a reload
+        source:
+          path: docs/api/alerting.md
+          anchor: "Each user can store which events they want to be notified about"
+  - n: 6
+    intent: read the scheduler health
+    layer: A
+    oracles:
+      - id: u-owner.6.page-equals-api
+        kind: ui_matches_api
+        expect: >-
+          one card per scheduler GET /api/v1/scheduler/health answered the
+          page, each with its name, running or idle, last status, failures in
+          a row and its last and next run at the instants the API gave
+        source:
+          path: docs/api/endpoints.md
+          anchor: "Health summary for every scheduler"
+      - id: u-owner.6.error-shown
+        kind: text_exact
+        expect: >-
+          when that request answers 503, the page shows the server error in
+          place of the cards, never "No schedulers found."
+        source:
+          path: frontend/src/services/api.ts
+          anchor: "Something went wrong on the server (HTTP"
+  - n: 7
+    intent: find the role change in the audit log, filtered to role changes
+    layer: A
+    oracles:
+      - id: u-owner.7.rows-exact
+        kind: ui_matches_api
+        expect: >-
+          filtered to the Role changed action and the User entity, the page
+          lists exactly the entries, actors and actions GET
+          /api/v1/audit-logs/ answers for that filter, in its order
+        source:
+          path: docs/api/audit-logging.md
+          anchor: "| `action_type` | string |"
+      - id: u-owner.7.change-listed
+        kind: audit_entry
+        expect: >-
+          the day's role change is one of them, the only one for the account,
+          by the owner, from DEVELOPER to ANALYST
+  - n: 8
+    intent: give the user a custom role that lets them change feature flags
+    layer: A
+    writes: true
+    profile: full
+    oracles:
+      - id: u-owner.8.grant-enforced
+        kind: api_state
+        expect: >-
+          before, the Analyst is offered no change on the day's flag; the
+          Roles page creates a role holding Feature flags Update (POST
+          /api/v1/rbac/roles, 201) and lists it, POST
+          /api/v1/rbac/roles/assign gives it to the user (200), and the
+          user's next flag page offers the switch, an editable rollout and
+          Save, whose PUT is answered 200 and the flag reads back changed
+        source:
+          path: docs/api/rbac.md
+          anchor: "A custom role or direct grant of a `feature_flag` action admits any flag, whoever owns it"
+      - id: u-owner.8.grant-audited
+        kind: audit_entry
+        expect: >-
+          the audit log holds the role's role_create entry and one role_assign
+          entry giving the user that custom role, both by the owner
+        source:
+          path: docs/api/audit-logging.md
+          anchor: "| `role_assign` | `user` | `POST /rbac/roles/assign` gives a user a custom role"
+  - n: 9
+    intent: invite the user to a workspace as a viewer
+    layer: A
+    writes: true
+    profile: full
+    oracles:
+      - id: u-owner.9.member-role
+        kind: api_state
+        expect: >-
+          the Members page's Invite Member creates an invitation for the
+          user's address with the Viewer role (POST
+          /api/v1/workspaces/{id}/invites, 201) and shows its link; the user
+          opens the link and accepts (201), and the workspace's members read
+          back with the user as a VIEWER
+        source:
+          path: docs/workspaces/overview.md
+          anchor: "they are added as a member with the invited"
+  - n: 10
+    intent: deactivate the user
+    layer: A
+    writes: true
+    security: true
+    oracles:
+      - id: u-owner.10.dialog-promise
+        kind: text_exact
+        expect: >-
+          clearing Active in the Edit dialog shows the warning that the user
+          cannot sign in, that their tokens are refused and their API keys
+          stop working, and lists the user's own key by name
+        source:
+          path: frontend/src/components/admin/users/EditUserModal.tsx
+          anchor: "export const DEACTIVATE_WARNING ="
+      - id: u-owner.10.access-ended
+        kind: api_refused
+        expect: >-
+          Save's PATCH /api/v1/admin/users/{id} is answered 200 and the
+          account reads back inactive; the user's token, which answered 200,
+          is refused with 400 Inactive user, their key, which answered 200,
+          with 401, and their password with 401
+        source:
+          path: docs/auth/auth-user-guide.md
+          anchor: "Deactivating a user stops them signing in, refuses requests with a token they"
+      - id: u-owner.10.deactivation-audited
+        kind: audit_entry
+        expect: the audit log holds one user_deactivate entry for the account, by the owner
+        source:
+          path: docs/api/audit-logging.md
+          anchor: "| `user_activate`, `user_deactivate` | `user` | The same routes change a user's active status |"
