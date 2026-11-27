@@ -242,6 +242,7 @@ ATTRIBUTE_SDKS: frozenset[str] = frozenset(
         "react-native",
         "java",
         "dotnet",
+        "android",
     ]
 )
 TARGETED_FLAG_KEY = "sdk_contract_targeted"

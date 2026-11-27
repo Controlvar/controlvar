@@ -697,13 +697,15 @@ def test_every_alias_sdk_runs_in_the_sdk_live_contract_job(runner):
     assert set(runner.ALIAS_SDKS) <= set(job["with"]["sdks"].split())
 
 
-def test_js_react_native_java_and_dotnet_must_show_their_attributes_reach_flag_evaluation(
+def test_js_react_native_java_dotnet_and_android_must_show_their_attributes_reach_flag_evaluation(
     runner,
 ):
-    """#1520 (plan D211 gate 4f), with java (#1718) and dotnet (#1719) since
-    D253: the four SDKs whose smokes report the targeted flag, and each passes
-    with exactly TARGETED."""
-    assert runner.ATTRIBUTE_SDKS == frozenset({"js", "react-native", "java", "dotnet"})
+    """#1520, with java (#1718), dotnet (#1719) and android (#2017): the five
+    SDKs whose smokes report the targeted flag, and each passes with exactly
+    TARGETED."""
+    assert runner.ATTRIBUTE_SDKS == frozenset(
+        {"js", "react-native", "java", "dotnet", "android"}
+    )
     assert runner.TARGETED_FLAG_KEY == "sdk_contract_targeted"
     for sdk in sorted(runner.ATTRIBUTE_SDKS):
         report = good(runner, sdk)
@@ -722,6 +724,21 @@ def test_js_react_native_java_and_dotnet_must_show_their_attributes_reach_flag_e
                 "targeted.reason='rollout' (expected 'targeting_rule' for plan=pro)",
             ],
             id="context-dropped",
+        ),
+        pytest.param(
+            "android",
+            {**TARGETED, "pro": False, "reason": "rollout"},
+            [
+                "targeted.pro=False (seeded rule plan=pro)",
+                "targeted.reason='rollout' (expected 'targeting_rule' for plan=pro)",
+            ],
+            id="android-context-dropped",
+        ),
+        pytest.param(
+            "android",
+            None,
+            ["targeted missing (android is in ATTRIBUTE_SDKS)"],
+            id="android-missing",
         ),
         pytest.param(
             "js",

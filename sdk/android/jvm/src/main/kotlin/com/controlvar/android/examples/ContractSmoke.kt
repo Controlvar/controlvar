@@ -6,9 +6,13 @@ import com.controlvar.android.SdkConfig
 import com.controlvar.android.TrackEvent
 import com.controlvar.android.User
 import kotlinx.coroutines.runBlocking
+import okhttp3.OkHttpClient
 import org.json.JSONArray
+import org.json.JSONException
 import org.json.JSONObject
+import java.util.Collections
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 import kotlin.system.exitProcess
 
 /**
@@ -22,7 +26,8 @@ import kotlin.system.exitProcess
  * Environment: CONTROLVAR_API_URL (default http://localhost:8000),
  * CONTROLVAR_API_KEY (required), CONTRACT_EXPERIMENT_KEY (default
  * sdk_contract_ab), CONTRACT_FLAG_KEY (default sdk_contract_flag),
- * CONTRACT_USER_ID (default smoke-<uuid>).
+ * CONTRACT_TARGETED_FLAG_KEY (default sdk_contract_targeted), CONTRACT_USER_ID
+ * (default smoke-<uuid>).
  *
  * Run from the repo root with `bash sdk/android/examples/contract_smoke.sh`.
  */
@@ -43,6 +48,7 @@ object ContractSmoke {
         val baseUrl = env("CONTROLVAR_API_URL", env("EXPERIMENTLY_API_URL", "http://localhost:8000"))
         val experimentKey = env("CONTRACT_EXPERIMENT_KEY", "sdk_contract_ab")
         val flagKey = env("CONTRACT_FLAG_KEY", "sdk_contract_flag")
+        val targetedKey = env("CONTRACT_TARGETED_FLAG_KEY", "sdk_contract_targeted")
         val userId = env("CONTRACT_USER_ID", "smoke-${UUID.randomUUID()}")
 
         val config = SdkConfig(baseUrl = baseUrl, apiKey = apiKey, timeoutMs = 10_000L)
@@ -128,6 +134,42 @@ object ContractSmoke {
                 )
                 repeat(2) { http.post("/api/v1/tracking/track", dedup.toJson()) }
 
+                // 4c. The attributes reach flag evaluation (#2017). The seeded targeted flag is
+                //     at 0% with one rule, plan equals pro, at 100%. A NEW client (so the fan-out
+                //     above is untouched) asks for it with plan=pro, then, after clearCache(), with
+                //     plan=free. EvalResult carries no reason, so the server's reason is read from
+                //     the answer to the client's own request: the client's HttpClient is given an
+                //     OkHttpClient with the default one's three timeouts and an interceptor that
+                //     only reads the targeted flag's answers. The runner requires on with
+                //     targeting_rule, then off.
+                val reasons: MutableList<String?> = Collections.synchronizedList(mutableListOf())
+                val recording = OkHttpClient.Builder()
+                    .connectTimeout(config.timeoutMs, TimeUnit.MILLISECONDS)
+                    .readTimeout(config.timeoutMs, TimeUnit.MILLISECONDS)
+                    .writeTimeout(config.timeoutMs, TimeUnit.MILLISECONDS)
+                    .addInterceptor { chain ->
+                        val response = chain.proceed(chain.request())
+                        val path = chain.request().url.pathSegments
+                        if (path.size >= 2 && path[path.size - 2] == "evaluate" && path.last() == targetedKey) {
+                            val reason = try {
+                                JSONObject(response.peekBody(1L shl 20).string()).opt("reason") as? String
+                            } catch (e: JSONException) {
+                                null // Not JSON: no reason.
+                            }
+                            reasons.add(reason)
+                        }
+                        response
+                    }
+                    .build()
+                val targeting = ExperimentationClient(config, HttpClient(baseUrl, apiKey, config.timeoutMs, recording))
+                val pro = targeting.evaluateFlag(targetedKey, User(userId, mapOf("plan" to "pro")))
+                targeting.clearCache()
+                val free = targeting.evaluateFlag(targetedKey, User(userId, mapOf("plan" to "free")))
+                targeting.close()
+                if (reasons.size != 2) {
+                    fail("the targeted flag was asked ${reasons.size} time(s), expected 2")
+                }
+
                 client.close()
 
                 val report = JSONObject()
@@ -142,6 +184,14 @@ object ContractSmoke {
                     .put("flag", JSONObject().put("enabled", flag.enabled))
                     .put("track", JSONObject().put("ok", true))
                     .put("fanout", JSONObject().put("ok", true))
+                    .put(
+                        "targeted",
+                        JSONObject()
+                            .put("pro", pro.enabled)
+                            .put("free", free.enabled)
+                            // JSONObject.NULL: put(key, null) would drop the key.
+                            .put("reason", reasons[0] ?: JSONObject.NULL)
+                    )
                     .put(
                         "event_id",
                         JSONObject()
