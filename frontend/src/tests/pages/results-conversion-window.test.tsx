@@ -495,6 +495,22 @@ describe('windowNotice, by status', () => {
     const lines = windowNotices(results({ metrics: [purchase(), visits(), refund] }));
     expect(lines).toHaveLength(2);
     expect(lines[0]).toBe(ACTIVE_LINE);
-    expect(lines[1]).toMatch(/^Refund: 30 of 9,830 users \(0%\) were still inside their 36 hours when/);
+    expect(lines[1]).toMatch(/^Refund: 30 of 9,830 users \(<1%\) were still inside their 36 hours when/);
+  });
+  it('a share above 0 that rounds to 0% reads "<1%", one below whole that rounds to 100% reads ">99%"', () => {
+    const small = {
+      ...purchase(),
+      variants: [variant('v-ctrl', 'Control', true, 1000, 0, 1), variant('v-treat', 'Treatment', false, 1000, 0, 0)],
+    } as MetricResult;
+    const line = windowNotice(results(), small) as string;
+    expect(line).toContain('1 of 2,000 users (<1%)');
+    expect(line).toContain('Still inside: Control <1%, Treatment 0%.');
+    const near = {
+      ...purchase(),
+      variants: [variant('v-ctrl', 'Control', true, 1000, 0, 999), variant('v-treat', 'Treatment', false, 1000, 0, 1000)],
+    } as MetricResult;
+    const nearLine = windowNotice(results(), near) as string;
+    expect(nearLine).toContain('1,999 of 2,000 users (>99%)');
+    expect(nearLine).toContain('Still inside: Control >99%, Treatment 100%.');
   });
 });
