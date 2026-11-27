@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import textwrap
@@ -235,7 +236,7 @@ def _env(extra: dict[str, str] | None = None) -> dict[str, str]:
 
 
 def _pytest_cmd(
-    root: Path, *args: str, cache: bool = False, target: str = SUITE
+    root: Path, *args: str, cache: Path | None = None, target: str = SUITE
 ) -> list[str]:
     return [
         sys.executable,
@@ -246,8 +247,8 @@ def _pytest_cmd(
         "-p",
         "no:cov",
         *(
-            ["-o", f"cache_dir={root / '.cache'}"]
-            if cache
+            ["-o", f"cache_dir={cache}"]
+            if cache is not None
             else ["-p", "no:cacheprovider"]
         ),
         "-c",
@@ -266,10 +267,16 @@ def run_shards(
     total: int,
     *args: str,
     env: dict[str, str] | None = None,
-    cache: bool = False,
+    cache: Path | None = None,
     target: str = SUITE,
 ) -> list[Path]:
-    """Run every shard of ``root`` concurrently; return the reports written."""
+    """Run every shard of ``root`` concurrently; return the reports written.
+
+    ``cache`` is a seeded pytest cache. Each shard runs on its own copy of it:
+    pytest writes ``lastfailed`` back when a run ends, so on one shared cache a
+    shard that started after another had finished read that shard's result
+    instead of the seed.
+    """
     out.mkdir(parents=True)
     procs = []
     for index in range(1, total + 1):
@@ -277,11 +284,15 @@ def run_shards(
         shard_env = _env(env)
         shard_env["EXPERIMENTLY_TEST_SHARD"] = f"{index}/{total}"
         shard_env["EXPERIMENTLY_TEST_SHARD_REPORT"] = str(report)
+        shard_cache = None
+        if cache is not None:
+            shard_cache = root / f".cache-shard-{index}"
+            shutil.copytree(cache, shard_cache)
         procs.append(
             (
                 report,
                 subprocess.Popen(
-                    _pytest_cmd(root, *args, cache=cache, target=target),
+                    _pytest_cmd(root, *args, cache=shard_cache, target=target),
                     cwd=root,
                     env=shard_env,
                     stdout=subprocess.PIPE,
@@ -321,8 +332,9 @@ class Fixtures:
             return run_shards(_write_tree(where / "tree", name), out, 2)
         if name in ("lf", "lf_file"):
             root = _write_tree(where / "tree", None)
+            seeded = root / ".cache"
             seed = subprocess.run(
-                _pytest_cmd(root, cache=True),
+                _pytest_cmd(root, cache=seeded),
                 cwd=root,
                 env=_env({"FIXTURE_FAIL": "1"}),
                 capture_output=True,
@@ -333,8 +345,8 @@ class Fixtures:
             if name == "lf_file":
                 # A file named on the command line keeps its passing tests
                 # through collection; --lf deselects them after the shard hook.
-                return run_shards(root, out, 2, "--lf", cache=True, target=LF_FILE)
-            return run_shards(root, out, 2, "--lf", cache=True)
+                return run_shards(root, out, 2, "--lf", cache=seeded, target=LF_FILE)
+            return run_shards(root, out, 2, "--lf", cache=seeded)
         if name == "other_suite":
             # Another suite (one file of the tree, named on the command
             # line), in two shards.
@@ -696,6 +708,35 @@ def test_last_failed_deselection_is_refused_through_pre_deselected(fixtures):
     assert any("pre_deselected=" in p for p in found), result.stdout
     # The passes it deselected were selected and never ran.
     assert any("selected but did not run" in p for p in found), result.stdout
+
+
+class _OneAtATime(subprocess.Popen):
+    """Runs its process to the end before returning, so ``run_shards``
+    starts each shard after the previous one has finished."""
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._output = super().communicate(timeout=300)
+
+    def communicate(self, *args, **kwargs):
+        return self._output
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "case",
+    [
+        test_last_failed_is_refused,
+        test_last_failed_deselection_is_refused_through_pre_deselected,
+    ],
+    ids=["lf", "lf_file"],
+)
+def test_last_failed_shards_started_one_after_another(tmp_path, monkeypatch, case):
+    """The --lf cases hold when one shard starts after the other has finished,
+    as on a slow runner: each shard reads the seeded cache, not the cache the
+    finished shard wrote back."""
+    monkeypatch.setattr(subprocess, "Popen", _OneAtATime)
+    case(Fixtures(tmp_path))
 
 
 # --- items removed without a trace, and disabled plugins ----------------
