@@ -5,7 +5,7 @@ document = "docs/api/data-export.md"
 
 [[unit]]
 text = "Data Export & Reporting API (EP-020)"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "This document describes the data export and reporting endpoints available under /api/v1/export/."
@@ -13,7 +13,7 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 
 [[unit]]
 text = "Authentication"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Every export endpoint takes a user's access token, from POST /api/v1/auth/login, in the Authorization: Bearer header."
@@ -40,7 +40,7 @@ by = [
 
 [[unit]]
 text = "The export takes no such parameters."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
 
 [[unit]]
 text = "Asked with another correction_method or confidence_level, /results can report a different is_significant, winner and recommendation than the export; the counts, rates and unadjusted p-values are the same."
@@ -66,23 +66,26 @@ by = ["test:backend/tests/unit/services/test_export_columns_and_rules.py::test_p
 
 [[unit]]
 text = "With two or more treatments a row can therefore show p_value 0.035 and is_significant false: under Benjamini-Hochberg that treatment's adjusted p-value can be 0.071."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/services/test_export_columns_and_rules.py::test_p_value_is_unadjusted_and_significance_is_decided_on_the_corrected_one"]
 
 [[unit]]
 text = "The export has no adjusted p-value column; /results reports it as adjusted_p_value."
-by = ["exempt:baseline"]
+by = [
+    "docex:docs/api/data-export.md#experiment_id,experiment_name,variant_id,variant_name,is_control,assignments,conversions,conversion_rate,p_value,is_significant,relative_improvement_pct",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
 
 [[unit]]
 text = "Run the commands on this page in one terminal, in order, against the stack from the Quick Start."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Each uses the shell variables set by the ones before it."
-by = ["exempt:baseline"]
+by = ["docex:docs/api/data-export.md#blue_button,True"]
 
 [[unit]]
 text = "Log in first:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "It prints \"ADMIN\"."
@@ -90,15 +93,15 @@ by = ["docex:docs/api/data-export.md#\"ADMIN\""]
 
 [[unit]]
 text = "The downloads below are written to the current directory, so this moves to a new, empty one first:"
-by = ["exempt:baseline"]
+by = ["docex:docs/api/data-export.md#0"]
 
 [[unit]]
 text = "It prints 0."
-by = ["exempt:baseline"]
+by = ["docex:docs/api/data-export.md#0"]
 
 [[unit]]
 text = "Rate Limiting"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Export endpoints allow 10 requests a minute per client address, shared by all export endpoints, because each export computes results for every experiment it covers."
@@ -120,11 +123,11 @@ by = [
 
 [[unit]]
 text = "For bulk data pipelines, consider exporting once and caching the result."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Export Endpoints"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The export URLs have no trailing slash: with one, the API answers 307, which curl doesn't follow."
@@ -136,16 +139,19 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 
 [[unit]]
 text = "Download all experiments as a CSV (default) or JSON file."
-by = ["exempt:baseline"]
+by = [
+    "docex:docs/api/data-export.md#experiment_id,experiment_name,status,experiment_type,start_date,end_date,duration_days,total_assignments,total_events,winner_variant,recommendation",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
 
 [[unit]]
 text = "Query Parameters"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 count = 5
 
 [[unit]]
 text = "Parameter | Type | Default | Description"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 count = 4
 
 [[unit]]
@@ -178,12 +184,12 @@ count = 2
 
 [[unit]]
 text = "CSV Column Names"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 count = 3
 
 [[unit]]
 text = "Column | Type | Description"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 count = 3
 
 [[unit]]
@@ -240,7 +246,7 @@ by = ["docex:docs/api/data-export.md#experiment_id,experiment_name,status,experi
 
 [[unit]]
 text = "Example curl"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 count = 5
 
 [[unit]]
@@ -249,7 +255,10 @@ by = ["docex:docs/api/data-export.md#experiment_id,experiment_name,status,experi
 
 [[unit]]
 text = "start_date and end_date filter on when the experiment was created; this asks for the ones created since the start of 2024:"
-by = ["exempt:baseline"]
+by = [
+    "docex:docs/api/data-export.md#active,a_b,green_button,SHIP_VARIANT",
+    "test:backend/tests/integration/api/test_export_api.py::test_the_bodies_are_the_bodies_of_one_experiment_at_a_time",
+]
 
 [[unit]]
 text = "It prints the header row, then the demo data's Checkout Button Color experiment's status, type, winner and recommendation, active,a_b,green_button,SHIP_VARIANT: on the demo data the green button converts better, and the results API recommends shipping it."
@@ -257,7 +266,7 @@ by = ["docex:docs/api/data-export.md#experiment_id,experiment_name,status,experi
 
 [[unit]]
 text = "The response carries the file name:"
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/api/test_export_endpoints.py::TestExportExperimentsEndpoint::test_export_csv_has_content_disposition_header"]
 
 [[unit]]
 text = "With format=json, the same rows are a JSON array; the variants example below asks for JSON."
@@ -269,7 +278,10 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 
 [[unit]]
 text = "Download per-variant results for all (or filtered) experiments."
-by = ["exempt:baseline"]
+by = [
+    "docex:docs/api/data-export.md#blue_button true",
+    "test:backend/tests/integration/api/test_export_api.py::TestExportEqualsResults::test_variant_rows_equal_results",
+]
 
 [[unit]]
 text = "Each row represents one variant within one experiment."
@@ -353,7 +365,7 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 
 [[unit]]
 text = "Download feature flag usage data."
-by = ["exempt:baseline"]
+by = ["docex:docs/api/data-export.md#beta_features,ACTIVE,100"]
 
 [[unit]]
 text = "flag_id | string | UUID of the feature flag"
@@ -405,7 +417,7 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 
 [[unit]]
 text = "Report Endpoints"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "GET /api/v1/export/reports/overview"
@@ -416,11 +428,17 @@ by = [
 
 [[unit]]
 text = "Returns a JSON summary of platform-wide activity."
-by = ["exempt:baseline"]
+by = [
+    "docex:docs/api/data-export.md#\"total_experiments\": 3",
+    "test:backend/tests/unit/api/test_export_endpoints.py::TestPlatformOverviewEndpoint::test_overview_report_returns_json",
+]
 
 [[unit]]
 text = "Always returns application/json."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "docex:docs/api/data-export.md#\"total_experiments\": 3",
+]
 
 [[unit]]
 text = "start_date | datetime | null | Report period start (inclusive, ISO 8601 UTC)"
@@ -432,12 +450,12 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 
 [[unit]]
 text = "JSON Response Schema"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 count = 2
 
 [[unit]]
 text = "Field | Type | Description"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "generated_at | string | ISO 8601 timestamp when the report was generated"
@@ -517,7 +535,7 @@ by = ["docex:docs/api/data-export.md#\"period_start\": \"2024-01-01T00:00:00+00:
 
 [[unit]]
 text = "It prints the period's start and \"total_experiments\": 0."
-by = ["exempt:baseline"]
+by = ["docex:docs/api/data-export.md#\"total_experiments\": 0"]
 
 [[unit]]
 text = "GET /api/v1/export/reports/experiments/"
@@ -528,11 +546,14 @@ by = [
 
 [[unit]]
 text = "Returns a report for a single experiment."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_export_api.py::TestExportEqualsResults::test_report_json_equals_the_exports"]
 
 [[unit]]
 text = "As JSON (the default) it has the experiment's row from /export/experiments and its variant rows from /export/variants; with format=csv it is the variant rows as CSV, with the same columns as /export/variants."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/integration/api/test_export_api.py::TestExportEqualsResults::test_report_json_equals_the_exports",
+    "test:backend/tests/integration/api/test_export_api.py::TestExperimentReport::test_format_csv_is_the_variant_rows_as_csv",
+]
 
 [[unit]]
 text = "An id that no experiment has answers 404, and one that is not a UUID answers 422."
@@ -550,11 +571,11 @@ by = [
 
 [[unit]]
 text = "Path Parameters"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Parameter | Type | Description"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "format | string | json | json, or csv for the variant rows as a CSV file"
@@ -562,11 +583,11 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 
 [[unit]]
 text = "As JSON (the default) the report has the shape above: the experiment's row from /export/experiments and its rows from /export/variants, which the examples above already show."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_export_api.py::TestExportEqualsResults::test_report_json_equals_the_exports"]
 
 [[unit]]
 text = "This asks for the demo experiment's report with format=csv, using the id the variants example saved in $EXP_ID; the variant rows come as a CSV file:"
-by = ["exempt:baseline"]
+by = ["docex:docs/api/data-export.md#blue_button,True"]
 
 [[unit]]
 text = "It prints the header row, then each variant's name and whether it is the control."
@@ -574,11 +595,11 @@ by = ["docex:docs/api/data-export.md#experiment_id,experiment_name,variant_id,va
 
 [[unit]]
 text = "Error Responses"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Status Code | Description"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "401 | Missing or invalid Bearer token"
@@ -606,7 +627,7 @@ by = ["test:backend/tests/unit/services/test_export_columns_and_rules.py::test_a
 
 [[unit]]
 text = "Example 422 Error"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "A scope other than summary is refused, with the reason in detail:"
@@ -618,11 +639,11 @@ by = ["test:backend/tests/unit/services/test_export_columns_and_rules.py::test_a
 
 [[unit]]
 text = "It names the parameter and the rule, not the value that was sent:"
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/services/test_export_columns_and_rules.py::test_an_unaccepted_value_lists_each_invalid_parameter"]
 
 [[unit]]
 text = "Notes"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Times are ISO 8601."
@@ -662,7 +683,10 @@ by = [
 
 [[unit]]
 text = "Numbers, and every value in the JSON exports, are written as they are."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/integration/api/test_export_api.py::TestSpreadsheetSafeCells::test_leading_characters_are_written_as_text",
+    "test:backend/tests/integration/api/test_export_api.py::TestSpreadsheetSafeCells::test_every_leading_character",
+]
 
 [[unit]]
 text = "The scope parameter of the experiment and variant exports takes only summary; events and assignments are reserved and answer 422."
