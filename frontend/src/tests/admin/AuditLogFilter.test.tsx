@@ -38,8 +38,8 @@ describe('AuditLogFilter', () => {
     );
   });
 
-  // #665: the API has no user filter, so a "User Email" box filtered nothing.
-  // It is gone until the API can filter by user (#669).
+  // #665: a "User Email" box filtered nothing, because the API filters by
+  // user id, not email. The bar has no user control.
   it('has no user email filter', () => {
     render(<AuditLogFilter filters={defaultFilters} onFilterChange={mockOnFilterChange} />);
     expect(screen.queryByTestId('filter-user-email')).not.toBeInTheDocument();

@@ -5,7 +5,7 @@ import { ENTITY_LABELS, actionFilterGroups } from './actionLabels';
 /**
  * What the filter bar holds. `start_date`/`end_date` are calendar days
  * (`YYYY-MM-DD`); `AuditLogTable` turns them into the API's `from_date` and
- * `to_date`. There is no user filter: the API has none (#669).
+ * `to_date`. The API also filters by `user_id`; this bar has no control for it.
  */
 export interface AuditLogFilters {
   action_type?: string;
