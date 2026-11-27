@@ -137,6 +137,22 @@ def test_the_u_sdk_day_reads_every_answer_back_and_checks_both_bucketings():
     assert [o.kind for o in persona.day[2].oracles] == ["count_delta"]
 
 
+def test_the_u_admin_day_changes_what_another_owns_and_finds_the_admin_area_closed():
+    """The Admin role without the superuser flag: an account the day makes,
+    whose two changes are decided by the state read back and the audit log,
+    and whose refused admin area is decided by the API, not by the page."""
+    personas = catalogue.load_personas(PERSONAS_ROOT / "personas", REPO_ROOT)
+    (persona,) = [p for p in personas if p.id == "U-ADMIN"]
+    assert persona.role == "ADMIN"
+    assert persona.account.startswith("setup:")
+    assert [s.n for s in persona.day] == [1, 2, 3]
+    assert {s.layer for s in persona.day} == {"A"}
+    assert [s.n for s in persona.day if s.writes] == [1, 2]
+    for step in persona.day[:2]:
+        assert [o.kind for o in step.oracles] == ["api_state", "audit_entry"], step.n
+    assert [o.kind for o in persona.day[2].oracles] == ["api_refused", "text_exact"]
+
+
 def test_the_real_matrix_loads_and_the_row_count_is_pinned():
     matrix = catalogue.load_matrix(PERSONAS_ROOT / "role-matrix.yaml", REPO_ROOT)
     assert len(matrix.rows) == MATRIX_ROWS
