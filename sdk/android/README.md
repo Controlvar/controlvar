@@ -208,8 +208,8 @@ Runs `com.controlvar.android.examples.ContractSmoke` from the JVM build above
 (`./mvnw -q package -DskipTests` when `jvm/target` is stale, Maven output to stderr; `FORCE_BUILD=1`
 forces a rebuild). Env: `CONTROLVAR_API_URL` (default `http://localhost:8000`),
 `CONTROLVAR_API_KEY` (required), `CONTRACT_EXPERIMENT_KEY` (default `sdk_contract_ab`),
-`CONTRACT_FLAG_KEY` (default `sdk_contract_flag`), `CONTRACT_USER_ID` (default random
-`smoke-<uuid>`). Repo-wide runner:
+`CONTRACT_FLAG_KEY` (default `sdk_contract_flag`), `CONTRACT_TARGETED_FLAG_KEY` (default
+`sdk_contract_targeted`), `CONTRACT_USER_ID` (default random `smoke-<uuid>`). Its `targeted` report entry holds the answers for `plan: pro` and `plan: free`. Repo-wide runner:
 `python tests/sdk-contract/live/run_live_contract.py --sdk android`.
 
 `ExperimentationClient.track()` is fire-and-forget — it launches on a background scope and swallows
