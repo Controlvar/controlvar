@@ -183,6 +183,34 @@ def test_the_analytics_stack_streams_to_s3_and_has_an_opensearch_domain(
 
 
 @pytest.mark.parametrize("env", ENVIRONMENTS)
+def test_the_stream_and_the_domain_are_not_named_by_the_stack(synths, env):
+    """CloudFormation generates the Kinesis stream's and the OpenSearch domain's names."""
+    if not MODULES_PRESENT:
+        pytest.skip("core checkout: no analytics module")
+    for rtype, name in (
+        ("AWS::Kinesis::Stream", "Name"),
+        ("AWS::OpenSearchService::Domain", "DomainName"),
+    ):
+        found = _of_type(synths[env], rtype)
+        assert found, f"{env}: no {rtype}"
+        for _, lid, resource in found:
+            assert name not in resource["Properties"], (env, lid)
+
+
+@pytest.mark.parametrize("env", ENVIRONMENTS)
+def test_the_crawler_is_given_an_s3_path_and_no_table_prefix(synths, env):
+    """The crawler names its table itself: the stack sets a path and no TablePrefix."""
+    if not MODULES_PRESENT:
+        pytest.skip("core checkout: no etl module")
+    ((_, _, crawler),) = _of_type(synths[env], "AWS::Glue::Crawler")
+    props = crawler["Properties"]
+    assert set(props["Targets"]) == {"S3Targets"}, props["Targets"]
+    (target,) = props["Targets"]["S3Targets"]
+    assert "Path" in target, target
+    assert "TablePrefix" not in props, props
+
+
+@pytest.mark.parametrize("env", ENVIRONMENTS)
 def test_nothing_collects_the_apis_prometheus_metrics(synths, env):
     synth = synths[env]
     (container,) = _backend_task_definition(synth)["Properties"]["ContainerDefinitions"]
