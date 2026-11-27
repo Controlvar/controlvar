@@ -39,8 +39,11 @@ OFFSET_MSG = "Value error, the UTC offset must be less than 16 hours"
 
 AUDIT_ROLE = UserRole.ANALYST
 
-#: (id, method, path, role that may call it, the two date parameters).
-#: ``{me}`` is the caller's own id.
+#: The caller of a route only a superuser may call.
+SUPERUSER = "superuser"
+
+#: (id, method, path, role that may call it or SUPERUSER, the two date
+#: parameters). ``{me}`` is the caller's own id.
 SITES = [
     ("audit-list", "GET", "/audit-logs/", UserRole.VIEWER, ("from_date", "to_date")),
     (
@@ -110,7 +113,7 @@ SITES = [
         "metrics-aggregate",
         "POST",
         "/metrics/aggregate",
-        UserRole.VIEWER,
+        SUPERUSER,
         ("start_time", "end_time"),
     ),
 ]
@@ -138,7 +141,9 @@ def client(db_session):
 
 @pytest.fixture
 def users(db_session):
-    return {role: make_user(db_session, role, tag=TAG) for role in UserRole}
+    users = {role: make_user(db_session, role, tag=TAG) for role in UserRole}
+    users[SUPERUSER] = make_user(db_session, UserRole.ADMIN, superuser=True, tag=TAG)
+    return users
 
 
 def _call(client, site, user, params):
