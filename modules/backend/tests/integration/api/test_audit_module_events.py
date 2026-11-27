@@ -797,20 +797,18 @@ def test_a_first_sso_sign_in_writes_user_create_by_the_new_account(
 
 
 @pytest.mark.regression
-@pytest.mark.parametrize("superuser", [False, True], ids=["admin", "superuser"])
 def test_an_sso_role_change_writes_one_role_assign_by_sso_sync(
-    client, fresh, db_session, superuser
+    client, fresh, db_session
 ):
     """``{role, is_superuser}`` before and after, from the reserved actor.
 
-    SSO sign-in never changes the superuser flag, so it is the same on both
-    sides; it is recorded all the same, as every ``role_assign`` writer does.
+    SSO sign-in never changes the superuser flag, and does not sign in a
+    superuser account at all (below), so the flag is false on both sides; it
+    is recorded all the same, as every ``role_assign`` writer does.
     """
     domain = _domain()
     cfg = _saml_config(db_session, domain, role_mapping={"readers": "viewer"})
-    user = _make_user(
-        db_session, UserRole.ADMIN, superuser=superuser, email=f"cy@{domain}"
-    )
+    user = _make_user(db_session, UserRole.ADMIN, email=f"cy@{domain}")
     v2 = _v2_count(fresh)
 
     resp = _acs(client, cfg, user.email, groups=["readers"])
@@ -819,8 +817,8 @@ def test_an_sso_role_change_writes_one_role_assign_by_sso_sync(
 
     row = _one(fresh, user.id, "role_assign", email=SSO_SYNC, user_id=None)
     assert _values(row) == (
-        {"role": "ADMIN", "is_superuser": superuser},
-        {"role": "VIEWER", "is_superuser": superuser},
+        {"role": "ADMIN", "is_superuser": False},
+        {"role": "VIEWER", "is_superuser": False},
     )
     assert row.reason == "SSO groups changed"
     assert row.entity_name == user.username
@@ -830,6 +828,34 @@ def test_an_sso_role_change_writes_one_role_assign_by_sso_sync(
     assert _acs(client, cfg, user.email, groups=["readers"]).status_code == 200
     assert len(_rows(fresh, user.id, "role_assign")) == 1
     assert len(_rows(fresh, user.id, "user_login")) == 2
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    ("role_mapping", "groups"),
+    [({}, ""), ({"readers": "viewer"}, "readers")],
+    ids=["no-group-mapped", "group-mapped-to-viewer"],
+)
+def test_a_superuser_sso_sign_in_is_refused_and_writes_nothing(
+    client, fresh, db_session, role_mapping, groups
+):
+    """Whether or not a group is mapped, the account is as it was: no role
+    change from a mapped group, and no ``role_assign`` or ``user_login``
+    entry."""
+    domain = _domain()
+    cfg = _saml_config(db_session, domain, role_mapping=role_mapping)
+    user = _make_user(db_session, UserRole.ADMIN, superuser=True, email=f"cy@{domain}")
+    v2 = _v2_count(fresh)
+
+    resp = _acs(client, cfg, user.email, groups=[groups] if groups else [])
+    assert resp.status_code == 403, resp.text
+    assert resp.json()["detail"] == sso_service.SUPERUSER_ACCOUNT_DETAIL
+    assert "access_token" not in resp.text
+
+    row = _user(fresh, user.id)
+    assert (row.role, row.is_superuser) == (UserRole.ADMIN, True)
+    assert _rows(fresh, user.id) == []
+    assert _v2_count(fresh) == v2
 
 
 @pytest.mark.regression

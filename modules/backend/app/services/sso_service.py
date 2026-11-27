@@ -1111,6 +1111,9 @@ IDENTITY_TAKEN_DETAIL = (
 EMAIL_AMBIGUOUS_DETAIL = (
     "More than one account matches this email address; ask an administrator"
 )
+SUPERUSER_ACCOUNT_DETAIL = (
+    "Single sign-on does not sign in superuser accounts; sign in with a password"
+)
 
 #: The most each value a sign-in stores can hold, read from the columns (#662),
 #: so a value is refused or shortened here instead of failing in the database.
@@ -1326,6 +1329,10 @@ def provision_user(
       subdomains): one configuration per domain.
     - Looks the user up by email, case-insensitively; more than one match is
       refused rather than guessed.
+    - A superuser account is refused (``sso_account``), before anything about
+      it is changed: superuser accounts sign in with a password. Each place
+      that mints an SSO session or hand-off code gets its account from here,
+      directly or through the hand-off code (``test_sso_sign_in_sites.py``).
     - An existing user's role changes only when one of their groups matches
       the configuration's ``role_mapping``. A sign-in with no matching group
       leaves the role as it is; to demote someone through SSO, map one of
@@ -1345,6 +1352,16 @@ def provision_user(
         raise SSORefusal(status.HTTP_409_CONFLICT, EMAIL_AMBIGUOUS_DETAIL, SSO_ACCOUNT)
     if matches:
         existing_user = matches[0]
+        if existing_user.is_superuser:
+            logger.warning(
+                "SSO sign-in refused for account %s: superuser accounts sign "
+                "in with a password (SSO config %s)",
+                existing_user.id,
+                config.id,
+            )
+            raise SSORefusal(
+                status.HTTP_403_FORBIDDEN, SUPERUSER_ACCOUNT_DETAIL, SSO_ACCOUNT
+            )
         new_role = UserRole(mapped) if mapped is not None else None
         if new_role is not None and existing_user.role != new_role:
             # Recorded as ``role_assign`` by ``system:sso-sync``, with the

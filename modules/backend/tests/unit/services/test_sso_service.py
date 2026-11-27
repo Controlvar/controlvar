@@ -1061,6 +1061,7 @@ class TestProvisionUser:
         existing = MagicMock(spec=User)
         existing.email = "alice@acme.com"
         existing.role = UserRole.VIEWER
+        existing.is_superuser = False
         db.first.return_value = existing
 
         cfg = _make_saml_config(role_mapping={})
@@ -1074,6 +1075,7 @@ class TestProvisionUser:
         existing = MagicMock(spec=User)
         existing.email = "alice@acme.com"
         existing.role = UserRole.VIEWER
+        existing.is_superuser = False
         db.first.return_value = existing
 
         cfg = _make_saml_config(role_mapping={"admins": "admin"})

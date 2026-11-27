@@ -40,6 +40,7 @@ from backend.app.api import deps
 from backend.app.db.session import get_db as _session_get_db
 from backend.app.main import app
 from backend.app.models.audit_log import AuditLog
+from backend.app.models.user import User, UserRole
 from modules.backend.app.models.sso_config import SSOConfig, SSOProviderType
 from modules.backend.app.services import sso_service
 
@@ -72,13 +73,28 @@ def id_token_mode() -> str:
 
 
 @pytest.fixture
-def provider(email, id_token_mode) -> Iterator[str]:
+def groups() -> str:
+    """The provider's user info ``groups``, comma-separated; overridden per test."""
+    return ""
+
+
+@pytest.fixture
+def role_mapping() -> dict:
+    return {}
+
+
+@pytest.fixture
+def provider(email, id_token_mode, groups) -> Iterator[str]:
     proc = subprocess.Popen(
         [sys.executable, str(PROVIDER_SCRIPT), CLIENT_ID, CLIENT_SECRET, email],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
-        env={**os.environ, "FAKE_OIDC_ID_TOKEN": id_token_mode},
+        env={
+            **os.environ,
+            "FAKE_OIDC_ID_TOKEN": id_token_mode,
+            "FAKE_OIDC_GROUPS": groups,
+        },
     )
     first_line: list[str] = []
     reader = threading.Thread(
@@ -102,7 +118,7 @@ def provider(email, id_token_mode) -> Iterator[str]:
 
 
 @pytest.fixture
-def config(db_session: Session, provider: str, domain: str) -> SSOConfig:
+def config(db_session: Session, provider: str, domain: str, role_mapping) -> SSOConfig:
     cfg = SSOConfig(
         org_name="Flow Org",
         org_domain=domain,
@@ -110,7 +126,7 @@ def config(db_session: Session, provider: str, domain: str) -> SSOConfig:
         entity_id=CLIENT_ID,
         client_secret=CLIENT_SECRET,
         sso_url=provider,
-        role_mapping={},
+        role_mapping=role_mapping,
         is_enforced=False,
         is_active=True,
     )
@@ -287,3 +303,72 @@ def test_the_id_tokens_email_wins_over_the_user_infos(
     resp = browser.get(callback, headers={"cookie": cookie})
     assert resp.status_code == 200, resp.text
     assert resp.json()["email"] == email
+
+
+# ---------------------------------------------------------------------------
+# A superuser account signs in with a password, not through SSO
+# ---------------------------------------------------------------------------
+
+
+def _account(db_session: Session, email: str, role: UserRole, superuser: bool) -> User:
+    user = User(
+        username=f"acct-{uuid.uuid4().hex[:8]}",
+        email=email,
+        hashed_password="x",
+        is_active=True,
+        is_superuser=superuser,
+        role=role,
+    )
+    db_session.add(user)
+    db_session.commit()
+    db_session.refresh(user)
+    return user
+
+
+@pytest.mark.parametrize(
+    ("role_mapping", "groups"),
+    [({}, ""), ({"readers": "viewer"}, "readers")],
+    ids=["no-group-mapped", "group-mapped-to-viewer"],
+)
+def test_a_superuser_account_is_refused_and_left_as_it_was(
+    browser, config, email, db_session, role_mapping, groups
+):
+    """No token, whether or not a group is mapped; a mapped group is not
+    applied, so the role and the superuser flag are as they were, and no
+    audit entry is written."""
+    root = _account(db_session, email, UserRole.ADMIN, superuser=True)
+    callback, cookie = _sign_in(browser, config)
+
+    resp = browser.get(callback, headers={"cookie": cookie})
+
+    assert resp.status_code == 403, resp.text
+    assert resp.json()["detail"] == sso_service.SUPERUSER_ACCOUNT_DETAIL
+    assert "access_token" not in resp.text
+    db_session.expire_all()
+    row = db_session.get(User, root.id)
+    assert (row.role, row.is_superuser) == (UserRole.ADMIN, True)
+    assert db_session.query(AuditLog).filter(AuditLog.entity_id == root.id).all() == []
+
+
+@pytest.mark.parametrize("role_mapping", [{"readers": "viewer"}])
+@pytest.mark.parametrize("groups", ["readers"])
+@pytest.mark.parametrize("role", [UserRole.ADMIN, UserRole.VIEWER])
+def test_an_admin_or_a_viewer_in_the_domain_still_signs_in(
+    browser, config, email, db_session, role_mapping, groups, role
+):
+    """The control: the same sign-in for an account that is not a superuser."""
+    account = _account(db_session, email, role, superuser=False)
+    callback, cookie = _sign_in(browser, config)
+
+    resp = browser.get(callback, headers={"cookie": cookie})
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    # The mapped group applies to them.
+    assert (body["user_id"], body["role"]) == (str(account.id), "viewer")
+    me = browser.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {body['access_token']}"},
+    )
+    assert me.status_code == 200, me.text
+    assert me.json()["email"] == email

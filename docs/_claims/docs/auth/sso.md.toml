@@ -428,12 +428,17 @@ by = [
 ]
 
 [[unit]]
-text = "sso_account | the account needs an administrator: more than one account has the email, the identity is already linked to another account, or the provider's identifier for the account (sub, or the SAML Name ID) is longer than 255 characters or not valid text"
+text = "sso_account | the account needs an administrator: more than one account has the email, the identity is already linked to another account, or the provider's identifier for the account (sub, or the SAML Name ID) is longer than 255 characters or not valid text; or the account is a superuser account, which signs in with a password. A superuser account with no password must have one set by another superuser (PUT /api/v1/admin/users/{id}) before it can sign in."
 by = [
     "test:modules/backend/tests/integration/api/test_sso_dashboard_sign_in.py::test_two_accounts_with_this_email_is_sso_account",
     "test:modules/backend/tests/integration/api/test_sso_dashboard_sign_in.py::test_an_identity_linked_to_another_account_is_sso_account",
     "test:modules/backend/tests/integration/api/test_sso_long_values.py::test_the_dashboard_redirect_says_sso_account_for_an_unusable_identifier",
     "test:modules/backend/tests/integration/api/test_sso_dashboard_sign_in.py::test_each_refusal_goes_back_with_its_own_code",
+    "test:modules/backend/tests/integration/api/test_sso_dashboard_sign_in.py::test_a_superuser_account_is_sso_account_and_is_left_as_it_was",
+    "test:backend/tests/integration/api/test_local_auth_path.py::TestLoginFlow::test_full_flow",
+    "test:backend/tests/unit/api/test_local_auth.py::TestLocalAuthService::test_user_without_password_hash_cannot_log_in",
+    "test:backend/tests/integration/api/test_own_password_change.py::test_superuser_resets_another_account",
+    "test:backend/tests/integration/api/test_own_password_change.py::test_own_password_via_put_is_refused",
 ]
 
 [[unit]]
@@ -987,6 +992,16 @@ by = [
     "test:modules/backend/tests/integration/api/test_sso_provisioning_scope.py::test_the_configured_domain_is_compared_normalised",
     "test:modules/backend/tests/integration/api/test_sso_provisioning_scope.py::test_a_mixed_case_account_is_linked_not_duplicated",
     "test:modules/backend/tests/integration/api/test_sso_dashboard_sign_in.py::test_two_accounts_with_this_email_is_sso_account",
+]
+
+[[unit]]
+text = "Single sign-on does not sign in superuser accounts; they sign in with a password."
+by = [
+    "test:modules/backend/tests/integration/api/test_sso_dashboard_sign_in.py::test_a_superuser_account_is_sso_account_and_is_left_as_it_was",
+    "test:modules/backend/tests/integration/api/test_sso_oidc_flow.py::test_a_superuser_account_is_refused_and_left_as_it_was",
+    "test:modules/backend/tests/integration/api/test_sso_provisioning_scope.py::test_superuser_is_never_changed",
+    "test:modules/backend/tests/integration/api/test_audit_module_events.py::test_a_superuser_sso_sign_in_is_refused_and_writes_nothing",
+    "test:backend/tests/integration/api/test_local_auth_path.py::TestLoginFlow::test_full_flow",
 ]
 
 [[unit]]
