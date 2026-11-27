@@ -157,7 +157,7 @@ Same as `/export/experiments` (`format`, `scope`, `start_date`, `end_date`).
 | `variant_name`              | string  | Variant name                                        |
 | `is_control`                | boolean | Whether this is the control variant                 |
 | `assignments`               | integer | Number of users assigned to this variant (`sample_size` in `/results`) |
-| `conversions`               | integer | Number of assigned users with at least one conversion on the primary metric (a repeat purchaser counts once) |
+| `conversions`               | integer | Number of assigned users with at least one conversion on the primary metric (a repeat purchaser counts once), within its conversion window when it has one; no column gives the window |
 | `conversion_rate`           | float   | Conversion rate [0, 1] (`mean` in `/results`); empty when the primary metric is a revenue, count, duration or custom metric |
 | `p_value`                   | float   | Unadjusted p-value against control; empty for the control |
 | `is_significant`            | boolean | Whether the result is significant after the experiment's correction, at its confidence level |

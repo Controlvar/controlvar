@@ -320,6 +320,40 @@ async def _invalidate_experiment_cache(
         logger.warning("Experiment cache invalidation failed: %s", cache_error)
 
 
+def _computed_results_patterns(experiment_id: UUID) -> List[str]:
+    """The keys of ``experiment_id``'s daily and segmented results, which the
+    experiment cache holds only with ``CACHE_ENABLED`` on."""
+    return [
+        f"experiment_daily_results:{experiment_id}*",
+        f"experiment_segmented_results:{experiment_id}:*",
+    ]
+
+
+async def _invalidate_computed_results(
+    cache_control: deps.CacheControl, experiment_id: UUID
+) -> None:
+    """Drop every cached answer computed from ``experiment_id``'s metrics.
+
+    None of the keys names the metrics, so after a change to them (a draft's
+    conversion window, #1934, an event name) a cached answer would be served
+    as computed with the old ones: the results route's cache, which has a
+    Redis client of its own, and the daily and segmented results. Called after
+    the change is committed, so a Redis error is logged rather than raised.
+    Both clients are async: no worker thread is taken while the request's
+    session is open.
+    """
+    await results_endpoints.clear_cached_results(experiment_id)
+    if not (cache_control.enabled and cache_control.redis):
+        return
+    try:
+        for pattern in _computed_results_patterns(experiment_id):
+            keys = [key async for key in cache_control.redis.scan_iter(match=pattern)]
+            if keys:
+                await cache_control.redis.delete(*keys)
+    except Exception as cache_error:
+        logger.warning("Results cache invalidation failed: %s", cache_error)
+
+
 def _owner_name(db: Session, owner_id: Optional[UUID]) -> Optional[str]:
     """The name ``GET /experiments/{experiment_id}`` gives the owner (#921).
 
@@ -1396,6 +1430,8 @@ async def _apply_experiment_update(
         )
 
         await _invalidate_experiment_cache(cache_control, experiment_id)
+        if "metrics" in fields_sent:
+            await _invalidate_computed_results(cache_control, experiment_id)
 
         # Handle the response with compatibility
         try:
@@ -1772,6 +1808,8 @@ async def start_experiment(
         )
 
         await _invalidate_experiment_cache(cache_control, experiment_id)
+        # The results cache's key does not name the status (#2206).
+        await results_endpoints.clear_cached_results(experiment_id)
 
         return ExperimentResponse.model_validate(started_experiment)
     except HTTPException:
@@ -1849,6 +1887,8 @@ async def pause_experiment(
         )
 
         await _invalidate_experiment_cache(cache_control, experiment_id)
+        # The results cache's key does not name the status (#2206).
+        await results_endpoints.clear_cached_results(experiment_id)
 
         # Serialise through the service so `metrics` comes from the
         # metric_definitions relationship (the ORM `metrics` column is JSONB).
@@ -2095,6 +2135,8 @@ async def complete_experiment(
         )
 
         await _invalidate_experiment_cache(cache_control, experiment_id)
+        # The results cache's key does not name the status (#2206).
+        await results_endpoints.clear_cached_results(experiment_id)
 
         # Serialise through the service so `metrics` comes from the
         # metric_definitions relationship (the ORM `metrics` column is JSONB).
@@ -2271,6 +2313,8 @@ async def archive_experiment(
         )
 
         await _invalidate_experiment_cache(cache_control, experiment_id)
+        # The results cache's key does not name the status (#2206).
+        await results_endpoints.clear_cached_results(experiment_id)
 
         # Serialise through the service so `metrics` comes from the
         # metric_definitions relationship (the ORM `metrics` column is JSONB).

@@ -625,6 +625,44 @@ describe('FeatureFlagDetailPage', () => {
     render(<FeatureFlagDetailPage />);
     expect(await screen.findByTestId('flag-error')).toHaveTextContent("Can't reach the API");
   });
+
+  describe('every state has one h1 that names it', () => {
+    it('loading', () => {
+      install([{ path: '/api/v1/feature-flags/flag-1', handler: () => new Promise(() => undefined) }]);
+      render(<FeatureFlagDetailPage />);
+      expect(screen.getAllByRole('heading', { level: 1 }).map((h) => h.textContent)).toEqual(['Loading feature flag...']);
+    });
+
+    it('not found', async () => {
+      install([
+        {
+          path: '/api/v1/feature-flags/flag-1',
+          handler: () => {
+            throw apiError(404, 'Feature flag not found');
+          },
+        },
+      ]);
+      render(<FeatureFlagDetailPage />);
+      await screen.findByTestId('flag-not-found');
+      expect(screen.getAllByRole('heading', { level: 1 }).map((h) => h.textContent)).toEqual(['Feature flag not found']);
+    });
+
+    it('error', async () => {
+      install([
+        {
+          path: '/api/v1/feature-flags/flag-1',
+          handler: () => {
+            throw apiError(0, "Can't reach the API");
+          },
+        },
+      ]);
+      render(<FeatureFlagDetailPage />);
+      await screen.findByTestId('flag-error');
+      expect(screen.getAllByRole('heading', { level: 1 }).map((h) => h.textContent)).toEqual([
+        'Could not load this feature flag',
+      ]);
+    });
+  });
 });
 
 describe('who may change a flag (#917)', () => {

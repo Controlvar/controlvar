@@ -48,20 +48,24 @@ USECASES_ROOT = REPO_ROOT / "tests" / "usecases"
 
 #: test node id count per module, as ``pytest --collect-only -q`` lists them.
 EXPECTED = {
-    "test_admin.py": 23,
+    "test_admin.py": 24,
     "test_collection_count.py": 5,
     "test_gates.py": 94,
     "test_proxy.py": 107,
-    "test_python_driver.py": 9,
+    "test_python_driver.py": 10,
     "test_runner.py": 12,
     "test_sdks.py": 22,
     "test_usecases_workflow.py": 12,
 }
 #: The same, for the cases under ``tests/usecases``.
 EXPECTED_CASES = {
+    "test_conversion_window.py": 1,
     "test_flags_over_time.py": 5,
-    "test_js_driver.py": 7,
+    "test_is_feature_enabled.py": 2,
+    "test_js_driver.py": 8,
     "test_local_evaluation.py": 4,
+    "test_missing_archived_flag.py": 2,
+    "test_segment_preview.py": 1,
     "test_targeting.py": 1,
 }
 #: What a copy needs to collect the cases: the root, the ground-truth library
@@ -263,9 +267,12 @@ def test_no_gate_here_or_under_tests_usecases_can_skip():
         "tests/usecases/usecases/sdks.py",
         "tests/usecases/drivers/python_driver.py",
         "tests/usecases/conftest.py",
+        "tests/usecases/test_conversion_window.py",
         "tests/usecases/test_flags_over_time.py",
         "tests/usecases/test_js_driver.py",
         "tests/usecases/test_local_evaluation.py",
+        "tests/usecases/test_missing_archived_flag.py",
+        "tests/usecases/test_segment_preview.py",
         "tests/usecases/test_targeting.py",
     } <= scanned
     offenders = [

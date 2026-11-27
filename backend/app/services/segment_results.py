@@ -67,14 +67,17 @@ from backend.app.models.event import Event
 from backend.app.models.experiment import Experiment, Metric
 from backend.app.models.segment import SegmentMember
 from backend.app.schemas.tracking import VALUE_BOUND
-from backend.app.services.analysis_service import AnalysisService
+from backend.app.services.analysis_service import AnalysisService, add_window_keys
 from backend.app.services.analysis_settings import resolve_analysis_settings
 from backend.app.services.event_matching import (
     _assigned_pairs,
     any_metric_event_filter,
+    converter_pairs_any,
     converting_user_ids,
     metric_event_filter,
     metric_events,
+    windowed,
+    windowed_users,
 )
 from backend.app.services.srm_service import (
     _is_fixed_allocation,
@@ -208,8 +211,15 @@ def _member_values(
     (any other mean metric: the total of the values with ``abs(value) <=
     VALUE_BOUND``): the same events, tagged with the variant, kept for the
     variant's members. A member with no such event is not listed, so their
-    value is 0.
+    value is 0. With a conversion window, only the events inside it count
+    (``windowed_users``), as there.
     """
+    events = metric_events(metric)
+    if windowed(events):
+        found = windowed_users(db, experiment_id, variant_id, events)
+        if metric_type_name(metric) in EVENT_COUNT_METRIC_TYPES:
+            return [float(r.events) for (_, u), r in found.items() if u in members]
+        return [r.value for (_, u), r in found.items() if r.valued and u in members]
     if metric_type_name(metric) in EVENT_COUNT_METRIC_TYPES:
         rows = (
             db.query(Event.user_id, func.count(Event.id))
@@ -327,17 +337,22 @@ def _summary(
             or 0
         )
 
-    rows = (
-        db.query(Event.variant_id, Event.user_id)
-        .filter(
-            Event.experiment_id == experiment.id,
-            any_metric_event_filter(
-                metric_events(m) for m in (experiment.metric_definitions or [])
-            ),
+    metric_events_all = [
+        metric_events(m) for m in (experiment.metric_definitions or [])
+    ]
+    if any(windowed(e) for e in metric_events_all):
+        # The union of the windowed converters and the others' (#1934).
+        rows = converter_pairs_any(db, experiment.id, metric_events_all, assigned=False)
+    else:
+        rows = (
+            db.query(Event.variant_id, Event.user_id)
+            .filter(
+                Event.experiment_id == experiment.id,
+                any_metric_event_filter(metric_events_all),
+            )
+            .distinct()
+            .all()
         )
-        .distinct()
-        .all()
-    )
     converted = {
         str(user_id)
         for variant_id, user_id in rows
@@ -446,6 +461,11 @@ def segment_results(
         )
         for metric, raw in zip(metric_definitions, raw_results)
     ]
+    computed_at = datetime.now(timezone.utc)
+    # A window's open count is of the segment's members (#1934).
+    add_window_keys(
+        db, experiment, metric_definitions, metrics, computed_at, members=segment_id
+    )
     sample_size_adequate = AnalysisService._sample_size_adequate(
         experiment, raw_results
     )
@@ -491,7 +511,7 @@ def segment_results(
         "confidence_level": confidence_level,
         "correction_method": correction_method,
         "sample_size_adequate": sample_size_adequate,
-        "computed_at": datetime.now(timezone.utc),
+        "computed_at": computed_at,
         "metrics": metrics,
         "summary": summary,
         "srm": srm,

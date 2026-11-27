@@ -10,7 +10,7 @@ SDK, because each one sends its events through `POST /api/v1/tracking/track` and
 | Sent again without an `event_id` | Yes, each time | Each time: a count metric counts it again, and a revenue, duration or custom metric adds its value again; a conversion metric counts the user once |
 | Received before the user is assigned to the experiment | Yes, with no variant | No |
 | Received while the experiment is a draft, paused, completed or archived | Yes, with no variant | No |
-| Received after the user is assigned, with an earlier `timestamp` | Yes | Yes |
+| Received after the user is assigned, with an earlier `timestamp` | Yes | Yes, unless the metric has a conversion window: then only a `timestamp` inside it counts ([below](#conversion-window)) |
 | With a `value` that is not a finite number from -10^12 to 10^12 | No: `/track` and `/events` answer `422`; `/batch` reports the entry in `errors` and stores the others, but refuses the whole request when the number in the JSON is NaN or infinite | No |
 | Stored before the server refused such a value, with a `value` larger than 10^12 in size | Yes | Its user counts as converting; the value adds nothing |
 | Sent by a bot or a crawler | Yes | Yes |
@@ -82,7 +82,8 @@ link can be stored under another
 
 An event sent to `POST /api/v1/tracking/track` or `POST /api/v1/tracking/batch` counts for the
 variant the user is assigned to when the server receives it. Its `timestamp` does not change
-that.
+that; for a metric with a conversion window, it decides whether the event counts at all
+([below](#conversion-window)).
 
 - An event received by `/track` or `/batch` before the user's assignment is stored with no
   variant, and counts in no variant's results, even after the user is assigned. Track a user's
@@ -93,11 +94,53 @@ that.
 - `POST /api/v1/tracking/events` stores the `variant_id` it is sent, whatever the experiment's
   status; the event counts for that variant once the user is assigned to it, whether the
   assignment came before or after the event, and in no variant while the user is assigned to
-  another or to none.
+  another or to none. For a metric with a conversion window, it counts only when its
+  `timestamp` is inside the window.
 - The results summary's Total Events counts every stored event of the experiment, the ones that
   count in no variant included.
 - Holdout results and CUPED history have their own rules: see
   [Mutual Exclusion Groups](../api/mutual-exclusion-groups.md) and [CUPED](../api/cuped.md).
+
+## Conversion window
+
+A metric with `conversion_window_hours` (beta, set while the experiment is a draft:
+[API endpoints](../api/endpoints.md#a-metrics-conversion-window-beta)) counts a user's events
+only within that many hours of their assignment: from the start of the second they were
+assigned in, up to and not including the assignment time plus the window, by each event's
+`timestamp`. An event dated before the assignment does not count, and neither does one dated
+after the window, however soon it is received. Every results view that reads the metric
+applies its window, and a metric without one counts as above.
+
+For example, a metric with a 1-hour window:
+
+```json
+{"name": "Purchase within an hour", "event_name": "purchase", "metric_type": "conversion", "is_primary": true, "conversion_window_hours": 1}
+```
+
+A user is assigned to the experiment. A purchase they send with a `timestamp` two hours after
+the assignment counts 0 converting users. One they send straight after, with no `timestamp`,
+is dated when it is received, inside the hour, and counts 1.
+
+With a window, users assigned within the window before the experiment stops never get a full
+window, and this cannot change after it ends. The number is not the N-day conversion rate: a
+change that makes people convert later can show the opposite sign, even when no window does
+not.
+
+- Counting stops when the experiment stops, whatever the window: an event received while the
+  experiment is paused, completed or archived counts in no variant.
+- Each variant's `open_window_users` in the results is how many of its assigned users had less
+  than the full window: at the experiment's `end_date` once it is completed, or archived with
+  an `end_date` at or before the time the results were computed, and at that time while it is
+  a draft or active. It is `null` while the experiment is paused, or archived without such an
+  `end_date`, because when counting stopped is not recorded.
+- A pause is not recorded either: if the experiment was paused, events sent during the pause
+  were not counted, so more users may have had less than the full window.
+- Users still inside their window are in the sample size and count as not converted until they
+  convert.
+- For ids linked as one person, the window starts at the assignment their events are stored
+  under, the one stored first among their ids ([below](#ids-linked-as-one-person)).
+- An event sent with no `timestamp` is dated when it is received, so an event a client holds
+  back and sends later can fall outside the window.
 
 ## Ids linked as one person
 
@@ -130,7 +173,9 @@ link on:
   at the very edge of the date range whose UTC offset moves it past 0001-01-01 or 9999-12-31
   (`9999-12-31T23:59:59-01:00`, say) is refused with `422`, or reported in a batch's `errors`,
   and nothing is stored.
-- `GET /api/v1/results/{experiment_id}` does not read it.
+- For a metric without a conversion window, `GET /api/v1/results/{experiment_id}` does not read
+  it. For a metric with one, it decides whether the event counts
+  ([above](#conversion-window)).
 - `GET /api/v1/results/{experiment_id}/daily` puts each user's first conversion on the UTC day
   of its `timestamp`. A day before the experiment's first day counts on that first day, and a
   day after its last day on that last day.

@@ -364,6 +364,20 @@ class VariantResult(BaseModel):
             "absolute_difference_ci is None."
         ),
     )
+    open_window_users: Optional[int] = Field(
+        None,
+        description=(
+            "Beta.  When the metric has a conversion window: how many of this "
+            "variant's assigned users had less than the full window, counted "
+            "when the experiment's counting stopped (its end_date once it is "
+            "completed, or archived with an end_date no later than "
+            "computed_at) or at computed_at while it is a draft or active.  "
+            "Their conversions so far are counted.  None when the "
+            "metric has no window, and when the experiment is paused or "
+            "archived without such an end_date: events sent then are not "
+            "counted, and when counting stopped is not recorded."
+        ),
+    )
 
     @field_validator("p_value", "adjusted_p_value", mode="before")
     @classmethod
@@ -428,6 +442,15 @@ class MetricResult(BaseModel):
             "before 1.13.0 used Welch's t-test).  'proportion' "
             "for a conversion metric: the share of users who converted, "
             "compared with Fisher's exact test."
+        ),
+    )
+    conversion_window_hours: Optional[int] = Field(
+        None,
+        description=(
+            "Beta.  The metric's conversion window, in hours (1 to 8760): only "
+            "events within this many hours of each user's assignment are "
+            "counted, for conversions and values alike.  None when the metric "
+            "has no window, and every event the metric matches is counted."
         ),
     )
     variants: List[VariantResult] = Field(

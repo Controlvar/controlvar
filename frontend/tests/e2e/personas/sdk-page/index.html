@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Persona shop</title>
+  </head>
+  <!--
+    U-SDK's page (tests/personas/personas/u-sdk.yaml): a shop's checkout that
+    runs this checkout's JavaScript SDK the way a site would. sdk.js is
+    sdk/js/dist as its build leaves it, wrapped by ../sdk-page.ts so a browser
+    can load it; config.json, written beside it for the day, holds the API key
+    and the experiment's and the flag's keys. ?user=<id>&country=<code> is the
+    visitor. The SDK calls this page's own origin, which passes /api on to the
+    API (tests/e2e/static-server.mjs), so no CORS entry is needed.
+  -->
+  <body data-state="loading">
+    <main>
+      <h1>Checkout</h1>
+      <p data-testid="sdk-variant">Loading your checkout</p>
+      <p data-testid="sdk-flag"></p>
+      <button type="button" data-testid="sdk-buy" disabled>Buy</button>
+      <p data-testid="sdk-bought"></p>
+      <p data-testid="sdk-exposures" data-count="0"></p>
+      <ul data-testid="sdk-errors"></ul>
+    </main>
+    <script src="sdk.js"></script>
+    <script>
+      (async function () {
+        var shown = function (id) {
+          return document.querySelector('[data-testid="' + id + '"]');
+        };
+        var exposures = 0;
+        function fail(text) {
+          var item = document.createElement("li");
+          item.textContent = text;
+          shown("sdk-errors").appendChild(item);
+        }
+        try {
+          var params = new URLSearchParams(window.location.search);
+          var user = { userId: params.get("user"), attributes: { country: params.get("country") } };
+          var config = await (await fetch("config.json", { cache: "no-store" })).json();
+          var client = new window.Controlvar.ExperimentationClient({
+            apiUrl: window.location.origin,
+            apiKey: config.apiKey,
+            onExposure: function () {
+              exposures += 1;
+              shown("sdk-exposures").dataset.count = String(exposures);
+              shown("sdk-exposures").textContent = "Exposures reported: " + exposures;
+            },
+            onError: function (error, operation) {
+              fail(operation + ": " + error.message);
+            },
+          });
+
+          var assignment = await client.getAssignment(config.experimentKey, user);
+          var variant = shown("sdk-variant");
+          variant.dataset.variant = assignment.variantName;
+          variant.dataset.assigned = String(assignment.assigned === true);
+          variant.textContent = "You see the " + assignment.variantName + " checkout";
+
+          var flag = await client.evaluateFlag(config.flagKey, user);
+          var answer = shown("sdk-flag");
+          answer.dataset.enabled = String(flag.enabled);
+          answer.dataset.reason = String(flag.reason);
+          answer.textContent = "One-click pay is " + (flag.enabled ? "on" : "off") + " for you (" + flag.reason + ")";
+
+          var buy = shown("sdk-buy");
+          buy.addEventListener("click", async function () {
+            buy.disabled = true;
+            await client.track(user.userId, "purchase", { experimentKey: config.experimentKey, value: 20 });
+            shown("sdk-bought").dataset.sent = "true";
+            shown("sdk-bought").textContent = "Thank you for your order";
+          });
+          buy.disabled = false;
+          document.body.dataset.state = "ready";
+        } catch (error) {
+          fail("page: " + (error && error.message ? error.message : String(error)));
+          document.body.dataset.state = "failed";
+        }
+      })();
+    </script>
+  </body>
+</html>

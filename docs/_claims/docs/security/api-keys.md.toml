@@ -5,11 +5,15 @@ document = "docs/security/api-keys.md"
 
 [[unit]]
 text = "API Key Management"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "API keys give programs access to the platform: SDK clients, server-side applications and scripts."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestKeyAuthenticatesSdkTraffic::test_tracking_assign_with_created_key",
+    "docex:docs/security/api-keys.md#\"key\": \"beta_features\"",
+    "docex:docs/security/api-keys.md#\"event_type\": \"purchase\"",
+]
 
 [[unit]]
 text = "Unlike a user's login token, which expires (after 12 hours by default), an API key lasts until you delete it or it reaches its own expires_at."
@@ -22,19 +26,19 @@ by = [
 
 [[unit]]
 text = "It is meant for service-to-service calls."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "The commands on this page run as written against the stack from the Quick Start, in one terminal, top to bottom."
-by = ["exempt:baseline"]
+by = ["docex:docs/security/api-keys.md#\"ADMIN\""]
 
 [[unit]]
 text = "Each one uses the shell variables set by the ones before it."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "What API Keys Are Used For"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "SDK integration: the SDKs authenticate with an API key to evaluate feature flags, assign users to experiments and track events."
@@ -46,7 +50,10 @@ by = [
 
 [[unit]]
 text = "Server-to-server calls: backend services that track conversions or evaluate flags."
-by = ["exempt:baseline"]
+by = [
+    "docex:docs/security/api-keys.md#\"key\": \"beta_features\"",
+    "docex:docs/security/api-keys.md#\"event_type\": \"purchase\"",
+]
 
 [[unit]]
 text = "Event ingestion: the tracking endpoints (/api/v1/tracking/) take an API key."
@@ -87,7 +94,7 @@ by = [
 
 [[unit]]
 text = "Creating an API Key"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Creating a key takes a user login."
@@ -95,7 +102,7 @@ by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestCreate::test
 
 [[unit]]
 text = "Log in first; this saves the token in $TOKEN:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "It prints \"ADMIN\"."
@@ -107,7 +114,7 @@ by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestRulesetScope
 
 [[unit]]
 text = "Then create the key."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "The collection URL has no trailing slash: /api/v1/api-keys/ answers 307 Temporary Redirect, which curl doesn't follow."
@@ -132,7 +139,10 @@ by = [
 
 [[unit]]
 text = "This saves the key in $KEY and its id in $KEY_ID, and prints:"
-by = ["exempt:baseline"]
+by = [
+    "docex:docs/security/api-keys.md#\"key\": \"beta_features\"",
+    "docex:docs/security/api-keys.md#204",
+]
 
 [[unit]]
 text = "The key value is shown only once."
@@ -150,15 +160,15 @@ by = [
 
 [[unit]]
 text = "Store it immediately in a secure location (a secrets manager, not a code repository)."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "If you lose it, create a new key."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "The request takes:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "name (required, up to 100 characters);"
@@ -169,7 +179,7 @@ by = [
 
 [[unit]]
 text = "description;"
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestCreate::test_create_returns_plaintext_once"]
 
 [[unit]]
 text = "scopes, a list of names, at most 255 characters in all when joined with commas; a longer list answers 422 (see Scopes);"
@@ -208,7 +218,7 @@ by = [
 
 [[unit]]
 text = "Scopes"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Scopes are stored with the key and returned when you list keys."
@@ -539,7 +549,7 @@ by = [
 
 [[unit]]
 text = "Using an API Key"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Pass the key in the X-API-Key header on every request."
@@ -547,7 +557,7 @@ by = ["docex:docs/security/api-keys.md#\"key\": \"beta_features\""]
 
 [[unit]]
 text = "This evaluates the demo data's beta_features flag for one user:"
-by = ["exempt:baseline"]
+by = ["docex:docs/security/api-keys.md#\"key\": \"beta_features\""]
 
 [[unit]]
 text = "It prints \"enabled\": true: the flag is on for everyone."
@@ -555,7 +565,7 @@ by = ["docex:docs/security/api-keys.md#\"key\": \"beta_features\""]
 
 [[unit]]
 text = "This tracks a purchase by the same user in the demo data's checkout_button_color experiment."
-by = ["exempt:baseline"]
+by = ["docex:docs/security/api-keys.md#\"event_type\": \"purchase\""]
 
 [[unit]]
 text = "A tracked event names the experiment (experiment_key) or the flag (feature_flag_key) it belongs to:"
@@ -570,15 +580,19 @@ by = [
 
 [[unit]]
 text = "In an SDK, the key is a setting of the client."
-by = ["exempt:baseline"]
+by = [
+    "test:sdk/js/__tests__/client.test.ts::requires apiKey",
+    "test:sdk/python/tests/test_client.py::TestConstruction::test_requires_api_url_and_api_key",
+    "test:sdk/python/tests/test_client.py::TestConstruction::test_headers_and_timeout_reach_the_transport",
+]
 
 [[unit]]
 text = "Load it from the environment rather than writing it into the code:"
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Listing Keys"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "List your keys."
@@ -633,15 +647,15 @@ by = [
 
 [[unit]]
 text = "Use it to find keys that are no longer used."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Deleting a Key"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Delete a key when it is no longer needed, or if you suspect it has leaked."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Only its owner or an ADMIN can delete it:"
@@ -672,31 +686,31 @@ by = ["journey:api-key-first-assignment#refused"]
 
 [[unit]]
 text = "Key Rotation Best Practices"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Rotate API keys on a regular schedule to limit the window of exposure if a key leaks."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Recommended Rotation Schedule"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Environment | Recommended Rotation"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Production | Every 90 days"
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Staging / Development | Every 180 days"
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "CI/CD pipelines | On every major deployment"
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Setting expires_at when you create a key makes the schedule hard to forget: the key stops working on that date."
@@ -704,7 +718,7 @@ by = ["test:backend/tests/integration/api/test_sdk_ruleset_api.py::TestScope::te
 
 [[unit]]
 text = "Zero-Downtime Rotation Procedure"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Create a new API key with the same name, scopes and environment as the old key."
@@ -715,19 +729,19 @@ by = [
 
 [[unit]]
 text = "Update your service's secrets (Secrets Manager, environment variables, and so on) to the new key."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Deploy or restart the service so it uses the new key."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Check that the service works with the new key."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Delete the old key."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "The service always has a valid key during the rotation."
@@ -735,59 +749,59 @@ by = ["test:backend/tests/unit/api/test_route_surface_rules.py::test_a_new_key_m
 
 [[unit]]
 text = "Security Best Practices"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Never commit keys to source control"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "API keys in source code can be exposed in logs, error messages or git history."
-by = ["exempt:baseline"]
+by = ["exempt:theory"]
 
 [[unit]]
 text = "Load keys from environment variables or a secrets manager:"
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "and never write the key itself into the code."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Use a secrets manager"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Store production API keys in a dedicated secrets manager:"
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "AWS Secrets Manager: integrates with ECS task definitions and Lambda environment variables"
-by = ["exempt:baseline"]
+by = ["exempt:third-party"]
 
 [[unit]]
 text = "HashiCorp Vault: for multi-cloud or on-premise setups"
-by = ["exempt:baseline"]
+by = ["exempt:third-party"]
 
 [[unit]]
 text = "Kubernetes Secrets: for Kubernetes-based deployments"
-by = ["exempt:baseline"]
+by = ["exempt:third-party"]
 
 [[unit]]
 text = "Separate keys per service"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Use one API key per service or application, and name it after the service."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "That limits the blast radius of a leaked key: you can delete that service's key without affecting the others."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestDelete::test_deleting_one_key_leaves_the_others_working"]
 
 [[unit]]
 text = "Grant sdk:ruleset only where it is needed"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Give the sdk:ruleset scope only to a server that will evaluate flags locally, assign lists of users or link ids."
@@ -795,7 +809,7 @@ by = ["exempt:advice"]
 
 [[unit]]
 text = "Every other key, including any key used in a browser or a mobile app, should be created without it."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Because no other scope limits a key, a separate key per service is what lets you revoke one integration without touching the others."

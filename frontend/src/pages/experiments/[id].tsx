@@ -36,6 +36,7 @@ import { DemoNote } from '@/components/DemoNote';
 import { DEMO_EXPERIMENTS_ACTION } from '@/utils/demoMode';
 import { correctionName, formatConfidence } from '@/components/results/shared/analysisSettings';
 import { parseApiTimestamp } from '@/utils/apiTimestamp';
+import { windowPageLine } from '@/utils/conversionWindow';
 
 /** Lifecycle transitions exposed per status (mirrors the backend guards). */
 export type LifecycleAction = 'start' | 'pause' | 'complete' | 'archive';
@@ -498,11 +499,11 @@ export default function ExperimentDetailPage() {
               </div>
               {/* Every dt is slate-500 (4.76:1 on white), never slate-400 (2.56:1): a11y/grey-text-contrast.test.ts. */}
               <dl className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm text-slate-600">
-                <div className="flex items-center gap-1.5">
+                <div className="flex min-w-0 items-center gap-1.5">
                   <dt className="text-slate-500">Key</dt>
                   {/* The Copy button sits inside the dd: a dl may hold only dt and dd groups. */}
-                  <dd className="flex items-center gap-1.5">
-                    <span className="font-mono text-slate-800" data-testid="experiment-key">
+                  <dd className="flex min-w-0 items-center gap-1.5">
+                    <span className="min-w-0 break-all font-mono text-slate-800" data-testid="experiment-key">
                       {experiment.key ?? '—'}
                     </span>
                     {experiment.key && (
@@ -809,6 +810,8 @@ export default function ExperimentDetailPage() {
                               // Text only: React escapes it, so a configuration holding markup shows as written.
                               <pre
                                 tabIndex={0}
+                                role="group"
+                                aria-label={`Configuration of ${variant.name}`}
                                 className="max-h-40 max-w-xs overflow-auto whitespace-pre-wrap break-all rounded bg-slate-50 p-2 font-mono text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-600"
                                 data-testid={`variant-configuration-view-${index}`}
                               >
@@ -851,6 +854,11 @@ export default function ExperimentDetailPage() {
                           event <code className="font-mono text-slate-700">{metric.event_name}</code>
                         </span>
                         <span>{METRIC_TYPE_LABELS[metric.metric_type as MetricType] ?? metric.metric_type}</span>
+                        {typeof metric.conversion_window_hours === 'number' && (
+                          <span data-testid="metric-window-line">
+                            {windowPageLine(metric.conversion_window_hours)}
+                          </span>
+                        )}
                       </div>
                     </li>
                   ))}
@@ -909,7 +917,12 @@ export default function ExperimentDetailPage() {
               ) : null}{' '}
               to <code className="font-mono">/api/v1/tracking/track</code>.
             </p>
-            <pre className="bg-slate-900 text-slate-100 text-xs rounded-md p-3 overflow-x-auto">
+            <pre
+              tabIndex={0}
+              role="group"
+              aria-label="Example request"
+              className="bg-slate-900 text-slate-100 text-xs rounded-md p-3 overflow-x-auto focus:outline-none focus:ring-2 focus:ring-blue-600"
+            >
               {`curl -X POST "$API_URL/api/v1/tracking/assign" \\
   -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \\
   -d '{"experiment_key": "${experiment.key}", "user_id": "user-123"}'`}

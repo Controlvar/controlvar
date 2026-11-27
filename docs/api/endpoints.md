@@ -476,7 +476,7 @@ curl -s "http://localhost:8000/api/v1/audit-logs/?page=4611686018427387905&limit
 ### Caching
 - `GET /api/v1/experiments/{experiment_id}` and its `daily-results` and `segmented-results` are cached for 3,600 seconds (an hour) when `CACHE_ENABLED` is on (it is off by default). A change to the experiment clears its cached detail; its cached daily and segmented results stay until they expire
 - Feature flags are not cached: the flag list and a flag's detail are read from the database on every request, whatever `CACHE_ENABLED` says
-- `GET /api/v1/results/{experiment_id}` and `GET /api/v1/experiments/{experiment_id}/results` are cached for 5 minutes while the experiment is running, and for 24 hours otherwise, whenever Redis is reachable
+- `GET /api/v1/results/{experiment_id}` and `GET /api/v1/experiments/{experiment_id}/results` are cached for 5 minutes while the experiment is running, and for 24 hours otherwise, whenever Redis is reachable. Starting, pausing, resuming, completing or archiving the experiment, by hand or by the scheduler, clears its cached results
 
 ## Authentication Endpoints
 
@@ -947,6 +947,32 @@ below 1 (`0`, `1.5`, a negative number) is stored as sent but not used: the
 plan is for `0.05` and `mde_source` is `default`. A secondary metric's
 `expected_effect` is not read. A clone keeps it. A `PUT` that sends `metrics`
 replaces them, so a metric resent without `expected_effect` no longer has one.
+
+### A metric's conversion window (beta)
+
+A metric's `conversion_window_hours`, sent on create or on a draft's `PUT`,
+makes it count each user's events only within that many hours of their
+assignment, for any metric type
+([Conversion window](../guides/how-events-count.md#conversion-window)). It is a
+whole number from 1 to 8760 (365 days); `null`, or leaving it out, means no
+window. Anything else answers 422 at
+`["body", "metrics", i, "conversion_window_hours"]` with Pydantic's own
+message: `0` and `8761` with `greater_than_equal` and `less_than_equal`, and
+`1.5`, `true` and `"24"` with `int_type`. Every experiment response carries it,
+a clone keeps it, and it cannot be changed once the experiment leaves draft
+(`400`). A `PUT` that sends `metrics` replaces them, so a metric resent without
+`conversion_window_hours` no longer has one. It also drops the experiment's
+cached results, so when that reaches the cache the next read is counted with
+the new windows. When the cache cannot be reached at that moment, a warning is
+logged and an answer it holds is served until it expires.
+
+In the results, each metric carries the `conversion_window_hours` its numbers
+were counted with, and each of its variants `open_window_users`: how many of
+the variant's assigned users had less than the full window, at the
+experiment's `end_date` once it is completed, or archived with an `end_date`
+at or before `computed_at`, and at `computed_at` while it is a draft or
+active. Both are `null` for a metric with no window, and `open_window_users`
+also while the experiment is paused, or archived without such an `end_date`.
 
 ### Balancing the split within groups (beta)
 

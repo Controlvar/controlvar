@@ -145,7 +145,7 @@ export function VariantsEditor({
             className="flex gap-3 items-start p-3 rounded-lg border border-slate-200 bg-slate-50"
             data-testid={`variant-row-${index}`}
           >
-            <div className="flex-1 space-y-2">
+            <div className="flex-1 min-w-0 space-y-2">
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -156,7 +156,7 @@ export function VariantsEditor({
                   }
                   placeholder="Variant name"
                   aria-label={`Variant ${index + 1} name`}
-                  className={`flex-1 ${smallInputClass}`}
+                  className={`flex-1 min-w-0 ${smallInputClass}`}
                   data-testid={`variant-name-${index}`}
                   {...marks(index, 'name')}
                 />

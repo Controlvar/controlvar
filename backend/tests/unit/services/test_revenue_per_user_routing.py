@@ -44,6 +44,9 @@ from backend.tests.unit.services import (
     test_binomial_metric_result_characterisation as characterisation,
 )
 from backend.tests.unit.services import (
+    test_binomial_metric_result_characterisation as characterisation_window,
+)
+from backend.tests.unit.services import (
     test_sufficient_stats_fingerprint as sufficient_stats,
 )
 
@@ -91,6 +94,9 @@ REVENUE_RESULTS_FINGERPRINTS: Dict[str, str] = {
     # 1.13.0 (#2041): the revenue metric's p-value comes from the
     # permutation test of Welch's t, named permutation_t_test.
     "1.13.0": "3e62a8db9f08b6de51a3da68ef189cdcc3f8660659be503770a3fc7081cb6673",
+    # 1.14.0 (#1934): a metric's conversion window; no fixture here has one,
+    # so 1.13.0's entries.
+    "1.14.0": "3e62a8db9f08b6de51a3da68ef189cdcc3f8660659be503770a3fc7081cb6673",
 }
 
 
@@ -164,6 +170,8 @@ def _results(
     )
     output.pop("computed_at")
     assert output.pop("srm") is None
+    # The window keys (#1934): null here, set aside as the check is.
+    characterisation_window.pop_window_keys(output)
     output["totals_read_for"] = sorted(totals_read)
     if counts_read:
         output["counts_read_for"] = sorted(counts_read)

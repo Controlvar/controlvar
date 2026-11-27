@@ -57,6 +57,9 @@ function storableDeep(value: unknown): boolean {
   return true;
 }
 
+/** Longest user id the API accepts (USER_ID_MAX_LENGTH in the backend's feature flag routes). */
+const USER_ID_MAX_LENGTH = 255;
+
 const NOT_STORABLE = "must not contain U+0000 or an unpaired surrogate";
 
 const limit = z
@@ -268,7 +271,7 @@ export function registerTools(server: McpServer, api: Api): void {
         user_id: z
           .string()
           .min(1)
-          .max(256)
+          .max(USER_ID_MAX_LENGTH)
           .refine(storable, NOT_STORABLE)
           .describe("The user to evaluate the flag for, as your app identifies them."),
         context: z

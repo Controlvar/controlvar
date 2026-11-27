@@ -270,8 +270,10 @@ update, and nothing is saved. That is:
   `start_time` with `end_time`, or `start_date` with `end_date`, and needs no `start` or
   `end`;
 - a `rollout_percentage`, top-level or on a native rule, that is not an integer from 0 to
-  100 (`100.0` is accepted; `33.5`, `true` and `"50"` are not), or an `id` that is not text
-  of 1 to 100 characters.
+  100 (`100.0` is accepted; `33.5`, `true` and `"50"` are not), or a dashboard-shape `id`
+  (beside `groups`) that is not text of 1 to 100 characters;
+- a native rule's `id` (`rules[0].id`) or the `default_rule`'s `id` longer than 255
+  characters.
 
 The message names the place and the reason, never the value you sent. Only the first
 problem found is reported. This request misspells `equals`:

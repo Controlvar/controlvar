@@ -37,8 +37,8 @@ the guardrails it expects.**
 **Flag delivery.** Flag checks are answered next to your apps, quickly, and keep working when the
 Controlvar server is down.
 
-- **A relay** that runs beside your apps, holds the rules, answers flag checks for every SDK and
-  streams changes. Browsers and phones never receive the rules.
+- **A relay** that runs beside your apps, holds the rules and answers flag checks for every SDK
+  ([#2212](https://github.com/Controlvar/controlvar/issues/2212)). Browsers and phones never receive the rules.
 - **Multi-way flags:** a weighted split among three or more values, and a different value per rule.
 
 **Release workflow.** A flag change is made in one environment, approved, then promoted, in one
@@ -50,16 +50,19 @@ install.
 
 **Statistics.** Every analysis reads a revenue, count or duration metric by its values.
 
-- **A shared metric library:** define a metric once, use it in experiments and rollouts.
+- **A shared metric library:** define a metric once, use it in experiments and rollouts
+  ([#2213](https://github.com/Controlvar/controlvar/issues/2213)).
 - **Every view of a mean metric reads its values:** Bayesian, sequential, sample size, daily, Live
-  and breakdowns; then CUPED and outlier control (winsorization) for means, and ratio metrics.
+  and breakdowns; then CUPED and outlier control (winsorization) for means
+  ([#2214](https://github.com/Controlvar/controlvar/issues/2214)).
 
 **Also in Next:**
 
 - **Dashboard screens** for what only the API does today
-  ([#442](https://github.com/Controlvar/controlvar/issues/442)).
+  ([#442](https://github.com/Controlvar/controlvar/issues/442)), starting with the per-flag safety
+  configuration page ([#2215](https://github.com/Controlvar/controlvar/issues/2215)).
 - **Guardrail thresholds that act:** alert, then stop or roll back on a business metric, in
-  experiments and in rollouts.
+  experiments and in rollouts ([#2218](https://github.com/Controlvar/controlvar/issues/2218)).
 - **SAML sign-in**, and Microsoft Entra ID over OIDC
   ([#123](https://github.com/Controlvar/controlvar/issues/123)).
 - **Identity aliasing:** a visitor who signs in keeps one assignment
@@ -69,8 +72,9 @@ install.
   in their next releases.
 - **Data retention by age**, and erasing one person's data.
 - **Moving in and out:** import flags from other flag tools, and export and import between
-  Controlvar instances.
-- **Rollback on an outside alert:** an alert from your monitoring stops the matching rollouts.
+  Controlvar instances ([#2216](https://github.com/Controlvar/controlvar/issues/2216)).
+- **Rollback on an outside alert:** an alert from your monitoring stops the matching rollouts
+  ([#2217](https://github.com/Controlvar/controlvar/issues/2217)).
 
 ## Later
 
@@ -85,7 +89,8 @@ install.
   ClickHouse, and intervals and the impact for mean metrics in a warehouse analysis.
 - Workspaces that keep teams' experiments and flags apart, not only group people.
 - Holdout results for mean metrics ([#835](https://github.com/Controlvar/controlvar/issues/835)).
-- Quantile and funnel metrics, and metrics defined from dbt models.
+- Quantile, funnel and ratio metrics, and metrics defined from dbt models.
+- Streaming flag changes to the relay.
 - Local evaluation in more server SDKs, including segments and the advanced operators.
 - Changes through the MCP server, under the same role checks, with a person approving risky ones
   ([#1607](https://github.com/Controlvar/controlvar/issues/1607)).

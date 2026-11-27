@@ -351,6 +351,23 @@
 # them, which only a run can say. The lists are 127 for superuser, 201 for
 # viewer and 9 for sdk.
 
+# Then #2192 (#1545) added three visual editor session operations.
+# GET /api/v1/visual-editor/sessions/current/segments and
+# GET /api/v1/visual-editor/sessions/current/exclusion-groups answer 401 to
+# a request without an editor session's token, and no pass sends one (a
+# pass's bearer token is not one); PATCH
+# /api/v1/visual-editor/sessions/current/experiment answers 403 to a request
+# without the dashboard's Origin, and no pass sends one (422 for a body that
+# is not JSON). Those answers were measured through the application, with a
+# superuser's and a VIEWER's bearer token, on the pull request's head merged
+# with main. The pull request's fuzz.yml run on its earlier head (b6207c51,
+# run 45869124544) selected three operations more than main's run at its
+# base (8b495c8c, run 45848535842) in each of the superuser and viewer
+# passes, reached the same number (145 and 70), and found 3 unreached and not
+# listed and 0 listed but reached in each: these three. None is an SDK
+# route, so the sdk pass selects none. The lists are 130 for superuser, 204
+# for viewer and 9 for sdk.
+
 # --- superuser: the seeded demo administrator's bearer token ----------------
 
 [[unreached]]
@@ -475,8 +492,23 @@ reason = "Signing out of an editor session is the dashboard's: no request carrie
 
 [[unreached]]
 pass = "superuser"
+operation = "GET /api/v1/visual-editor/sessions/current/segments"
+reason = "Read with an editor session's token: no request carries one (the pass's bearer token is not one), so it answers 401."
+
+[[unreached]]
+pass = "superuser"
+operation = "GET /api/v1/visual-editor/sessions/current/exclusion-groups"
+reason = "Read with an editor session's token: no request carries one (the pass's bearer token is not one), so it answers 401."
+
+[[unreached]]
+pass = "superuser"
 operation = "PUT /api/v1/visual-editor/sessions/current/variants/{variant_id}/changes"
 reason = "Saving a variant's changes is the editor's, in the dashboard: no request carries the dashboard's Origin, so it answers 403."
+
+[[unreached]]
+pass = "superuser"
+operation = "PATCH /api/v1/visual-editor/sessions/current/experiment"
+reason = "Saving a draft's audience, split, metrics and goals is the editor's, in the dashboard: no request carries the dashboard's Origin, so it answers 403, and 422 for a body that is not JSON."
 
 [[unreached]]
 pass = "superuser"
@@ -1152,8 +1184,23 @@ reason = "Signing out of an editor session is the dashboard's: no request carrie
 
 [[unreached]]
 pass = "viewer"
+operation = "GET /api/v1/visual-editor/sessions/current/segments"
+reason = "Read with an editor session's token: no request carries one (the pass's bearer token is not one), so it answers 401."
+
+[[unreached]]
+pass = "viewer"
+operation = "GET /api/v1/visual-editor/sessions/current/exclusion-groups"
+reason = "Read with an editor session's token: no request carries one (the pass's bearer token is not one), so it answers 401."
+
+[[unreached]]
+pass = "viewer"
 operation = "PUT /api/v1/visual-editor/sessions/current/variants/{variant_id}/changes"
 reason = "Saving a variant's changes is the editor's, in the dashboard: no request carries the dashboard's Origin, so it answers 403."
+
+[[unreached]]
+pass = "viewer"
+operation = "PATCH /api/v1/visual-editor/sessions/current/experiment"
+reason = "Saving a draft's audience, split, metrics and goals is the editor's, in the dashboard: no request carries the dashboard's Origin, so it answers 403, and 422 for a body that is not JSON."
 
 [[unreached]]
 pass = "viewer"

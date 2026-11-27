@@ -100,6 +100,10 @@ by = [
 ]
 
 [[unit]]
+text = "Reading is open: every signed-in role can read the global safety settings and a flag's safety config and check; changing them, and the rollback, need the superuser flag."
+by = ["test:backend/tests/unit/api/test_route_surface_rules.py::test_every_safety_read_takes_any_signed_in_user_and_every_write_a_superuser"]
+
+[[unit]]
 text = "The dashboard's Users, API Keys, Safety settings and Roles pages also require a superuser."
 by = [
     "test:backend/tests/unit/api/test_route_surface_rules.py::test_the_users_api_keys_and_safety_pages_need_a_superuser",

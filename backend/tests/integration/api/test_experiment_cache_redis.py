@@ -345,6 +345,47 @@ def test_a_change_drops_the_experiment_and_every_cached_list(
     assert redis_server.exists(own_list, other_list) == 0, "a cached list survived"
 
 
+def test_a_change_to_a_draft_s_metrics_drops_its_cached_results(
+    cached_client, redis_server
+):
+    """None of the results caches' keys names the metrics, so a PUT that sends
+    them -- a conversion window, here (#1934) -- drops the experiment's cached
+    results: the results route's own (``results:{id}:*``) and the daily and
+    segmented results. Another experiment's stay, and a PUT without metrics
+    leaves them."""
+    exp, other = _create(cached_client), _create(cached_client)
+
+    def plant(experiment_id) -> list:
+        keys = [
+            f"results:{experiment_id}:1.14.0:0.95:benjamini_hochberg:",
+            f"results:{experiment_id}:1.14.0:0.9:none:country",
+            f"experiment_daily_results:{experiment_id}",
+            f"experiment_daily_results:{experiment_id}:{uuid.uuid4()}",
+            f"experiment_segmented_results:{experiment_id}:country",
+        ]
+        for key in keys:
+            redis_server.set(key, "{}")
+        return keys
+
+    keys, others = plant(exp["id"]), plant(other["id"])
+    described = cached_client.put(f"{BASE}/{exp['id']}", json={"description": "x"})
+    assert described.status_code == 200, described.text
+    assert redis_server.exists(*keys) == len(keys), "a PUT without metrics dropped them"
+
+    metric = {
+        "name": "Conversion",
+        "event_name": "purchase",
+        "metric_type": "conversion",
+        "is_primary": True,
+        "conversion_window_hours": 168,
+    }
+    resp = cached_client.put(f"{BASE}/{exp['id']}", json={"metrics": [metric]})
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["metrics"][0]["conversion_window_hours"] == 168
+    assert redis_server.exists(*keys) == 0, "a cached result survived"
+    assert redis_server.exists(*others) == len(others)
+
+
 #: Dashboard-shape rules, before and after a targeting change (#523).
 TARGETING_BEFORE = {
     "logical_operator": "AND",
@@ -934,13 +975,31 @@ def uncached_superuser_client(db_session, admin_user, monkeypatch):
     )
 
 
+def _results_clear(experiment_id) -> list:
+    """The commands of ``clear_cached_results(experiment_id)`` against
+    ``test_with_the_cache_off_no_writer_calls_redis``'s spy, which answers a
+    SCAN with one key, as a Redis holding one answer would."""
+    return [
+        ("SCAN", "0", b"MATCH", f"results:{experiment_id}:*"),
+        ("DEL", f"results:{experiment_id}:held"),
+    ]
+
+
 def test_with_the_cache_off_no_writer_calls_redis(
     uncached_superuser_client, db_session, monkeypatch, caplog
 ):
-    """No Redis is asked for and no command is sent: not by the group routes,
-    not by a tick that starts one experiment and completes another. Nor is a
-    failed invalidation logged, which is all a writer that went on past the
-    cache-off check would show."""
+    """The experiment cache asks for no Redis and sends no command: not for the
+    group routes, not for a tick that starts one experiment and completes
+    another. Nor is a failed invalidation logged, which is all a writer that
+    went on past the cache-off check would show.
+
+    The one thing sent is the results cache's clear, which does not read
+    ``CACHE_ENABLED`` (that cache is on whenever Redis answers, #2206): a SCAN
+    of ``results:{id}:*`` and a DEL of what it found, for the experiment
+    ``POST /start`` started and then for each one the tick started or
+    completed, in that order."""
+    from backend.app.core.scheduler import ExperimentScheduler
+
     client = uncached_superuser_client
     calls = []
     real_pool = deps.get_redis_pool
@@ -951,21 +1010,34 @@ def test_with_the_cache_off_no_writer_calls_redis(
 
     async def spied_command(self, *args, **options):
         calls.append(args)
+        if args[0] == "SCAN":
+            return 0, [args[3].replace("*", "held")]
+
+    ticked = []
+    real_process_due = ExperimentScheduler._process_due
+
+    def spied_process_due(self):
+        work = real_process_due(self)
+        ticked.extend(work.activated_ids + work.completed_ids)
+        return work
 
     monkeypatch.setattr(deps, "get_redis_pool", spied_pool)
     monkeypatch.setattr(async_redis.Redis, "execute_command", spied_command)
+    monkeypatch.setattr(ExperimentScheduler, "_process_due", spied_process_due)
 
     exp = _create(client)
     group = _create_group(client)
     assert _add(client, group["id"], exp["id"]).status_code == 200
     assert _remove(client, group["id"], exp["id"]).status_code == 200
     starts = _due_to_start(client)
-    ends = _due_to_end(client, db_session)
+    ends = _due_to_end(client, db_session)  # started with POST /start
     _tick(client, db_session)
 
     assert _detail(client, starts["id"])["status"] == "active"
     assert _detail(client, ends["id"])["status"] == "completed"
-    assert calls == []
+    assert {starts["id"], ends["id"]} <= {str(i) for i in ticked}
+    cleared = [ends["id"], *ticked]
+    assert calls == [command for i in cleared for command in _results_clear(i)]
     assert INVALIDATION_FAILED not in caplog.text
 
 

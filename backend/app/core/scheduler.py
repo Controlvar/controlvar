@@ -14,6 +14,7 @@ from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from backend.app.api import experiment_cache
+from backend.app.api.v1.endpoints import results as results_endpoints
 from backend.app.core.logging import get_logger
 from backend.app.core.metrics import update_active_experiments
 from backend.app.core.scheduler_tick import run_in_worker, run_locked_tick
@@ -149,17 +150,23 @@ class ExperimentScheduler:
         Once it has returned, here on the API's event loop: the cached detail
         of every experiment it started or resumed is dropped (with
         ``CACHE_ENABLED`` on), so the experiment page shows the new status at
-        once, and the "started" notifications are sent; then the same for the
-        experiments it completed and the "ended" notifications. The cache
+        once; its cached results are cleared, one experiment at a time,
+        whatever ``CACHE_ENABLED`` says (the results cache is on whenever
+        Redis answers, and its key does not name the status, #2206); and the
+        "started" notifications are sent. Then the same for the experiments
+        it completed and the "ended" notifications. The cache
         drop stays on this loop because it uses the process-wide Redis pool,
         which belongs to it (run on a private loop in the worker, as the
         safety tick runs, it would create that pool on a loop that closes when
-        the tick ends); a Redis failure there is logged and does not stop the
-        tick. Each send runs in a worker thread (#1690): a send
-        is a synchronous HTTP call. Nothing is dropped or announced that was
-        not committed, and "started" still comes before "ended". A tick
-        cancelled at shutdown while the worker runs waits for it
-        (``run_in_worker``) and then drops and announces nothing.
+        the tick ends); a Redis failure there, or in a clear, is logged and
+        does not stop the tick. A clear uses the results cache's own client,
+        one attempt with 1 s timeouts, so a Redis that does not answer costs
+        about a second per experiment. Each send runs in a worker thread
+        (#1690): a send is a synchronous HTTP call. Nothing is dropped,
+        cleared or announced that was not committed, and "started" still
+        comes before "ended". A tick cancelled at shutdown while the worker
+        runs waits for it (``run_in_worker``) and then drops, clears and
+        announces nothing.
 
         An experiment's ``bayesian_decision`` is a recommendation only: nothing
         here stops an experiment on it (see docs/api/bayesian.md).
@@ -172,11 +179,15 @@ class ExperimentScheduler:
 
         if work.activated_ids:
             await experiment_cache.drop_cached_experiment_details(work.activated_ids)
+            for experiment_id in work.activated_ids:
+                await results_endpoints.clear_cached_results(experiment_id)
             await _send_each(
                 self._notification_service.notify_experiment_started, work.started
             )
         if work.completed_ids:
             await experiment_cache.drop_cached_experiment_details(work.completed_ids)
+            for experiment_id in work.completed_ids:
+                await results_endpoints.clear_cached_results(experiment_id)
             await _send_each(
                 self._notification_service.notify_experiment_ended, work.ended
             )

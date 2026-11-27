@@ -181,6 +181,29 @@ by = [
 ]
 
 [[unit]]
+text = "A conversion window (beta) that gives every user the full window | With a window, users assigned within the window before the experiment stops never get a full window, and this cannot change after it ends. The number is not the N-day conversion rate: a change that makes people convert later can show the opposite sign, even when no window does not. Each variant's open_window_users in the results says how many of its users had less than the full window. See Conversion window."
+by = [
+    "test:backend/tests/integration/api/test_metric_window_open_users.py::test_paused_longer_than_the_window_then_completed",
+    "test:backend/tests/integration/api/test_metric_window_open_users.py::test_the_open_windows_of_each_status",
+    "test:backend/tests/integration/api/test_metric_window_writes.py::test_a_change_that_makes_people_convert_later_can_show_the_opposite_sign",
+]
+
+[[unit]]
+text = "Changing a running experiment's conversion window | A metric's conversion_window_hours cannot be changed once the experiment leaves draft (400), as nothing else about its metrics can. A clone copies the windows and can be changed while it is a draft."
+by = [
+    "test:backend/tests/integration/api/test_metric_window_writes.py::test_no_role_changes_the_window_once_the_experiment_left_draft",
+    "test:backend/tests/integration/api/test_metric_window_writes.py::test_create_put_get_list_clone_and_audit_carry_the_window",
+]
+
+[[unit]]
+text = "A metric's conversion window in a global holdout's results | A holdout's results are for one event name you give, counted from each user's first-seen time to the end of the holdout; no experiment's metric is read, so no metric's conversion window applies. See Mutual Exclusion Groups."
+by = [
+    "test:backend/tests/integration/api/test_holdout_results.py::TestWindow::test_an_event_at_first_seen_counts",
+    "test:backend/tests/integration/api/test_holdout_results.py::TestWindow::test_an_event_at_window_end_does_not",
+    "test:backend/tests/integration/api/test_holdout_results.py::TestWindow::test_another_event_name_or_a_view_record_does_not_count",
+]
+
+[[unit]]
 text = "A sample-ratio mismatch that stops the experiment or removes its winner | Under a mismatch, recommendation is INCONCLUSIVE in GET /api/v1/results/{experiment_id}, in the data export and in the report. winner_variant, has_winner, the Bayesian decision and the sequential panel are unchanged."
 by = [
     "test:backend/tests/integration/api/test_export_api.py::TestExportEqualsResults::test_failed_sample_ratio_check_is_inconclusive_in_results_and_export",
@@ -534,6 +557,30 @@ by = [
     "test:backend/tests/integration/api/test_balanced_assignment.py::test_a_held_counter_row_holds_up_nothing_else",
     "test:backend/tests/integration/api/test_balanced_assignment.py::test_a_held_counter_row_is_answered_by_hash",
     "test:backend/tests/integration/database/test_balance_within_migration.py::test_the_previous_releases_statements_run_on_this_schema",
+]
+
+[[unit]]
+text = "A metric with a conversion window reads each converting user's assignment time as well as their events, so its results take longer to compute."
+by = [
+    "test:backend/tests/integration/api/test_metric_window_results.py::test_the_window_counts_exactly_these_users",
+    "test:backend/tests/integration/api/test_metric_window_open_users.py::test_one_aggregate_statement_per_windowed_metric",
+]
+
+[[unit]]
+text = "On AWS the load balancer ends a request that has had no answer for 60 seconds, so GET /api/v1/results/{experiment_id} reaches that limit with fewer events when a metric has a window."
+by = ["test:backend/tests/unit/infrastructure/test_cdk_api_settings.py::test_the_load_balancer_closes_an_idle_connection_before_the_api_does"]
+
+[[unit]]
+text = "On 2026-11-26, on one machine, the results of an experiment with 1.5 million of a metric's events took 8 seconds to compute without a window and 14 seconds with one; at that rate the limit comes at about 11 million events without a window and about 6 million with one."
+by = ["exempt:intent"]
+tag = "X"
+
+[[unit]]
+text = "While the dashboard's Live tab is open, its results are computed again every 30 seconds, the default of RESULTS_STREAM_INTERVAL_SECONDS."
+by = [
+    "test:backend/tests/integration/api/test_websocket_results.py::TestPeriodicSnapshots::test_the_interval_is_30_seconds_by_default",
+    "test:backend/tests/integration/api/test_websocket_results.py::TestPeriodicSnapshots::test_the_interval_is_read_from_the_environment",
+    "test:backend/tests/integration/api/test_metric_window_results.py::test_the_live_stream_counts_the_window",
 ]
 
 [[unit]]

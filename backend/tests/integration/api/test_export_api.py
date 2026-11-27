@@ -53,6 +53,7 @@ from backend.app.schemas.export import (
 )
 from backend.app.schemas.tracking import VALUE_BOUND
 from backend.app.services.analysis_service import AnalysisService
+from backend.app.services.event_matching import metric_events
 from backend.app.services.export_service import ExportService
 
 VARIANT_HEADER = ",".join(VariantExportRow.model_fields.keys())
@@ -1596,6 +1597,246 @@ class TestResultsReadTogether:
         ids = [battery[s] for s in ("bandit", _UNKNOWN, "significant")]
         results, _ = _many(db_session, [*ids, ids[0], ids[1]])
         assert list(results) == [str(i) for i in ids]
+
+
+# ---------------------------------------------------------------------------
+# A metric's conversion window (#1934): the battery with windowed shapes
+# ---------------------------------------------------------------------------
+
+#: When the windowed shapes' users were assigned; their purchases are dated
+#: from it.
+_ASSIGNED_AT = datetime(2026, 9, 2, 0, 0, 0)
+_HOUR = timedelta(hours=1)
+#: The windowed shapes, added after the battery's (whose pins above are of
+#: the battery without them).
+_ON_ONE_EVENT = "windows on one event"
+_WINDOWED_EMPTY = "windowed, no assignments"
+_WINDOWED = (_ON_ONE_EVENT, _WINDOWED_EMPTY)
+_WINDOWED_SHAPES = _SHAPES + len(_WINDOWED)
+
+
+def _windowed_metrics():
+    """A conversion, a count and a revenue metric on one event, each with 24
+    hours, 1 hour and no window."""
+    metrics = []
+    for metric_type, label in (
+        (MetricType.CONVERSION, "Bought"),
+        (MetricType.COUNT, "Purchases"),
+        (MetricType.REVENUE, "Revenue"),
+    ):
+        for hours, within in ((24, "in a day"), (1, "in an hour"), (None, "ever")):
+            extra = {"conversion_window_hours": hours}
+            if metric_type == MetricType.CONVERSION and hours == 24:
+                extra["is_primary"] = True
+            metrics.append((f"{label} {within}", "purchase", metric_type, extra))
+    return metrics
+
+
+def _fill_windows(b):
+    """The windowed shapes. In ``_ON_ONE_EVENT``, 20 users per arm, assigned
+    at ``_ASSIGNED_AT``, buy at these offsets (value in brackets):
+
+    control:   0-5 at 30 min (2.0), 0-1 again at 40 min (1.0), 6-9 at 5 h
+               (3.0), 10-13 at 30 h (5.0);
+    treatment: 0-8 at 30 min (2.0), 9-11 at 5 h (3.0), 12-19 at 30 h (5.0).
+    """
+    b.experiment(_ON_ONE_EVENT, _windowed_metrics())
+    u = b.users(_ON_ONE_EVENT, control=20, treatment=20)
+    b.db.flush()
+    b.db.query(Assignment).filter(
+        Assignment.experiment_id == b.ids[_ON_ONE_EVENT]
+    ).update({Assignment.created_at: _ASSIGNED_AT}, synchronize_session=False)
+    for arm, users, minutes, value in (
+        ("control", u["control"][0:6], 30, 2.0),
+        ("control", u["control"][0:2], 40, 1.0),
+        ("control", u["control"][6:10], 5 * 60, 3.0),
+        ("control", u["control"][10:14], 30 * 60, 5.0),
+        ("treatment", u["treatment"][0:9], 30, 2.0),
+        ("treatment", u["treatment"][9:12], 5 * 60, 3.0),
+        ("treatment", u["treatment"][12:20], 30 * 60, 5.0),
+    ):
+        b.db.add_all(
+            Event(
+                event_type="purchase",
+                event_name="purchase",
+                user_id=user_id,
+                experiment_id=b.ids[_ON_ONE_EVENT],
+                variant_id=b.arm(_ON_ONE_EVENT, arm),
+                value=value,
+                created_at=_ASSIGNED_AT + timedelta(minutes=minutes),
+            )
+            for user_id in users
+        )
+    # Weighs nothing, as "no assignments" does: by weight alone it would join
+    # a batched part.
+    b.experiment(
+        _WINDOWED_EMPTY,
+        [("Bought in a day", "purchase", MetricType.CONVERSION, {
+            "is_primary": True, "conversion_window_hours": 24,
+        })],
+    )  # fmt: skip
+    b.db.commit()
+
+
+@pytest.fixture
+def windowed_battery(db_session, make_experiment):
+    """The battery and the windowed shapes, then an id no experiment has."""
+    made = _Battery(db_session, make_experiment)
+    _fill(made)
+    _fill_windows(made)
+    yield {**made.ids, _UNKNOWN: uuid.uuid4()}
+    _delete_experiments(db_session, list(made.ids.values()))
+
+
+#: The seven configurations the battery is read in, as module settings of
+#: ``results_batch`` (``event_matching``'s for the lookup chunk).
+_CONFIGURATIONS = {
+    "shipped": {},
+    "one group": {"RESULTS_BATCH_SIZE": _WINDOWED_SHAPES},
+    "one at a time": {"RESULTS_BATCH_SIZE": 1},
+    "lookups of 40": {"ASSIGNMENT_LOOKUP_CHUNK": 40},
+    "budget 300": {"RESULTS_BATCH_SIZE": _WINDOWED_SHAPES, "RESULTS_ROW_BUDGET": 300},
+    "budget 300, limit 399": {
+        "RESULTS_BATCH_SIZE": _WINDOWED_SHAPES,
+        "RESULTS_ROW_BUDGET": 300,
+        "RESULTS_BATCH_ROW_LIMIT": 399,
+    },
+    # Below the budget: every part is led by an experiment that weighs more
+    # than the limit, or by one that weighs nothing.
+    "limit 0": {"RESULTS_BATCH_SIZE": _WINDOWED_SHAPES, "RESULTS_BATCH_ROW_LIMIT": 0},
+}
+
+
+def _configure(monkeypatch, settings):
+    from backend.app.services import event_matching, results_batch
+
+    for name, value in settings.items():
+        if name == "ASSIGNMENT_LOOKUP_CHUNK":
+            monkeypatch.setattr(results_batch, name, value)
+            monkeypatch.setattr(event_matching, name, value)
+        else:
+            monkeypatch.setattr(results_batch, name, value)
+
+
+def _arms(results, metric, column):
+    (found,) = [m for m in results["metrics"] if m["metric_name"] == metric]
+    return [v[column] for v in found["variants"]]
+
+
+@pytest.mark.integration
+@pytest.mark.requires_db
+@pytest.mark.regression
+class TestWindowedResultsReadTogether:
+    """A windowed experiment is computed in a part of its own, by
+    ``AnalysisService``, in every configuration, and the batch's answer for it
+    is the one read alone."""
+
+    @pytest.mark.parametrize("configuration", sorted(_CONFIGURATIONS))
+    def test_each_result_is_the_result_read_alone(
+        self, db_session, windowed_battery, monkeypatch, configuration
+    ):
+        from backend.app.services import results_batch
+
+        _configure(monkeypatch, _CONFIGURATIONS[configuration])
+        shapes = {str(i): shape for shape, i in windowed_battery.items()}
+        read = []
+        load_rows = results_batch.load_rows
+
+        def reading(db, experiments):
+            read.append([shapes[str(e.id)] for e in experiments])
+            return load_rows(db, experiments)
+
+        monkeypatch.setattr(results_batch, "load_rows", reading)
+        results, _ = _many(db_session, windowed_battery.values())
+
+        assert list(results) == [str(i) for i in windowed_battery.values()]
+        assert _shapes_that_differ(db_session, windowed_battery, results) == []
+        # No windowed shape is ever in a batched read.
+        batched = {shape for part in read for shape in part}
+        assert batched & set(_WINDOWED) == set()
+        assert batched, "nothing was batched"
+        self._the_windows_hold(results[str(windowed_battery[_ON_ONE_EVENT])])
+        assert results[str(windowed_battery[_WINDOWED_EMPTY])] is not None
+
+    @staticmethod
+    def _the_windows_hold(results):
+        """Worked out by hand from ``_fill_windows``."""
+        assert _arms(results, "Bought in a day", "conversions") == [10, 12]
+        assert _arms(results, "Bought in an hour", "conversions") == [6, 9]
+        assert _arms(results, "Bought ever", "conversions") == [14, 20]
+        assert _arms(results, "Purchases in a day", "mean") == [12 / 20, 12 / 20]
+        assert _arms(results, "Purchases in an hour", "mean") == [8 / 20, 9 / 20]
+        assert _arms(results, "Purchases ever", "mean") == [16 / 20, 20 / 20]
+        assert _arms(results, "Revenue in a day", "mean") == [
+            pytest.approx(26 / 20),
+            pytest.approx(27 / 20),
+        ]
+        assert _arms(results, "Revenue in an hour", "mean") == [
+            pytest.approx(14 / 20),
+            pytest.approx(18 / 20),
+        ]
+        assert _arms(results, "Revenue ever", "mean") == [
+            pytest.approx(46 / 20),
+            pytest.approx(67 / 20),
+        ]
+        assert results["summary"]["total_conversions"] == 14 + 20
+        assert {
+            m["metric_name"]: m["conversion_window_hours"] for m in results["metrics"]
+        } == {
+            f"{label} {within}": hours
+            for label in ("Bought", "Purchases", "Revenue")
+            for hours, within in ((24, "in a day"), (1, "in an hour"), (None, "ever"))
+        }
+
+    def test_the_batched_reads_refuse_a_window(self, db_session, windowed_battery):
+        """With an error that is not a ValueError: the batch reads a
+        ValueError as "no results", and a window here is a defect."""
+        from backend.app.services import results_batch
+
+        assert not issubclass(results_batch.WindowNotBatched, ValueError)
+        experiment = (
+            db_session.query(Experiment)
+            .filter(Experiment.id == windowed_battery[_ON_ONE_EVENT])
+            .one()
+        )
+        with pytest.raises(results_batch.WindowNotBatched):
+            results_batch.load_rows(db_session, [experiment])
+        service = results_batch._BatchedAnalysisService(
+            db_session, results_batch.load_group(db_session, [experiment.id])
+        )
+        (metric,) = [
+            m for m in experiment.metric_definitions if m.name == "Bought in a day"
+        ]
+        variant = experiment.variants[0].id
+        for read in (
+            service._converting_users,
+            service.event_counts,
+            service.value_totals,
+        ):
+            with pytest.raises(results_batch.WindowNotBatched):
+                read(experiment.id, variant, metric_events(metric))
+        with pytest.raises(results_batch.WindowNotBatched):
+            service._experiment_totals(experiment)
+
+    def test_a_windowed_experiment_is_a_part_of_its_own(
+        self, db_session, windowed_battery
+    ):
+        """Decided by the predicate, not by weight: the empty windowed shape
+        weighs nothing and is still alone, and the part after it starts afresh."""
+        from backend.app.services import results_batch
+
+        ids = [
+            windowed_battery[s]
+            for s in ("no assignments", _WINDOWED_EMPTY, "nothing", _ON_ONE_EVENT)
+        ]
+        reads = results_batch.load_group(db_session, ids)
+        assert reads.weight(ids[1]) == 0
+        assert results_batch.sub_groups(reads, ids) == [
+            [ids[0]],
+            [ids[1]],
+            [ids[2]],
+            [ids[3]],
+        ]
 
 
 def _one_by_one(service, experiment_ids):

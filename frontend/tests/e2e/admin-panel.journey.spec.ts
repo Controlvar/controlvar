@@ -1,4 +1,6 @@
 import { test, expect } from "./fixtures/auth.fixture";
+import { FeatureFlagsPage } from "./pages/feature-flags.page";
+import { API_URL, TOKEN_STORAGE_KEY } from "./env";
 
 /**
  * Journey 5 — admin panel.
@@ -50,6 +52,39 @@ test.describe("Journey: admin panel", () => {
           timeout: 20_000,
         });
         await expect(adminPage.getByTestId("audit-log-error-state")).toHaveCount(0);
+      }
+    }
+  });
+
+  test("a flag created in the dashboard shows on the Audit Log with its actor", async ({
+    adminPage,
+  }) => {
+    const stamp = Date.now();
+    const flagName = `Audit trail ${stamp}`;
+    const flags = new FeatureFlagsPage(adminPage);
+    const flagId = await flags.createFlag(flagName, `audit_trail_${stamp}`);
+    try {
+      await adminPage.goto("/admin/audit");
+      await expect(adminPage.getByTestId("audit-log-table")).toBeVisible({ timeout: 15_000 });
+      await expect(adminPage.getByTestId("audit-log-table-loading")).toHaveCount(0, {
+        timeout: 20_000,
+      });
+      await expect(adminPage.getByTestId("audit-log-error-state")).toHaveCount(0);
+
+      // The change just made is on the first page: one row, naming the flag,
+      // the action and the admin who made it.
+      const row = adminPage.locator('[data-testid^="audit-log-row-"]', { hasText: flagName });
+      await expect(row).toHaveCount(1, { timeout: 15_000 });
+      await expect(row.locator('[data-testid^="action-"]')).toHaveText("Flag created");
+      await expect(row.locator('[data-testid^="actor-"]')).toHaveText("admin@demo.com");
+    } finally {
+      // Delete the flag so repeated local runs do not pile them up.
+      const token = await adminPage.evaluate((key) => localStorage.getItem(key), TOKEN_STORAGE_KEY);
+      if (token && flagId) {
+        await adminPage.request.delete(`${API_URL}/api/v1/feature-flags/${flagId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+          failOnStatusCode: false,
+        });
       }
     }
   });

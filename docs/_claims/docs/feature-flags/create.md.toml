@@ -5,11 +5,11 @@ document = "docs/feature-flags/create.md"
 
 [[unit]]
 text = "Creating Feature Flags"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "This guide creates a flag, adds targeting rules, turns it on for 10% of users and evaluates it: first in the dashboard, then with the REST API."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "The API commands run as written against the stack from the Quick Start."
@@ -17,15 +17,15 @@ by = ["docex:docs/feature-flags/create.md#\"ADMIN\""]
 
 [[unit]]
 text = "Prerequisites"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "A running stack."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Quick Start Step 1 starts one on localhost."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "On your own deployment, use its URL wherever this page says localhost:8000 or localhost:3000."
@@ -64,11 +64,11 @@ by = [
 
 [[unit]]
 text = "The examples below use the demo administrator, admin@demo.com."
-by = ["exempt:baseline"]
+by = ["docex:docs/feature-flags/create.md#\"ADMIN\""]
 
 [[unit]]
 text = "An API key, to evaluate the flag the way your application will."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "The API section creates one; in the dashboard, a superuser can also create one under Admin → API Keys."
@@ -80,7 +80,7 @@ by = [
 
 [[unit]]
 text = "Creating a Flag in the Dashboard"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Step 1: Open the form"
@@ -112,11 +112,11 @@ by = [
 
 [[unit]]
 text = "Step 2: Name the flag"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Field | Description | Example"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Name (required) | The label shown in the dashboard. | New Checkout Flow"
@@ -135,7 +135,7 @@ by = [
 
 [[unit]]
 text = "Description | What the flag controls, and when it should be removed. | Redesigned single-page checkout experience"
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Optional: serve a value instead of on or off"
@@ -249,7 +249,7 @@ by = ["exempt:navigation"]
 
 [[unit]]
 text = "Step 3: Add targeting rules (optional)"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Targeting rules turn the flag on for specific users, whatever the rollout percentage is."
@@ -264,11 +264,14 @@ by = [
 
 [[unit]]
 text = "Click + Add Condition for each condition after the first."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "A condition has three parts:"
-by = ["exempt:baseline"]
+by = [
+    "journey:feature-flag-create#add-group",
+    "journey:feature-flag-create#add-condition",
+]
 
 [[unit]]
 text = "an attribute: pick a suggestion such as user.country, or type any attribute your application sends;"
@@ -279,15 +282,15 @@ by = [
 
 [[unit]]
 text = "an operator;"
-by = ["exempt:baseline"]
+by = ["journey:feature-flag-create#country-operator"]
 
 [[unit]]
 text = "a value."
-by = ["exempt:baseline"]
+by = ["journey:feature-flag-create#country-value"]
 
 [[unit]]
 text = "Attribute | Operator | Value"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "user.country | is one of | US, CA"
@@ -299,7 +302,11 @@ by = [
 
 [[unit]]
 text = "user.plan | equals | enterprise"
-by = ["exempt:baseline"]
+by = [
+    "journey:feature-flag-create#add-condition",
+    "journey:feature-flag-create#plan-attribute",
+    "journey:feature-flag-create#plan-value",
+]
 
 [[unit]]
 text = "Each group's AND/OR decides how its conditions combine, and the AND/OR above the groups decides how the groups combine."
@@ -328,15 +335,18 @@ by = ["journey:feature-flag-create#new-flag"]
 
 [[unit]]
 text = "Step 4: Set the rollout percentage"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The Rollout percentage slider sets the share of users who get the flag when they match no targeting rule:"
-by = ["exempt:baseline"]
+by = [
+    "journey:feature-flag-create#rollout",
+    "journey:feature-flag-create#rollout-users",
+]
 
 [[unit]]
 text = "Percentage | Effect"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "0% | Only users who match a targeting rule get the flag"
@@ -374,7 +384,7 @@ by = ["test:backend/tests/unit/ground_truth/test_flag_rollout_use_cases.py::test
 
 [[unit]]
 text = "Step 5: Create the flag, then turn it on"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Click Create Feature Flag."
@@ -393,7 +403,7 @@ by = [
 
 [[unit]]
 text = "The same switch turns it off again."
-by = ["exempt:baseline"]
+by = ["journey:feature-flag-create#turn-off"]
 
 [[unit]]
 text = "Clients serve the change within their cache lifetime, 5 minutes by default, the next time they ask for the flag: see Turning a Flag Off."
@@ -412,23 +422,26 @@ by = [
 
 [[unit]]
 text = "You set it with is_active."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/integration/api/test_archived_flag_verbs.py::test_every_status_verb_from_every_status",
+    "docex:docs/feature-flags/create.md#\"status\": \"active\"",
+]
 
 [[unit]]
 text = "Creating a Flag with the API"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Run these in one terminal, in order."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Each step uses the shell variables set by the ones before it ($TOKEN, $FLAG_ID, $KEY)."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "URLs."
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The collection URL answers with or without a trailing slash (/api/v1/feature-flags/ or /api/v1/feature-flags)."
@@ -440,11 +453,11 @@ by = ["test:backend/tests/unit/middleware/test_relative_slash_redirect.py"]
 
 [[unit]]
 text = "curl doesn't follow the redirect, so nothing happens and nothing is printed."
-by = ["exempt:baseline"]
+by = ["exempt:third-party"]
 
 [[unit]]
 text = "Log in"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The second command prints \"ADMIN\"."
@@ -456,7 +469,7 @@ by = ["docex:docs/feature-flags/create.md#\"ADMIN\""]
 
 [[unit]]
 text = "Create the flag"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "A new flag is off unless the request sends \"is_active\": true, so creating one never exposes anyone."
@@ -467,11 +480,14 @@ by = [
 
 [[unit]]
 text = "The response carries the flag's id, which this saves in $FLAG_ID for the next steps."
-by = ["exempt:baseline"]
+by = [
+    "docex:docs/feature-flags/create.md#\"status\": \"inactive\"",
+    "docex:docs/feature-flags/create.md#200",
+]
 
 [[unit]]
 text = "The request takes these fields:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "key and name (both required; name is at most 100 characters);"
@@ -482,7 +498,10 @@ by = [
 
 [[unit]]
 text = "description;"
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/integration/api/test_flag_contract.py::test_put_null_clears_a_nullable_field",
+    "test:backend/tests/integration/api/test_feature_flags_api.py::TestFeatureFlagsUpdate::test_update_feature_flag_description",
+]
 
 [[unit]]
 text = "is_active (default false);"
@@ -494,7 +513,10 @@ by = ["test:backend/tests/unit/schemas/test_feature_flag_schemas.py::TestRequest
 
 [[unit]]
 text = "targeting_rules;"
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/integration/api/test_flag_text_refused.py::test_a_get_body_still_puts_back",
+    "test:backend/tests/integration/api/test_flag_contract.py::test_put_null_clears_a_nullable_field",
+]
 
 [[unit]]
 text = "value_type: boolean (the default), string, number or json (see Serve a value);"
@@ -528,7 +550,10 @@ by = [
 
 [[unit]]
 text = "tags."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/integration/api/test_flag_text_refused.py::test_a_get_body_still_puts_back",
+    "test:backend/tests/integration/api/test_flag_contract.py::test_put_null_clears_a_nullable_field",
+]
 
 [[unit]]
 text = "Any other field answers 422 (\"type\": \"extra_forbidden\"), so a misspelled or unsupported field is never dropped silently."
@@ -570,11 +595,14 @@ by = [
 
 [[unit]]
 text = "Any other value answers 422 with \"type\": \"read_only\"; turn a flag on or off with is_active."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/integration/api/test_flag_contract.py::test_put_status_that_differs_is_422",
+    "test:backend/tests/integration/api/test_flag_contract.py::test_create_status_must_be_the_one_the_flag_gets",
+]
 
 [[unit]]
 text = "Add targeting rules"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "targeting_rules uses the same shape the dashboard rule builder writes: a top-level logical_operator combining one or more groups, each group combining its conditions."
@@ -585,11 +613,11 @@ by = [
 
 [[unit]]
 text = "This example targets enterprise-plan users in the US, CA or GB, or any employee:"
-by = ["exempt:baseline"]
+by = ["docex:docs/feature-flags/create.md#200"]
 
 [[unit]]
 text = "It prints 200."
-by = ["exempt:baseline"]
+by = ["docex:docs/feature-flags/create.md#200"]
 
 [[unit]]
 text = "Rules the flag evaluator would not apply as written answer 422, on a create and on an update, and nothing is saved."
@@ -600,7 +628,7 @@ by = [
 
 [[unit]]
 text = "That is:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "a list of rules (the legacy [{\"type\": ...}] shape), and a value that is not an object (a string, a number, true);"
@@ -667,10 +695,18 @@ by = [
 ]
 
 [[unit]]
-text = "a rollout_percentage, top-level or on a native rule, that is not an integer from 0 to 100 (100.0 is accepted; 33.5, true and \"50\" are not), or an id that is not text of 1 to 100 characters."
+text = "a rollout_percentage, top-level or on a native rule, that is not an integer from 0 to 100 (100.0 is accepted; 33.5, true and \"50\" are not), or a dashboard-shape id (beside groups) that is not text of 1 to 100 characters;"
 by = [
     "test:backend/tests/unit/core/test_flag_targeting_validation.py::test_refused",
     "test:backend/tests/unit/core/test_flag_targeting_validation.py::test_a_rollout_percentage_outside_the_integers_0_to_100_is_refused",
+]
+
+[[unit]]
+text = "a native rule's id (rules[0].id) or the default_rule's id longer than 255 characters."
+by = [
+    "test:backend/tests/integration/api/test_flag_rule_id_refused.py::test_a_create_refuses_an_id_over_255_characters",
+    "test:backend/tests/integration/api/test_flag_rule_id_refused.py::test_an_update_refuses_it_and_keeps_the_stored_rules",
+    "test:backend/tests/integration/api/test_flag_rule_id_refused.py::test_an_id_of_255_characters_is_saved_evaluated_and_recorded",
 ]
 
 [[unit]]
@@ -686,11 +722,14 @@ by = ["test:backend/tests/integration/api/test_flag_guide_behaviour.py::test_onl
 
 [[unit]]
 text = "This request misspells equals:"
-by = ["exempt:baseline"]
+by = ["docex:docs/feature-flags/create.md#\"msg\":\"Value error, groups[0].conditions[0].operator: unknown operator\""]
 
 [[unit]]
 text = "groups[0].conditions[0] is the first condition of the first group."
-by = ["exempt:baseline"]
+by = [
+    "docex:docs/feature-flags/create.md#\"msg\":\"Value error, groups[0].conditions[0].operator: unknown operator\"",
+    "test:backend/tests/unit/core/test_flag_targeting_validation.py::test_refused",
+]
 
 [[unit]]
 text = "A problem with the rules as a whole has no place, and reads targeting rules: <reason>, for example targeting rules: unknown key."
@@ -710,7 +749,7 @@ by = ["test:backend/tests/integration/api/test_flag_targeting_validated.py::test
 
 [[unit]]
 text = "To list the flags whose stored rules are refused, run this from the repository root, against the same database settings as the API:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "It prints one line per flag, feature_flag <id> <key> <place> <reason>, writes nothing, and exits 0 whether or not it lists anything (2 when it cannot read the database)."
@@ -762,15 +801,15 @@ by = [
 
 [[unit]]
 text = "See the rules engine reference."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "in_segment, not_in_segment."
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "{\"attribute\": \"segment\", \"operator\": \"in_segment\", \"value\": \"<segment id>\"}."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/core/test_segment_targeting_validation.py::test_accepted_in_both_shapes"]
 
 [[unit]]
 text = "One segment per condition; to match any of several, put one condition per segment in an OR group."
@@ -836,7 +875,7 @@ by = ["test:backend/tests/integration/api/test_tracking_api.py::TestBanditAssign
 
 [[unit]]
 text = "See Segments."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Users who match a rule are bucketed with the rule's rollout_percentage (100 unless set on the rules object); users who match no rule fall through to the flag's global rollout_percentage."
@@ -869,7 +908,7 @@ by = [
 
 [[unit]]
 text = "Targeting context and attribute aliases"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Rules are matched against the context the SDK sends with each evaluation (the user's attributes: context=<url-encoded JSON> on GET /feature-flags/evaluate/{key}, or the context object on the POST variant)."
@@ -880,7 +919,12 @@ by = [
 
 [[unit]]
 text = "Before matching, the context is expanded so that:"
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestExpandContext::test_raw_keys_kept",
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestExpandContext::test_dotted_keys_for_nested_dicts",
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestExpandContext::test_prefix_aliases_for_top_level_keys",
+    "test:backend/tests/unit/core/test_targeting_adapter.py::TestExpandContext::test_explicit_keys_win_over_aliases",
+]
 
 [[unit]]
 text = "every key is available as given ({\"country\": \"US\"} answers country);"
@@ -921,7 +965,7 @@ by = ["test:backend/tests/integration/api/test_targeting_context_limits.py::test
 
 [[unit]]
 text = "Turn the flag on at 10%"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "\"is_active\": false turns it off again."
@@ -937,7 +981,7 @@ by = ["docex:docs/feature-flags/create.md#\"status\": \"active\""]
 
 [[unit]]
 text = "Archived flags"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "An archived flag is retired: every evaluation answers it as off (enabled: false, reason: \"inactive\", and its off value, which a value method returns instead of your default), in local evaluation too, and nothing turns it back on by accident."
@@ -1025,7 +1069,10 @@ by = [
 
 [[unit]]
 text = "and leaves the flag archived."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/integration/api/test_archived_flag_verbs.py::test_every_status_verb_from_every_status",
+    "test:backend/tests/integration/api/test_archived_flag_verbs.py::test_bulk_enable_refuses_only_the_archived_flag",
+]
 
 [[unit]]
 text = "A request that turns it off (\"is_active\": false, /deactivate, /disable, bulk disable) succeeds and changes nothing, because an archived flag is already off."
@@ -1071,7 +1118,7 @@ by = ["exempt:navigation"]
 
 [[unit]]
 text = "Create an API key"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Applications evaluate flags with an API key, not a user token."
@@ -1188,7 +1235,7 @@ by = ["exempt:advice"]
 
 [[unit]]
 text = "Flag Key Naming Conventions"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "A key is lowercase letters, digits, hyphens and underscores, starting with a letter or digit."
@@ -1199,11 +1246,14 @@ by = [
 
 [[unit]]
 text = "Anything else is refused with 422."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/integration/api/test_feature_flags_api.py::TestFeatureFlagsValidation::test_create_feature_flag_invalid_key_uppercase_returns_422",
+    "test:backend/tests/unit/api/test_request_validation.py",
+]
 
 [[unit]]
 text = "When a Flag Evaluates to Off"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Evaluation returns enabled: false, and value set to the flag's off_value (false for a boolean flag), when:"
@@ -1254,7 +1304,11 @@ by = [
 
 [[unit]]
 text = "So a flag your code can't reach behaves as off."
-by = ["exempt:baseline"]
+by = [
+    "test:sdk/js/__tests__/client.test.ts",
+    "test:sdk/python/tests/test_client.py::TestIsFeatureEnabled::test_false_on_network_error",
+    "test:sdk/python/tests/test_client.py::TestIsFeatureEnabled::test_false_on_404",
+]
 
 [[unit]]
 text = "How soon each client serves a change: Turning a Flag Off."
@@ -1262,31 +1316,31 @@ by = ["exempt:navigation"]
 
 [[unit]]
 text = "Evaluating the Flag from Your Application"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "JavaScript SDK"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Python SDK"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "REST API (Direct)"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Send the targeting context as a URL-encoded JSON object on the GET endpoint (this is what the SDKs do):"
-by = ["exempt:baseline"]
+by = ["docex:docs/feature-flags/create.md#\"enabled\": true"]
 
 [[unit]]
 text = "Or send it as the context object in the body of the POST variant:"
-by = ["exempt:baseline"]
+by = ["docex:docs/feature-flags/create.md#\"targeting_rule\""]
 
 [[unit]]
 text = "It prints \"targeting_rule\"."
-by = ["exempt:baseline"]
+by = ["docex:docs/feature-flags/create.md#\"targeting_rule\""]
 
 [[unit]]
 text = "The same user on a free plan in Germany matches no rule."
@@ -1326,7 +1380,7 @@ by = [
 
 [[unit]]
 text = "Reporting client-side errors"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Safety monitoring computes a flag's error rate from error_logs rows divided by its evaluations."
@@ -1398,11 +1452,11 @@ by = [
 
 [[unit]]
 text = "What is stored for each report, on both endpoints:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Field | Stored as"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "timestamp | The time the server received the report, for the stored row and for the timestamp in the POST /api/v1/tracking/errors response. A timestamp you send is kept in the row's metadata as client_timestamp (ISO 8601)."
@@ -1428,11 +1482,11 @@ by = ["test:backend/tests/integration/api/test_client_errors_api.py::TestStoredE
 
 [[unit]]
 text = "Next Steps"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Gradual Rollouts — set up a staged rollout schedule with automatic progression"
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Multi-way Flags — serve one of several values, by weight or by targeting rule"
@@ -1449,4 +1503,4 @@ by = [
 
 [[unit]]
 text = "SDK Documentation — full SDK integration guide"
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]

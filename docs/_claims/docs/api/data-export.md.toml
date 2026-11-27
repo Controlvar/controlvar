@@ -308,8 +308,13 @@ text = "assignments | integer | Number of users assigned to this variant (sample
 by = ["docex:docs/api/data-export.md#experiment_id,experiment_name,variant_id,variant_name,is_control,assignments,conversions,conversion_rate,p_value,is_significant,relative_improvement_pct"]
 
 [[unit]]
-text = "conversions | integer | Number of assigned users with at least one conversion on the primary metric (a repeat purchaser counts once)"
-by = ["docex:docs/api/data-export.md#experiment_id,experiment_name,variant_id,variant_name,is_control,assignments,conversions,conversion_rate,p_value,is_significant,relative_improvement_pct"]
+text = "conversions | integer | Number of assigned users with at least one conversion on the primary metric (a repeat purchaser counts once), within its conversion window when it has one; no column gives the window"
+by = [
+    "docex:docs/api/data-export.md#experiment_id,experiment_name,variant_id,variant_name,is_control,assignments,conversions,conversion_rate,p_value,is_significant,relative_improvement_pct",
+    "test:backend/tests/integration/api/test_metric_window_results.py::test_every_view_counts_the_window",
+    "test:backend/tests/integration/api/test_metric_window_results.py::test_two_metrics_on_one_event_keep_their_own_windows",
+    "test:backend/tests/integration/api/test_metric_window_writes.py::test_two_metrics_created_through_the_api_count_9_and_16_in_every_view",
+]
 
 [[unit]]
 text = "conversion_rate | float | Conversion rate [0, 1] (mean in /results); empty when the primary metric is a revenue, count, duration or custom metric"

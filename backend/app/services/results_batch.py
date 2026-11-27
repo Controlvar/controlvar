@@ -35,7 +35,10 @@ there is nothing to read:
   a user stored while the sub-group is read is counted as assigned.
 
 An experiment expected to read more than ``RESULTS_BATCH_ROW_LIMIT`` rows is
-computed by ``AnalysisService`` with its own reads.
+computed by ``AnalysisService`` with its own reads, and so is an experiment
+with a metric that has a conversion window (#1934): its rows are not read
+here, it is a part of its own whatever its weight (``sub_groups``), and
+``_BatchedAnalysisService`` refuses a window (``WindowNotBatched``).
 
 ``backend/tests/integration/api/test_export_api.py`` compares the results with
 those of each experiment read alone, so a change to one of these reads that is
@@ -71,6 +74,7 @@ from backend.app.services.event_matching import (
     conversion_event_filter,
     metric_event_name,
     metric_events,
+    windowed,
 )
 from backend.app.services.srm_service import _is_fixed_allocation, compute_srm
 
@@ -89,6 +93,15 @@ RESULTS_ROW_BUDGET = 50_000
 #: here. One expected to read more is computed by ``AnalysisService`` with its
 #: own reads; nothing is refused.
 RESULTS_BATCH_ROW_LIMIT = 250_000
+
+
+class WindowNotBatched(RuntimeError):
+    """A metric with a conversion window reached the batched reads.
+
+    Not a ``ValueError``: ``_compute_group`` reads that as "no results" for
+    the experiment, and this is a defect, which fails the export.
+    """
+
 
 #: ``(events, value total)`` of one user: the value total is None when none of
 #: the user's values counts.
@@ -173,6 +186,15 @@ def _metric_events(experiment: Experiment) -> Set[MetricEvents]:
 def _event_names(experiment: Experiment) -> Set[str]:
     """The event names the experiment's metrics read."""
     return {events.event_name for events in _metric_events(experiment)}
+
+
+def has_window(experiment: Experiment) -> bool:
+    """Whether one of the experiment's metrics has a conversion window: its
+    results are computed by ``AnalysisService``, in a part of its own."""
+    return any(
+        windowed(metric_events(metric))
+        for metric in experiment.metric_definitions or []
+    )
 
 
 def _reads_legacy(experiment: Experiment) -> bool:
@@ -367,6 +389,8 @@ def load_rows(db: Session, experiments: Sequence[Experiment]) -> EventRows:
     """The event rows one sub-group is computed from, then its assigned users."""
     if not experiments:
         return EventRows()
+    if any(has_window(e) for e in experiments):
+        raise WindowNotBatched("an experiment with a conversion window is read alone")
     named = {e.id: events for e in experiments if (events := _metric_events(e))}
     # Each row carries its event name; it is the rows of the MetricEvents that
     # names it (one per name: no metric has a window).
@@ -412,16 +436,22 @@ def load_rows(db: Session, experiments: Sequence[Experiment]) -> EventRows:
 
 def sub_groups(reads: GroupReads, experiment_ids: Sequence[UUID]) -> List[List[UUID]]:
     """The group in order, split so that each part's weights stay within
-    ``RESULTS_ROW_BUDGET``. An experiment over it is a part on its own."""
+    ``RESULTS_ROW_BUDGET``. An experiment over it is a part on its own, and
+    so is one with a conversion window (``has_window``), whatever its weight;
+    the part after it starts afresh."""
     parts: List[List[UUID]] = []
     total = 0
+    alone = False
     for experiment_id in experiment_ids:
         weight = reads.weight(experiment_id)
-        if not parts or total + weight > RESULTS_ROW_BUDGET:
+        experiment = reads.experiments.get(str(experiment_id))
+        own = experiment is not None and has_window(experiment)
+        if not parts or own or alone or total + weight > RESULTS_ROW_BUDGET:
             parts.append([])
             total = 0
         parts[-1].append(experiment_id)
         total += weight
+        alone = own
     return parts
 
 
@@ -431,6 +461,13 @@ class _BatchedAnalysisService(AnalysisService):
     def __init__(self, db: Session, reads: GroupReads) -> None:
         super().__init__(db)
         self._reads = reads
+
+    @staticmethod
+    def _not_windowed(events: Optional[MetricEvents]) -> None:
+        if windowed(events):
+            raise WindowNotBatched(
+                "a metric with a conversion window is computed by AnalysisService"
+            )
 
     def _load_experiment(self, experiment_id: Any) -> Optional[Experiment]:
         return self._reads.experiments.get(str(experiment_id))
@@ -442,21 +479,28 @@ class _BatchedAnalysisService(AnalysisService):
     def _converting_users(
         self, experiment_id: Any, variant_id: Any, events: Optional[MetricEvents]
     ) -> int:
+        self._not_windowed(events)
         return len(self._reads.rows.of(experiment_id, variant_id, events))
 
     def event_counts(
         self, experiment_id: Any, variant_id: Any, events: Optional[MetricEvents]
     ) -> List[float]:
+        self._not_windowed(events)
         rows = self._reads.rows.of(experiment_id, variant_id, events)
         return [float(count) for count, _ in rows]
 
     def value_totals(
         self, experiment_id: Any, variant_id: Any, events: Optional[MetricEvents]
     ) -> List[float]:
+        self._not_windowed(events)
         rows = self._reads.rows.of(experiment_id, variant_id, events)
         return [float(total) for _, total in rows if total is not None]
 
     def _experiment_totals(self, experiment: Experiment) -> Tuple[int, int, int]:
+        if has_window(experiment):
+            raise WindowNotBatched(
+                "an experiment with a conversion window is computed by AnalysisService"
+            )
         key = str(experiment.id)
         return (
             self._reads.users.get(key, 0),
@@ -512,8 +556,12 @@ def _compute_group(
         # The last part's rows and counts go before the next part's are read.
         reads.rows = EventRows()
         service: AnalysisService
-        if reads.weight(part[0]) > RESULTS_BATCH_ROW_LIMIT:
-            # The limit is above the budget, so it is alone in its part.
+        first = reads.experiments.get(str(part[0]))
+        if (first is not None and has_window(first)) or (
+            reads.weight(part[0]) > RESULTS_BATCH_ROW_LIMIT
+        ):
+            # Either is alone in its part: a window by sub_groups' rule, a
+            # weight over the limit because the limit is above the budget.
             service = AnalysisService(db)
         else:
             service = _BatchedAnalysisService(db, reads)

@@ -39,8 +39,8 @@ pytestmark = pytest.mark.unit
 ADDRESSING = re.compile(r"^(design_etag|variants\[\d+\]\.id)$")
 
 #: design_etag 1, targeting_rules 1 (opaque), each of 2 variants' id and
-#: share 4, the metric's 10, a click goal's 5 and a page view's 4, the group 1.
-LEAVES = 1 + 1 + 4 + 10 + 5 + 4 + 1
+#: share 4, the metric's 11, a click goal's 5 and a page view's 4, the group 1.
+LEAVES = 1 + 1 + 4 + 11 + 5 + 4 + 1
 
 
 def _save() -> EditorDesignChange:

@@ -37,6 +37,11 @@ export interface ExperimentMetric {
   expected_effect?: number | null;
   event_value_path?: string | null;
   lower_is_better?: boolean;
+  /**
+   * Beta (#1934): only events in this many hours from each user's assignment
+   * count, 1 to 8,760. Null or absent: no window.
+   */
+  conversion_window_hours?: number | null;
   experiment_id?: string;
   created_at?: string;
   updated_at?: string;
@@ -122,6 +127,8 @@ export interface MetricInput {
   expected_effect?: number;
   event_value_path?: string;
   lower_is_better?: boolean;
+  /** Sent only when the form has a window; without it the metric has none. */
+  conversion_window_hours?: number;
 }
 
 /**
@@ -138,9 +145,10 @@ export interface DesignVariant {
 
 /**
  * `MetricBase` as the dashboard's design edit sends it. The Optional fields
- * (`description`, `expected_effect`, `event_value_path`) are sent as null when
- * they have no value; `aggregation_method` and `minimum_sample_size` have
- * non-null defaults and are left out instead, because null is refused there.
+ * (`description`, `expected_effect`, `event_value_path`,
+ * `conversion_window_hours`) are sent as null when they have no value;
+ * `aggregation_method` and `minimum_sample_size` have non-null defaults and
+ * are left out instead, because null is refused there.
  */
 export interface DesignMetric {
   name: string;
@@ -153,6 +161,7 @@ export interface DesignMetric {
   expected_effect: number | null;
   event_value_path: string | null;
   lower_is_better: boolean;
+  conversion_window_hours: number | null;
 }
 
 /**

@@ -1,0 +1,153 @@
+# U-ANALYST: analyst@demo.com, the analyst's normal day. The analyst reads
+# results, exports them and sizes the next test; every change the role may
+# not make is tried where the dashboard would offer it, and decided by asking
+# the API with a valid body, then reading the thing back unchanged.
+#
+# The day reads an experiment the superuser made, started and sent traffic to
+# just before it (frontend/tests/e2e/personas/stamped.ts), so each number is
+# decided against the ledger of what was sent, never by the page alone.
+id: U-ANALYST
+role: ANALYST
+account: analyst@demo.com
+goals:
+  - Read a running experiment's results and trust every number on the page.
+  - Export the results and size the next test.
+  - Change nothing the role may not change.
+day:
+  - n: 1
+    intent: read a running experiment's results
+    layer: A
+    numeric: true
+    oracles:
+      - id: u-analyst.1.results-equal-ledger
+        kind: count_delta
+        expect: >-
+          users and conversions per variant equal the ledger, the p-value
+          equals scipy's Fisher exact test on the ledger's counts, and the
+          sample ratio check's p-value equals scipy's chi-square test of the
+          ledger's users against the 50/50 split
+        source:
+          path: docs/guides/user-guide.md
+          anchor: "chi-square test of the assignment counts"
+      - id: u-analyst.1.page-equals-api
+        kind: ui_matches_api
+        expect: >-
+          the page shows each variant's users, rate and p-value, and the
+          sample ratio check's p-value, as GET /api/v1/results/{id} returns
+          them
+  - n: 2
+    intent: download the results as CSV
+    layer: A
+    numeric: true
+    oracles:
+      - id: u-analyst.2.csv-equals-ledger
+        kind: count_delta
+        expect: >-
+          the file has one row per variant, its assignments and conversions
+          equal the ledger, and the treatment's p-value equals the results
+          API's
+        source:
+          path: docs/guides/user-guide.md
+          anchor: "**Download CSV** saves its variant rows as a CSV file"
+  - n: 3
+    intent: size the next test in the power calculator
+    layer: A
+    numeric: true
+    oracles:
+      - id: u-analyst.3.page-equals-api
+        kind: ui_matches_api
+        expect: >-
+          the page's sample size per variant, total and runtime equal POST
+          /api/v1/power/sample-size for the same inputs
+      - id: u-analyst.3.api-equals-formula
+        kind: api_state
+        expect: >-
+          the API's sample size per variant is the documented two-proportion
+          formula, computed with scipy, rounded up
+        source:
+          path: docs/statistics/power-analysis.md
+          anchor: "give `n` rounded up to a whole user"
+  - n: 4
+    intent: read the revenue metric's mean per user
+    layer: A
+    numeric: true
+    oracles:
+      - id: u-analyst.4.revenue-equals-ledger
+        kind: count_delta
+        expect: >-
+          each variant's revenue per user equals the ledger's revenue total
+          over its users, counting users who bought nothing as 0
+        source:
+          path: docs/guides/user-guide.md
+          anchor: "averaged over every user assigned to the variant (0 for a user with none)"
+      - id: u-analyst.4.page-equals-api
+        kind: ui_matches_api
+        expect: >-
+          the page shows each variant's revenue per user as GET
+          /api/v1/results/{id} returns it
+  - n: 5
+    intent: read the audit log
+    layer: A
+    oracles:
+      - id: u-analyst.5.other-users-entries
+        kind: audit_entry
+        expect: >-
+          the audit log holds the superuser's creating and starting of the
+          day's experiment, and the page lists both rows as the API returns
+          them, with no note narrowing the analyst to their own entries
+        source:
+          path: docs/api/rbac.md
+          anchor: "Read the audit log, including other users' entries"
+  - n: 6
+    intent: open the new-experiment page by its address
+    layer: A
+    writes: true
+    security: true
+    oracles:
+      - id: u-analyst.6.create-refused
+        kind: api_refused
+        expect: >-
+          the page sends no create request; POST /api/v1/experiments/ as the
+          analyst, with a valid body, answers 403 and no experiment with that
+          name exists after it
+        source:
+          path: docs/rbac/README.md
+          anchor: "**Analyst**: Can view experiments and feature flags"
+      - id: u-analyst.6.refusal-words
+        kind: text_exact
+        expect: >-
+          the page shows the 403 view: it names the account and the permission the
+          page requires, and links back to the experiments
+        source:
+          path: frontend/src/components/RequireAuth.tsx
+          anchor: "You do not have permission to access this page."
+  - n: 7
+    intent: try to change a feature flag
+    layer: A
+    writes: true
+    security: true
+    oracles:
+      - id: u-analyst.7.flag-unchanged
+        kind: api_refused
+        expect: >-
+          the flag page offers no switch, no editable rollout and no Save;
+          PUT /api/v1/feature-flags/{id} as the analyst answers 403 and the
+          flag reads back unchanged
+        source:
+          path: docs/rbac/README.md
+          anchor: "owning a flag does not let an Analyst or Viewer change it"
+  - n: 8
+    intent: try to pause the running experiment
+    layer: A
+    writes: true
+    security: true
+    oracles:
+      - id: u-analyst.8.experiment-still-active
+        kind: api_refused
+        expect: >-
+          the experiment page offers no lifecycle action and says why; POST
+          /api/v1/experiments/{id}/pause as the analyst answers 403 and the
+          experiment reads back active
+        source:
+          path: docs/rbac/README.md
+          anchor: "**Analyst**: Can view experiments and feature flags"

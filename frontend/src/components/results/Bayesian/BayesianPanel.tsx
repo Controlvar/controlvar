@@ -123,7 +123,12 @@ export function BayesianPanel({
           {BAYESIAN_NO_DATA}
         </p>
       ) : (
-        <div className="overflow-x-auto">
+        <div
+          tabIndex={0}
+          role="group"
+          aria-label="Bayesian results by variant"
+          className="overflow-x-auto rounded focus:outline-none focus:ring-2 focus:ring-blue-600"
+        >
           <table className="min-w-full text-sm" data-testid="bayesian-table">
             <thead>
               <tr className="text-left text-slate-600 border-b border-slate-200">

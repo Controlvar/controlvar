@@ -1,0 +1,97 @@
+{
+  "errors": [],
+  "stats": {
+    "duration": 9682.874,
+    "expected": 1,
+    "flaky": 0,
+    "skipped": 0,
+    "startTime": "2026-11-26T10:12:05.488Z",
+    "unexpected": 0
+  },
+  "suites": [
+    {
+      "column": 0,
+      "file": "personas/u-dev.persona.spec.ts",
+      "line": 0,
+      "specs": [
+        {
+          "column": 1,
+          "file": "personas/u-dev.persona.spec.ts",
+          "id": "52002264398a8bc4e16c-d2ec34cdf9d2e8be4b05",
+          "line": 29,
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "personas",
+              "projectName": "personas",
+              "results": [
+                {
+                  "annotations": [],
+                  "attachments": [],
+                  "duration": 9162,
+                  "errors": [],
+                  "parallelIndex": 0,
+                  "retry": 0,
+                  "startTime": "2026-11-26T10:12:05.759Z",
+                  "status": "passed",
+                  "stderr": [],
+                  "stdout": [],
+                  "steps": [
+                    {
+                      "duration": 200,
+                      "title": "U-DEV day 1: create an API key at /account/api-keys"
+                    },
+                    {
+                      "duration": 544,
+                      "title": "U-DEV day 2: build an experiment in the dashboard's guided setup with two variants and one metric"
+                    },
+                    {
+                      "duration": 73,
+                      "title": "U-DEV day 3: start the experiment"
+                    },
+                    {
+                      "duration": 3879,
+                      "title": "U-DEV day 4: send 200 users through assign and 40 conversions with the new key"
+                    },
+                    {
+                      "duration": 885,
+                      "error": {
+                        "location": {
+                          "column": 13,
+                          "file": "frontend/tests/e2e/oracles/watcher.ts",
+                          "line": 88
+                        },
+                        "message": "Error: watcher: visible text contains [object Object] on /results/a7ded848-70eb-4ae1-b65c-23709ac0610d"
+                      },
+                      "title": "U-DEV day 5: read the results page"
+                    },
+                    {
+                      "duration": 536,
+                      "title": "U-DEV day 6: target a feature flag at country US with a 20% rollout"
+                    },
+                    {
+                      "duration": 2191,
+                      "title": "U-DEV day 7: add a rollout schedule of 10, 50 and 100 percent"
+                    },
+                    {
+                      "duration": 275,
+                      "title": "U-DEV day 8: set an experiment end date in Los Angeles time"
+                    }
+                  ],
+                  "workerIndex": 0
+                }
+              ],
+              "status": "expected",
+              "timeout": 120000
+            }
+          ],
+          "title": "U-DEV: the developer's day"
+        }
+      ],
+      "title": "personas/u-dev.persona.spec.ts"
+    }
+  ]
+}

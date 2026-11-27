@@ -135,7 +135,8 @@ CONFIG = {
         {"event_name": "page_thanks", "kind": "page_view", "page": PAGE},
     ],
 }
-#: Every metric field set away from its default.
+#: Every metric field set away from its default, except Thanks' conversion
+#: window.
 METRICS = [
     {
         "name": "Buy",
@@ -148,6 +149,7 @@ METRICS = [
         "expected_effect": 0.1,
         "event_value_path": "amount",
         "lower_is_better": True,
+        "conversion_window_hours": 168,
     },
     {
         "name": "Thanks",
@@ -160,6 +162,7 @@ METRICS = [
         "expected_effect": 0.03,
         "event_value_path": "count",
         "lower_is_better": True,
+        "conversion_window_hours": None,
     },
 ]
 COUNTRY_RULES = {

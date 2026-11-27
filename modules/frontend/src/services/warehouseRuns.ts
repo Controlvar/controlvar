@@ -235,7 +235,8 @@ export const BETA_EXPLANATION =
 export const RESULTS_DIFFERENCE =
   'Warehouse results count a unit as converted only for an event at or after its first ' +
   'exposure and inside the conversion window, and leave out units seen in more than one ' +
-  'variant. The Results page counts every distinct converter, so the two can differ.';
+  "variant. The Results page counts each assigned user in their variant, at any time after " +
+  "assignment unless the experiment's metric has a conversion window of its own, so the two can differ.";
 
 export interface FailureCopy {
   title: string;

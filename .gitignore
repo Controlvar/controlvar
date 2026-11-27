@@ -209,6 +209,7 @@ sdk/flutter/pubspec.lock
 # Playwright run output (reports, traces, screenshots)
 frontend/playwright-results/
 frontend/playwright-report/
+frontend/persona-results/
 
 
 # Local agent settings: ignored here too, not only in a developer’s global

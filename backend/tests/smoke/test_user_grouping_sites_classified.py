@@ -65,6 +65,8 @@ INVENTORY: Dict[str, str] = {
     "backend/app/api/v1/endpoints/tracking.py::_variant_at_receipt": RESOLVED_IN_CODE,
     "backend/app/core/bandit_scheduler.py::BanditScheduler"
     "._count_assignments_by_variant": PER_ROW,
+    # Assignment rows with less than a whole window (#1934).
+    "backend/app/services/analysis_service.py::open_window_counts": PER_ROW,
     _A + "event_counts": RESOLVED_AT_WRITE,
     _A + "value_totals": RESOLVED_AT_WRITE,
     _A + "_assignment_count": PER_ROW,
@@ -88,6 +90,9 @@ INVENTORY: Dict[str, str] = {
     "backend/app/services/balanced_groups_results.py::stored_strata": PER_ROW,
     "backend/app/services/balanced_groups_results.py::users_outside_blocks": PER_ROW,
     "backend/app/services/event_matching.py::_assigned_pairs": RESOLVED_AT_WRITE,
+    # The senders of a windowed metric's events, each by the id its events are
+    # stored under (#1934).
+    "backend/app/services/event_matching.py::_assignment_starts": RESOLVED_AT_WRITE,
     "backend/app/services/event_matching.py::_converters": RESOLVED_AT_WRITE,
     "backend/app/services/event_matching.py::assignment_times": PER_ROW,
     "backend/app/services/event_service.py::EventService.track_conversion": NOT_ROUTED,
@@ -123,8 +128,8 @@ BY_HAND = {
 
 #: Per class, at this base, in both profiles (modules/backend/app has none).
 COUNTS = {
-    PER_ROW: 18,
-    RESOLVED_AT_WRITE: 9,
+    PER_ROW: 19,
+    RESOLVED_AT_WRITE: 10,
     RESOLVED_IN_CODE: 9,
     NOT_ROUTED: 3,
     STATED_LIMIT: 5,

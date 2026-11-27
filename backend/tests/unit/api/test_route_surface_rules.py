@@ -80,6 +80,25 @@ def test_no_route_overrides_a_flag_for_one_user():
     assert per_user == {("GET", "/api/v1/feature-flags/user/{user_id}")}
 
 
+def test_every_safety_read_takes_any_signed_in_user_and_every_write_a_superuser():
+    # docs/rbac/README.md: reading the safety settings, a flag's safety config
+    # and its check is open to every role; changing them and the rollback need
+    # the superuser flag. No role check sits on any of these routes.
+    routes = {
+        (method, path): set(_calls(ctx.dependant))
+        for method, path, ctx in _contexts()
+        if path.startswith("/api/v1/safety")
+    }
+    reads = {key for key in routes if key[0] == "GET"}
+    writes = {key for key in routes if key[0] != "GET"}
+    assert len(reads) == 3 and len(writes) == 3, sorted(routes)
+    for key in reads:
+        assert deps.get_current_active_user in routes[key], key
+        assert deps.get_current_superuser not in routes[key], key
+    for key in writes:
+        assert deps.get_current_superuser in routes[key], key
+
+
 def test_the_experiments_collection_url_ends_with_a_slash():
     response = TestClient(app, follow_redirects=False).get("/api/v1/experiments")
     assert response.status_code == 307

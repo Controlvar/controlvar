@@ -1081,6 +1081,102 @@ by = [
 ]
 
 [[unit]]
+text = "POST /api/v1/experiments/, PUT /api/v1/experiments/{experiment_id}, POST /api/v1/safety/feature-flags/{feature_flag_id}/config, POST /api/v1/api-keys | #2180 | Text holding NUL (U+0000) or an unpaired surrogate anywhere, in a key or a value, nested or not, answers 422 at its field with the msg Value error, name must not contain NUL or unpaired surrogate characters (or the field's own name); nothing is saved and no audit entry is made. The fields are an experiment's name, description, hypothesis, targeting_rules and tags; a variant's name, description and configuration and a metric's name, description, event_name, aggregation_method and event_value_path, each answered at its place in the list, such as [\"body\", \"metrics\", 0, \"event_name\"]; an experiment's variance_reduction_config.covariate_metric_id and split_url_config's cookie_name and canonical_url, each at its own field, such as [\"body\", \"split_url_config\", \"cookie_name\"]; a flag safety configuration's metrics, for the character in a metric's name or in its thresholds; and an API key's name, description and scopes. Most of these answered 500, because the database cannot store such text; on an experiment create, tags, targeting_rules, a variant's configuration and those three settings answered 400, except an unpaired surrogate in a key of a variant's configuration, which answered 500 in a nested key and in a top-level key was saved as three replacement characters. A split URL variant's url and visual_config's editor_url now refuse an unpaired surrogate as they refused NUL, with 422 at the field and the fixed message each already gave; in the query, which was not checked, it answered 400 on a create and 500 on an update. In a split URL variant's path or host it was already refused, with the path's or the host's message; it now gets the message about a # fragment, a backslash, a space or a control character, with the same type and loc. Where another check refused such text first, as for an unpaired surrogate in a name, event_name, aggregation_method or event_value_path, in an experiment's description or hypothesis or in an API key's description, or for the character in a condition's attribute or operator, it answered that check's 422 and now answers this one. An experiment's key answers its own 422 as before. The message does not repeat the value sent. Authentication still answers 401 first, and a safety configuration by a caller who is not a superuser still answers 403 first; the 422 now comes before the 403 for a role that may not create or change experiments or create a key with the sdk:ruleset scope, and the 404 for an unknown experiment or flag, as every other body 422 on these operations does. A valid surrogate pair, such as an emoji, is saved as before, and every other body answers as before. The OpenAPI document does not change."
+by = [
+    "test:backend/tests/integration/api/test_experiment_safety_key_text_refused.py::test_an_experiment_create_refuses_the_character",
+    "test:backend/tests/integration/api/test_experiment_safety_key_text_refused.py::test_an_experiment_update_refuses_the_character",
+    "test:backend/tests/integration/api/test_experiment_safety_key_text_refused.py::test_a_safety_configuration_refuses_the_character",
+    "test:backend/tests/integration/api/test_experiment_safety_key_text_refused.py::test_an_api_key_create_refuses_the_character",
+    "test:backend/tests/integration/api/test_experiment_safety_key_text_refused.py::test_an_experiment_create_refuses_the_character_in_a_setting",
+    "test:backend/tests/integration/api/test_experiment_safety_key_text_refused.py::test_an_experiment_update_refuses_the_character_in_a_setting",
+    "test:backend/tests/integration/api/test_experiment_safety_key_text_refused.py::test_a_setting_with_an_emoji_is_still_saved_as_sent",
+    "test:backend/tests/unit/schemas/test_experiment_safety_key_text_refused.py::test_a_url_refuses_an_unpaired_surrogate_with_its_own_message",
+    "test:backend/tests/unit/schemas/test_experiment_safety_key_text_refused.py::test_a_url_with_an_emoji_or_without_the_character_is_accepted",
+    "test:backend/tests/unit/schemas/test_experiment_safety_key_text_refused.py::test_a_surrogate_in_a_split_url_path_or_host_gets_the_forbidden_message",
+    "test:backend/tests/unit/schemas/test_split_url_config_rules.py::test_a_url_no_visitor_could_be_sent_to_is_refused_at_its_loc",
+    "test:backend/tests/unit/schemas/test_experiment_safety_key_text_refused.py::test_the_text_is_refused_at_its_field",
+    "test:backend/tests/integration/api/test_experiment_safety_key_text_refused.py::test_rules_another_check_reads_get_this_answer",
+    "test:backend/tests/integration/api/test_experiment_safety_key_text_refused.py::test_a_key_still_answers_its_own_422",
+    "test:backend/tests/integration/api/test_experiment_safety_key_text_refused.py::test_authentication_still_answers_401_first",
+    "test:backend/tests/integration/api/test_experiment_safety_key_text_refused.py::test_on_a_safety_configuration_the_403_for_a_non_superuser_still_comes_first",
+    "test:backend/tests/integration/api/test_experiment_safety_key_text_refused.py::test_on_an_experiment_create_the_422_comes_before_the_403",
+    "test:backend/tests/integration/api/test_experiment_safety_key_text_refused.py::test_on_an_experiment_update_the_422_comes_before_the_403",
+    "test:backend/tests/integration/api/test_experiment_safety_key_text_refused.py::test_on_an_api_key_create_the_422_comes_before_the_403",
+    "test:backend/tests/integration/api/test_experiment_safety_key_text_refused.py::test_on_an_experiment_update_the_422_comes_before_the_404",
+    "test:backend/tests/integration/api/test_experiment_safety_key_text_refused.py::test_on_a_safety_configuration_the_422_comes_before_the_404",
+    "test:backend/tests/integration/api/test_experiment_safety_key_text_refused.py::test_an_emoji_in_an_experiment_is_still_saved_as_sent",
+    "test:backend/tests/integration/api/test_experiment_safety_key_text_refused.py::test_an_emoji_in_a_safety_metric_name_is_still_saved",
+    "test:backend/tests/integration/api/test_experiment_safety_key_text_refused.py::test_an_emoji_in_an_api_key_is_still_saved",
+    "test:backend/tests/unit/schemas/test_experiment_safety_key_text_refused.py::test_an_emoji_is_accepted_as_sent",
+    "test:backend/tests/unit/schemas/test_experiment_safety_key_text_refused.py::test_the_same_body_without_the_character_is_accepted",
+    "test:backend/tests/unit/schemas/test_experiment_safety_key_text_refused.py::test_a_null_is_answered_as_before",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "POST /api/v1/holdout, PUT /api/v1/holdout/{holdout_id}, POST /api/v1/mutual-exclusion-groups, PUT /api/v1/mutual-exclusion-groups/{group_id}, POST /api/v1/users/, PUT /api/v1/users/{user_id}, PUT /api/v1/notifications/preferences, POST /api/v1/feature-flags/, PUT /api/v1/feature-flags/{flag_id}, POST /api/v1/rollout-schedules/, PUT /api/v1/rollout-schedules/{schedule_id}, POST /api/v1/rollout-schedules/{schedule_id}/stages, PUT /api/v1/rollout-schedules/stages/{stage_id}; POST /api/v1/workspaces/, PUT /api/v1/workspaces/{workspace_id}, POST /api/v1/rbac/roles, PUT /api/v1/rbac/roles/{role_name} (full profile) | #2181 | Text holding NUL (U+0000) or an unpaired surrogate anywhere, in a key or a value, nested or not, answers 422 at its field with the msg Value error, name must not contain NUL or unpaired surrogate characters (or the field's own name); nothing is saved and no audit entry is made. The fields are a holdout's and a mutual exclusion group's name and description; a user's username and full_name; the notification settings' slack_channel and email_override; a flag's name and description; a rollout schedule's name, description and config_data, and a stage's name, description and trigger_configuration, a stage in a schedule create answered at its place in the list, such as [\"body\", \"stages\", 0, \"name\"]; a workspace's name and description; and a custom role's description. A NUL answered 500 for a holdout, a group, a user, the notification settings and a workspace, and 400 with the database driver's sentence for a flag's, a schedule's or a stage's name or description and for a role's description on an update, 409 on a create. A schedule's config_data and a stage's trigger_configuration answered 500 for either character, a workspace's name and description 500 for an unpaired surrogate too, and a schedule's or a stage's description 400 for it. Where another check refused an unpaired surrogate first, in each of the other fields, it answered that check's 422 and now answers this one. A user's email, a workspace's slug and a role's name answer their own 422 as before. The message does not repeat the value sent. Authentication still answers 401 first, and a flag create by a role that may not create a flag still answers 403 first; the 422 now comes before the 403 for a role the operation refuses, and the 404 for an unknown holdout, group, user, flag, schedule, stage, workspace or role, as every other body 422 on these operations does. A valid surrogate pair, such as an emoji, is saved as before, and every other body answers as before. The OpenAPI document does not change."
+by = [
+    "test:backend/tests/integration/api/test_names_text_refused.py::test_a_holdout_or_group_create_refuses_the_character",
+    "test:backend/tests/integration/api/test_names_text_refused.py::test_a_holdout_or_group_update_refuses_the_character",
+    "test:backend/tests/integration/api/test_names_text_refused.py::test_a_user_create_refuses_the_character",
+    "test:backend/tests/integration/api/test_names_text_refused.py::test_a_user_update_refuses_the_character",
+    "test:backend/tests/integration/api/test_names_text_refused.py::test_a_user_changing_their_own_name_is_refused_the_character",
+    "test:backend/tests/integration/api/test_names_text_refused.py::test_notification_settings_refuse_the_character",
+    "test:backend/tests/integration/api/test_names_text_refused.py::test_a_flag_create_refuses_the_character",
+    "test:backend/tests/integration/api/test_names_text_refused.py::test_a_flag_update_refuses_the_character",
+    "test:backend/tests/integration/api/test_names_text_refused.py::test_a_rollout_schedule_create_refuses_the_character",
+    "test:backend/tests/integration/api/test_names_text_refused.py::test_a_rollout_schedule_update_refuses_the_character",
+    "test:backend/tests/integration/api/test_names_text_refused.py::test_a_rollout_stage_refuses_the_character",
+    "test:modules/backend/tests/integration/api/test_workspace_role_text_refused.py::test_a_workspace_create_refuses_the_character",
+    "test:modules/backend/tests/integration/api/test_workspace_role_text_refused.py::test_a_workspace_update_refuses_the_character",
+    "test:modules/backend/tests/integration/api/test_workspace_role_text_refused.py::test_a_role_create_refuses_the_character",
+    "test:modules/backend/tests/integration/api/test_workspace_role_text_refused.py::test_a_role_update_refuses_the_character",
+    "test:backend/tests/unit/schemas/test_names_text_refused.py::test_the_text_is_refused_at_its_field",
+    "test:modules/backend/tests/unit/schemas/test_workspace_role_text_refused.py::test_the_text_is_refused_at_its_field",
+    "test:backend/tests/unit/schemas/test_names_text_refused.py::test_a_password_and_an_email_answer_as_before",
+    "test:modules/backend/tests/unit/schemas/test_workspace_role_text_refused.py::test_a_slug_and_a_role_name_answer_their_own_422",
+    "test:backend/tests/integration/api/test_names_text_refused.py::test_authentication_still_answers_401_first",
+    "test:modules/backend/tests/integration/api/test_workspace_role_text_refused.py::test_authentication_still_answers_401_first",
+    "test:backend/tests/integration/api/test_names_text_refused.py::test_on_a_flag_create_the_403_still_comes_first",
+    "test:backend/tests/integration/api/test_names_text_refused.py::test_the_422_comes_before_the_403",
+    "test:modules/backend/tests/integration/api/test_workspace_role_text_refused.py::test_the_422_comes_before_the_403",
+    "test:backend/tests/integration/api/test_names_text_refused.py::test_the_422_comes_before_the_404",
+    "test:modules/backend/tests/integration/api/test_workspace_role_text_refused.py::test_the_422_comes_before_the_404",
+    "test:backend/tests/integration/api/test_names_text_refused.py::test_an_emoji_in_a_holdout_or_group_is_still_saved",
+    "test:backend/tests/integration/api/test_names_text_refused.py::test_an_emoji_in_a_user_is_still_saved",
+    "test:backend/tests/integration/api/test_names_text_refused.py::test_an_emoji_in_notification_settings_is_still_saved",
+    "test:backend/tests/integration/api/test_names_text_refused.py::test_an_emoji_in_a_flag_is_still_saved",
+    "test:backend/tests/integration/api/test_names_text_refused.py::test_an_emoji_in_a_rollout_schedule_is_still_saved",
+    "test:modules/backend/tests/integration/api/test_workspace_role_text_refused.py::test_an_emoji_in_a_workspace_is_still_saved",
+    "test:modules/backend/tests/integration/api/test_workspace_role_text_refused.py::test_an_emoji_in_a_role_description_is_still_saved",
+    "test:backend/tests/unit/schemas/test_names_text_refused.py::test_an_emoji_is_accepted_as_sent",
+    "test:backend/tests/unit/schemas/test_names_text_refused.py::test_the_same_body_without_the_character_is_accepted",
+    "test:backend/tests/unit/schemas/test_names_text_refused.py::test_a_null_is_answered_as_before",
+    "test:modules/backend/tests/unit/schemas/test_workspace_role_text_refused.py::test_a_null_is_answered_as_before",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "POST /api/v1/safety/settings | #2209 | NUL (U+0000) or an unpaired surrogate in a metric's name or its comparison_type in default_metrics answers 422 at [\"body\", \"default_metrics\"] with the msg Value error, default_metrics must not contain NUL or unpaired surrogate characters; nothing is saved and no audit entry is made. It used to answer 500, because the database cannot store such text. The message does not repeat the value sent. Authentication still answers 401 first, and a caller who is not a superuser still answers 403 first. A valid surrogate pair, such as an emoji, is saved as before, and every other body answers as before. The OpenAPI document does not change."
+by = [
+    "test:backend/tests/integration/api/test_safety_settings_text_refused.py::test_the_global_safety_settings_refuse_the_character",
+    "test:backend/tests/unit/schemas/test_safety_settings_text_refused.py::test_default_metrics_refuses_the_character",
+    "test:backend/tests/integration/api/test_safety_settings_text_refused.py::test_authentication_still_answers_401_first",
+    "test:backend/tests/integration/api/test_safety_settings_text_refused.py::test_the_403_for_a_caller_who_is_not_a_superuser_still_comes_first",
+    "test:backend/tests/integration/api/test_safety_settings_text_refused.py::test_an_emoji_in_a_metric_name_is_still_saved",
+    "test:backend/tests/integration/api/test_safety_settings_text_refused.py::test_a_body_this_check_does_not_read_answers_as_before",
+    "test:backend/tests/integration/api/test_safety_settings_text_refused.py::test_a_body_another_check_refuses_answers_as_before",
+    "test:backend/tests/integration/api/test_safety_settings_text_refused.py::test_a_key_a_threshold_does_not_have_is_still_dropped",
+    "test:backend/tests/unit/schemas/test_safety_settings_text_refused.py::test_a_key_a_threshold_does_not_have_is_still_dropped",
+    "test:backend/tests/unit/schemas/test_safety_settings_text_refused.py::test_a_body_another_check_refuses_gets_that_error",
+    "test:backend/tests/unit/schemas/test_safety_settings_text_refused.py::test_a_null_a_storable_body_and_an_emoji_are_accepted_as_before",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
 text = "POST /api/v1/feature-flags/, PUT /api/v1/feature-flags/{flag_id}, PUT /api/v1/feature-flags/{flag_id}/environments/{environment} (beta) | #2163 | A targeting_rules or tags holding NUL (U+0000) or an unpaired surrogate anywhere, in a key or a value, nested or not, answers 422 at [\"body\", \"targeting_rules\"] or [\"body\", \"tags\"] with the msg Value error, targeting_rules must not contain NUL or unpaired surrogate characters (or tags); nothing is saved and no audit entry is made. Where another check refused such a body first, as for the character in a condition's attribute, operator or semantic version, it answered that check's 422 and now answers this one; otherwise it answered 500, because the database cannot store such text. The message does not repeat the value sent. Authentication still answers 401 first, and a create by a role that may not create a flag still answers 403 first; on both PUTs the 422 now comes before the 403 for a role that may not change the flag and the 404 for an unknown flag. A valid surrogate pair, such as an emoji, is saved as before, and every other body answers as before. The OpenAPI document does not change."
 by = [
     "test:backend/tests/integration/api/test_flag_text_refused.py::test_a_create_refuses_the_character_in_targeting_rules",
@@ -1440,6 +1536,31 @@ by = [
 ]
 
 [[unit]]
+text = "GET /api/v1/results/{experiment_id}, GET /api/v1/experiments/{experiment_id}/results, GET /api/v1/results/{experiment_id}/segments/{segment_id} (beta), GET /api/v1/results/{experiment_id}/bayesian, GET /api/v1/results/{experiment_id}/cuped (beta), GET /api/v1/results/{experiment_id}/balanced-groups (beta), GET /api/v1/bandit/{experiment_id}, POST /api/v1/bandit/{experiment_id}/update, PUT /api/v1/bandit/{experiment_id}/weights | #1934 (engine 1.14.0) | Additive. Each metric of /results, of its alias and of a saved segment's results carries conversion_window_hours, and each of its variants open_window_users. Both are null for a metric with no conversion window. A metric with a window counts only the events within that many hours of each user's assignment, in every result that reads it, and open_window_users is how many of the variant's assigned users had less than the full window. Without a window every answer is the one before, less the two keys and with engine_version 1.14.0, so the Bayesian, CUPED, balanced-groups and bandit operations change only in their engine_version, and /results serves no answer cached before the upgrade. The OpenAPI document changes in MetricResult and VariantResult, which gain the two properties, and in the four engine_version defaults, in both snapshots."
+by = [
+    "test:backend/tests/integration/api/test_metric_window_results.py::test_a_window_is_the_only_thing_that_moves_a_number",
+    "test:backend/tests/integration/api/test_metric_window_results.py::test_every_view_counts_the_window",
+    "test:backend/tests/integration/api/test_metric_window_open_users.py::test_the_open_windows_of_each_status",
+    "test:backend/tests/integration/api/test_metric_window_open_users.py::test_an_answer_cached_by_the_engine_before_is_not_served",
+    "test:backend/tests/integration/api/test_unfiltered_results_pinned.py::test_the_window_keys_are_all_that_moved_from_1_13_0",
+    "test:backend/tests/unit/services/test_engine_versions_frozen.py",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "POST /api/v1/experiments/, GET /api/v1/experiments/, GET/PUT /api/v1/experiments/{experiment_id}, POST /api/v1/experiments/{experiment_id}/clone | #1934 | Additive. Each metric gains conversion_window_hours (beta): set on create or on a draft's PUT, a whole number of hours from 1 to 8760, it makes the metric count each user's events only within that many hours of their assignment (Conversion window). Every response carries it, null for a metric with no window, and a clone copies it. Anything else answers 422 at [\"body\", \"metrics\", i, \"conversion_window_hours\"] with Pydantic's own message: 0, -1 and 8761 with greater_than_equal or less_than_equal, and 1.5, true and a string such as \"24\" with int_type. Changing it after draft answers 400, as any change to metrics does. A PUT that sends metrics replaces them, so a metric sent without it no longer has one. A metric created without it has no window and is counted as before. The OpenAPI document changes in MetricBase and MetricResponse, which gain the property, in both snapshots."
+by = [
+    "test:backend/tests/integration/api/test_metric_window_writes.py::test_create_put_get_list_clone_and_audit_carry_the_window",
+    "test:backend/tests/integration/api/test_metric_window_writes.py::test_create_and_put_refuse_anything_but_1_to_8760_hours",
+    "test:backend/tests/integration/api/test_metric_window_writes.py::test_a_draft_put_without_the_window_stores_none",
+    "test:backend/tests/integration/api/test_metric_window_writes.py::test_no_role_changes_the_window_once_the_experiment_left_draft",
+    "test:backend/tests/unit/services/test_metric_window_writes.py::test_create_and_put_refuse_anything_but_a_whole_number_of_hours",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
 text = "POST /api/v1/auth/login, POST /api/v1/auth/token | #1812 | For an account with two-step sign-in on, the right password answers 200 with {\"mfa_required\": true, \"mfa_token\", \"enrol\": false, \"expires_in\": 300} and no access_token; the access token comes from POST /api/v1/auth/mfa/verify. For an account whose role LOCAL_AUTH_2FA_REQUIRED_ROLES names and that has not set it up, it answers {\"mfa_required\": true, \"mfa_token\", \"enrol\": true, \"expires_in\": 600} and no access_token; the access token comes from POST /api/v1/auth/mfa/enroll/confirm. Every other account gets the answer it got before. The OpenAPI document changes: each 200 answer is an anyOf that adds MfaRequiredResponse, and the descriptions say so. See Two-step sign-in."
 by = [
     "test:backend/tests/unit/api/test_two_factor_routes.py::test_the_password_step_answers_mfa_required_and_no_access_token",
@@ -1628,6 +1749,22 @@ by = [
 ]
 
 [[unit]]
+text = "POST /api/v1/feature-flags/, PUT /api/v1/feature-flags/{flag_id}, PUT /api/v1/feature-flags/{flag_id}/environments/{environment} (beta), POST /api/v1/feature-flags/{flag_id}/environments/{target}/promote (beta) | #2179 | A native rule's id or the default_rule's id longer than 255 characters answers 422 at [\"body\", \"targeting_rules\"], with Value error, rules[0].id: must be at most 255 characters (or default_rule.id), and nothing is saved. It used to be saved, and then, with a production key, every evaluation that reached that rule and GET /api/v1/feature-flags/user/{user_id} for each user it matched answered 500, because the id a production evaluation records holds at most 255 characters. An id of 255 characters is saved and evaluated as before; the dashboard shape's id is still 1 to 100 characters, and experiment rules are unaffected. A request that resends such stored rules is refused too, and a promotion from environment settings that hold them is refused until they are fixed. A flag stored with such an id before this release keeps answering 500 to those evaluations until its id is shortened: python -m backend.scripts.check_targeting_rules lists it, and a PUT that sends the rules with an id of at most 255 characters fixes it. The OpenAPI document does not change."
+by = [
+    "test:backend/tests/integration/api/test_flag_rule_id_refused.py::test_a_create_refuses_an_id_over_255_characters",
+    "test:backend/tests/integration/api/test_flag_rule_id_refused.py::test_an_update_refuses_it_and_keeps_the_stored_rules",
+    "test:backend/tests/integration/api/test_flag_rule_id_refused.py::test_an_environment_update_refuses_it",
+    "test:backend/tests/integration/api/test_flag_rule_id_refused.py::test_a_promotion_of_a_stored_long_id_is_refused",
+    "test:backend/tests/integration/api/test_flag_rule_id_refused.py::test_an_id_of_255_characters_is_saved_evaluated_and_recorded",
+    "test:backend/tests/integration/api/test_flag_rule_id_refused.py::test_a_flag_stored_with_a_long_id_is_listed_and_can_be_fixed",
+    "test:backend/tests/integration/api/test_flag_rule_id_refused.py::test_experiment_rules_are_unaffected",
+    "test:backend/tests/unit/core/test_targeting_vocabulary.py::test_the_walker_is_called_from_write_paths_only",
+    "test:backend/tests/unit/core/test_flag_targeting_validation.py::test_refused",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
 text = "POST /api/v1/feature-flags/, GET /api/v1/feature-flags/, GET/PUT /api/v1/feature-flags/{flag_id}, POST /api/v1/feature-flags/{flag_id}/activate, POST /api/v1/feature-flags/{flag_id}/deactivate | #2012 | The request and response schemas gain split: what share of the users a string, number or json flag is on for gets each of 3 to 10 values, by whole-number weights that add up to 100. null, every existing flag's, means none, and a boolean flag's is always null. A targeting rule of such a flag may carry a value of its own. Anything else answers 422: a split at [\"body\", \"split\"] or at its entry ([\"body\", \"split\", 2, \"weight\"]), a rule's value at [\"body\", \"targeting_rules\"]. A release older than 0.49.0 refuses both (422) and serves the on value."
 by = [
     "test:backend/tests/unit/schemas/test_flag_split_write.py::test_a_create_accepts_a_split_of_three_to_ten_values",
@@ -1667,6 +1804,18 @@ by = [
     "test:backend/tests/integration/api/test_evaluate_user_id_refused.py::test_the_key_is_still_checked_first",
     "test:backend/tests/integration/api/test_evaluate_user_id_refused.py::test_the_422_comes_before_an_unknown_flag_key",
     "test:backend/tests/integration/api/test_evaluate_user_id_refused.py::test_an_id_of_255_characters_is_answered_and_recorded",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "GET /api/v1/results/{experiment_id}/daily, GET /api/v1/experiments/{experiment_id}/daily-results | #2205 | Without metric_id, /daily answers for the metric GET /api/v1/results/{experiment_id} lists first: the primary, or the first by name when none is marked primary. It used to answer for the first metric the database returned, which need not be the primary, so the Daily Trends chart on the results page could show a different metric from the page's summary. /daily-results lists each day's metrics in that same order, with the same entries. With metric_id, both answer as before. With CACHE_ENABLED on, a /daily-results answer cached before the upgrade keeps the old order for up to an hour. The OpenAPI document does not change."
+by = [
+    "test:backend/tests/integration/api/test_daily_results_primary_metric.py::test_the_daily_series_without_a_metric_id_is_the_primary_metrics",
+    "test:backend/tests/integration/api/test_daily_results_primary_metric.py::test_with_no_primary_the_daily_series_is_the_first_metric_by_name",
+    "test:backend/tests/integration/api/test_daily_results_primary_metric.py::test_the_daily_results_list_the_primary_first_then_by_name",
+    "test:backend/tests/integration/api/test_experiment_cache_redis.py::test_results_are_cached_and_served_from_the_cache",
+    "test:backend/tests/unit/api/test_experiment_cache_scope.py::test_an_entry_is_kept_for_an_hour",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
 ]

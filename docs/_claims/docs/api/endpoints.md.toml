@@ -706,8 +706,15 @@ text = "Feature flags are not cached: the flag list and a flag's detail are read
 by = ["test:backend/tests/smoke/test_no_flag_cache.py::test_flag_routes_do_not_depend_on_the_cache"]
 
 [[unit]]
-text = "GET /api/v1/results/{experiment_id} and GET /api/v1/experiments/{experiment_id}/results are cached for 5 minutes while the experiment is running, and for 24 hours otherwise, whenever Redis is reachable"
+text = "GET /api/v1/results/{experiment_id} and GET /api/v1/experiments/{experiment_id}/results are cached for 5 minutes while the experiment is running, and for 24 hours otherwise, whenever Redis is reachable."
 by = ["test:backend/tests/unit/api/test_results_stored_settings.py::test_results_are_kept_300_seconds_while_running_and_86400_otherwise"]
+
+[[unit]]
+text = "Starting, pausing, resuming, completing or archiving the experiment, by hand or by the scheduler, clears its cached results"
+by = [
+    "test:backend/tests/integration/api/test_results_cache_status_change.py::test_a_status_change_through_the_routes_clears_the_cached_results",
+    "test:backend/tests/integration/api/test_results_cache_status_change.py::test_a_scheduled_status_change_clears_the_cached_results",
+]
 
 [[unit]]
 text = "Authentication Endpoints"
@@ -1502,6 +1509,72 @@ by = ["test:backend/tests/integration/api/test_planned_sample_effect.py::test_an
 [[unit]]
 text = "A PUT that sends metrics replaces them, so a metric resent without expected_effect no longer has one."
 by = ["test:backend/tests/integration/api/test_planned_sample_effect.py::test_a_put_that_resends_metrics_without_the_effect_clears_it"]
+
+[[unit]]
+text = "A metric's conversion window (beta)"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A metric's conversion_window_hours, sent on create or on a draft's PUT, makes it count each user's events only within that many hours of their assignment, for any metric type (Conversion window)."
+by = [
+    "test:backend/tests/integration/api/test_metric_window_writes.py::test_create_put_get_list_clone_and_audit_carry_the_window",
+    "test:backend/tests/integration/api/test_metric_window_writes.py::test_two_metrics_created_through_the_api_count_9_and_16_in_every_view",
+    "test:backend/tests/integration/api/test_metric_window_results.py::test_a_mean_drops_the_events_outside_not_the_users",
+]
+
+[[unit]]
+text = "It is a whole number from 1 to 8760 (365 days); null, or leaving it out, means no window."
+by = [
+    "test:backend/tests/unit/services/test_metric_window_writes.py::test_create_and_put_take_1_to_8760_hours_or_null",
+    "test:backend/tests/integration/api/test_metric_window_writes.py::test_create_and_put_take_the_bounds",
+]
+
+[[unit]]
+text = "Anything else answers 422 at [\"body\", \"metrics\", i, \"conversion_window_hours\"] with Pydantic's own message: 0 and 8761 with greater_than_equal and less_than_equal, and 1.5, true and \"24\" with int_type."
+by = [
+    "test:backend/tests/unit/services/test_metric_window_writes.py::test_create_and_put_refuse_anything_but_a_whole_number_of_hours",
+    "test:backend/tests/integration/api/test_metric_window_writes.py::test_create_and_put_refuse_anything_but_1_to_8760_hours",
+]
+
+[[unit]]
+text = "Every experiment response carries it, a clone keeps it, and it cannot be changed once the experiment leaves draft (400)."
+by = [
+    "test:backend/tests/integration/api/test_metric_window_writes.py::test_create_put_get_list_clone_and_audit_carry_the_window",
+    "test:backend/tests/integration/api/test_metric_window_writes.py::test_no_role_changes_the_window_once_the_experiment_left_draft",
+]
+
+[[unit]]
+text = "A PUT that sends metrics replaces them, so a metric resent without conversion_window_hours no longer has one."
+by = [
+    "test:backend/tests/integration/api/test_metric_window_writes.py::test_a_draft_put_without_the_window_stores_none",
+    "test:backend/tests/unit/services/test_metric_window_writes.py::test_a_put_that_leaves_the_window_out_writes_none",
+]
+
+[[unit]]
+text = "It also drops the experiment's cached results, so when that reaches the cache the next read is counted with the new windows."
+by = [
+    "test:backend/tests/integration/api/test_metric_window_writes.py::test_a_changed_window_is_not_answered_from_the_cache",
+    "test:backend/tests/unit/services/test_metric_window_writes.py::test_a_change_to_the_metrics_drops_every_cached_result",
+]
+
+[[unit]]
+text = "When the cache cannot be reached at that moment, a warning is logged and an answer it holds is served until it expires."
+by = ["test:backend/tests/unit/services/test_metric_window_writes.py::test_a_clear_that_does_not_reach_the_cache_is_logged"]
+
+[[unit]]
+text = "In the results, each metric carries the conversion_window_hours its numbers were counted with, and each of its variants open_window_users: how many of the variant's assigned users had less than the full window, at the experiment's end_date once it is completed, or archived with an end_date at or before computed_at, and at computed_at while it is a draft or active."
+by = [
+    "test:backend/tests/integration/api/test_metric_window_results.py::test_two_metrics_on_one_event_keep_their_own_windows",
+    "test:backend/tests/integration/api/test_metric_window_open_users.py::test_the_open_windows_of_each_status",
+    "test:backend/tests/integration/api/test_metric_window_open_users.py::test_open_window_time_follows_the_rule",
+]
+
+[[unit]]
+text = "Both are null for a metric with no window, and open_window_users also while the experiment is paused, or archived without such an end_date."
+by = [
+    "test:backend/tests/integration/api/test_metric_window_open_users.py::test_the_open_windows_of_each_status",
+    "test:backend/tests/integration/api/test_unfiltered_results_pinned.py::test_the_window_keys_are_all_that_moved_from_1_13_0",
+]
 
 [[unit]]
 text = "Feature Flag Endpoints"

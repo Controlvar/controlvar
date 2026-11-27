@@ -7,7 +7,7 @@ import { launchOptions } from "./tests/e2e/launch";
 /**
  * Playwright configuration for the Controlvar dashboard.
  *
- * Seven projects:
+ * Eight projects, and a ninth on request:
  *   - `journeys` — the fail-hard PR journeys (`*.journey.spec.ts`), the
  *     required `browser-e2e` gate. Run them with `--project=journeys`.
  *   - `sso` — sign in with SSO from the dashboard (`*.sso.spec.ts`, C2b). It
@@ -46,6 +46,10 @@ import { launchOptions } from "./tests/e2e/launch";
  *     committed (#943), so every test in it fails on the first comparison and
  *     no workflow runs this project. `npm run test:visual` (and
  *     `test:visual:update`, which writes the baselines) select it by file name.
+ *   - `personas` — the persona days (`*.persona.spec.ts`, #1950; the cards
+ *     are in tests/personas), present only when PERSONAS=1, and then the one
+ *     reporter is a JSON report to a file (PERSONAS_REPORT). nightly-qa.yml's
+ *     persona-days job runs it; `extended` never lists these specs.
  *
  * The web server is chosen automatically so nobody has to remember a flag:
  *   - a dashboard already answering on the base URL is reused (local dev);
@@ -62,9 +66,16 @@ import { launchOptions } from "./tests/e2e/launch";
  *   PLAYWRIGHT_PORT        port for the managed server (default 3100)
  *   PLAYWRIGHT_WEB_SERVER  auto | dev | export | none   (default auto)
  *   PLAYWRIGHT_HEADLESS    "false" to watch the browser
+ *   PERSONAS               "1" adds the `personas` project and its one reporter
+ *   PERSONAS_REPORT        that report's file (default persona-results/report.json)
  */
 
 const HEADLESS = process.env.PLAYWRIGHT_HEADLESS !== "false";
+
+// The persona days (tests/e2e/personas, tests/personas): a project of their
+// own that exists only when PERSONAS=1, so a bare run never lists them.
+const PERSONAS = process.env.PERSONAS === "1";
+const PERSONAS_REPORT = process.env.PERSONAS_REPORT ?? "persona-results/report.json";
 const hasExport = existsSync(join(__dirname, "out", "index.html"));
 
 type ServerMode = "auto" | "dev" | "export" | "none";
@@ -116,9 +127,13 @@ export default defineConfig({
   // window out (see LoginPage.submitResilient) before it can continue.
   timeout: 120_000,
   expect: { timeout: 10_000 },
-  reporter: process.env.CI
-    ? [["html", { outputFolder: "playwright-report", open: "never" }], ["github"], ["list"]]
-    : [["html", { outputFolder: "playwright-report", open: "never" }], ["list"]],
+  // PERSONAS=1: one JSON report written to a file and nothing else, so no
+  // test or step title reaches the log (tests/personas/check_run.py reads it).
+  reporter: PERSONAS
+    ? [["json", { outputFile: PERSONAS_REPORT }]]
+    : process.env.CI
+      ? [["html", { outputFolder: "playwright-report", open: "never" }], ["github"], ["list"]]
+      : [["html", { outputFolder: "playwright-report", open: "never" }], ["list"]],
 
   use,
 
@@ -155,6 +170,7 @@ export default defineConfig({
         /\.site\.spec\.ts$/,
         /\.launch\.spec\.ts$/,
         /\.runtime\.spec\.ts$/,
+        /\.persona\.spec\.ts$/,
         /visual-regression\.spec\.ts$/,
       ],
       use: { ...devices["Desktop Chrome"] },
@@ -195,6 +211,17 @@ export default defineConfig({
       testMatch: /visual-regression\.spec\.ts$/,
       use: { ...devices["Desktop Chrome"] },
     },
+    // The persona days, only when PERSONAS=1 (nightly-qa.yml's persona-days
+    // job); `extended` ignores their specs above.
+    ...(PERSONAS
+      ? [
+          {
+            name: "personas",
+            testMatch: /\.persona\.spec\.ts$/,
+            use: { ...devices["Desktop Chrome"] },
+          },
+        ]
+      : []),
   ],
 
   webServer,

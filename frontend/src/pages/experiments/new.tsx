@@ -14,6 +14,7 @@ import {
   configurationProblems,
   createInitialFormState,
   experimentFormReducer,
+  metricWindowProblem,
   splitUrlProblem,
   validateForm,
 } from '@/components/experiments/new/formState';
@@ -22,6 +23,7 @@ import { MODULES } from '@/services/modules';
 import { useOptionalAuth } from '@/contexts/AuthContext';
 import { useEffectivePermissions } from '@/contexts/EffectivePermissionsContext';
 import { useDemoMode } from '@/contexts/AuthConfigContext';
+import { ForbiddenView } from '@/components/RequireAuth';
 import { DemoNote } from '@/components/DemoNote';
 import { DEMO_EXPERIMENTS_ACTION } from '@/utils/demoMode';
 import { canCreateExperiment } from '@/utils/experimentPermissions';
@@ -29,7 +31,6 @@ import {
   CreateError,
   CreateView,
   describeCreateError,
-  ROLE_CANNOT_CREATE,
   TARGETING_INCOMPLETE,
 } from '@/components/experiments/new/createErrors';
 
@@ -92,6 +93,11 @@ export default function NewExperimentPage() {
       setError({ message: problem });
       if (configurationProblems(state.variants).some((p) => p !== null)) {
         setRevealProblems((n) => n + 1);
+      }
+      // A conversion window that cannot be saved: its box takes focus, where the view shows it.
+      const windowProblem = metricWindowProblem(state.metrics);
+      if (windowProblem && windowProblem.message === problem) {
+        document.querySelector<HTMLElement>(`[data-testid="metric-window-${windowProblem.index}"]`)?.focus();
       }
       return;
     }
@@ -178,13 +184,24 @@ export default function NewExperimentPage() {
     );
   }
 
+  // A role that cannot create gets the 403 view every refused page shows.
+  // (A read-only demo keeps its own note below, whatever the role.)
+  if (!allowed && !demo && auth?.user) {
+    return (
+      <div className="flex-1 bg-slate-50">
+        <PageTitle title="New Experiment" />
+        <ForbiddenView user={auth.user} requirement="permission to create experiments" fallbackPath="/experiments" />
+      </div>
+    );
+  }
+
   // `?advanced` carries no value, so it parses to "" — check for the key.
   const advanced = 'advanced' in router.query;
   const freshLoad = !shownViewRef.current;
 
   return (
     <div className="flex-1 bg-slate-50">
-      {(advanced || !allowed || demo) && <PageTitle title="New Experiment" />}
+      {(advanced || demo) && <PageTitle title="New Experiment" />}
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="flex items-center gap-4 mb-6">
@@ -194,13 +211,13 @@ export default function NewExperimentPage() {
           <h1 className="text-2xl font-bold text-slate-900">New Experiment</h1>
         </div>
 
-        {!allowed || demo ? (
+        {demo ? (
           <div
             role="status"
             className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-700 space-y-3"
             data-testid="create-not-allowed"
           >
-            {demo ? <DemoNote action={DEMO_EXPERIMENTS_ACTION} className="" /> : <p>{ROLE_CANNOT_CREATE}</p>}
+            <DemoNote action={DEMO_EXPERIMENTS_ACTION} className="" />
             <p>
               <Link href="/experiments" className="text-blue-700 underline hover:text-blue-900">
                 Back to experiments

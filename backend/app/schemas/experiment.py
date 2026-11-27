@@ -16,6 +16,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    StrictInt,
     ValidationError,
     ValidationInfo,
     field_validator,
@@ -28,6 +29,7 @@ from backend.app.core.targeting_adapter import (
     TargetingRulesError,
     validate_experiment_targeting,
 )
+from backend.app.models.experiment import MAX_CONVERSION_WINDOW_HOURS
 from backend.app.schemas.balance_within import BalanceWithin
 from backend.app.schemas.bandit import OptimizationType
 from backend.app.schemas.bayesian import BayesianConfig
@@ -37,6 +39,10 @@ from backend.app.schemas.split_url_config import (
     SPLIT_URL_CONFIG_ERROR,
     SplitUrlConfig,
     find_split_url_config_problem,
+)
+from backend.app.schemas.storable_text import (
+    contains_unstorable_text,
+    unstorable_text_message,
 )
 from backend.app.schemas.variance_reduction import VarianceReductionConfig
 from backend.app.schemas.visual import (
@@ -123,6 +129,20 @@ EVENT_VALUE_PATH_DESCRIPTION = (
     "metric does not read value, and values inside an event's properties are "
     "never read.  Stored and returned as sent."
 )
+#: A metric's conversion window (#1934), on the request (``MetricBase``) and
+#: the response (``MetricResponse``).
+CONVERSION_WINDOW_DESCRIPTION = (
+    "Beta.  The metric's conversion window, in hours: a whole number from 1 "
+    f"to {MAX_CONVERSION_WINDOW_HOURS} (365 days).  With one, the metric "
+    "counts a user's events only within that many elapsed hours from their "
+    "assignment: from the start of the second they were assigned in, up to "
+    "and not including the assignment time plus the window, by each event's "
+    "timestamp (the time it was received when it was sent without one).  "
+    "null, or left out, means no window: every event the metric matches "
+    "counts.  Any metric type.  It cannot be changed once the experiment "
+    "leaves draft; a PUT that sends metrics replaces them, so a metric sent "
+    "without it no longer has one."
+)
 
 
 #: The message for a ``time_zone`` that is not a known IANA zone name. Fixed:
@@ -149,6 +169,17 @@ def _zone(name: str) -> tzinfo:
     if name == "UTC":
         return timezone.utc
     return ZoneInfo(name)
+
+
+def _refuse_unstorable_text(value: Any, info: ValidationInfo) -> Any:
+    """Refuse NUL and unpaired surrogates anywhere in a request field's value,
+    keys included: the database cannot store them, and the save failed (#2180).
+    Called from a ``mode="before"`` validator of each request model below, so
+    no other check of the field reads the value first; the message names the
+    field, never the value."""
+    if contains_unstorable_text(value):
+        raise ValueError(unstorable_text_message(info.field_name))
+    return value
 
 
 class ScheduleConfig(BaseModel):
@@ -281,6 +312,14 @@ class MetricBase(BaseModel):
         description=EVENT_VALUE_PATH_DESCRIPTION,
     )
     lower_is_better: bool = Field(False, description="Whether lower values are better")
+    # Strict: "24", 24.0 and true are refused, as the warehouse analysis's
+    # field of the same name refuses them, rather than read as 24 or 1.
+    conversion_window_hours: Optional[StrictInt] = Field(
+        None,
+        ge=1,
+        le=MAX_CONVERSION_WINDOW_HOURS,
+        description=CONVERSION_WINDOW_DESCRIPTION,
+    )
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -296,6 +335,19 @@ class MetricBase(BaseModel):
             }
         }
     )
+
+    @field_validator(
+        "name",
+        "description",
+        "event_name",
+        "aggregation_method",
+        "event_value_path",
+        mode="before",
+    )
+    @classmethod
+    def refuse_unstorable_text(cls, value: Any, info: ValidationInfo) -> Any:
+        """A metric's text the database cannot store answers 422 at the field."""
+        return _refuse_unstorable_text(value, info)
 
 
 #: The 422 message for a metric name that repeats in one request (#1461). It
@@ -383,6 +435,13 @@ class VariantBase(BaseModel):
         }
     )
 
+    @field_validator("name", "description", "configuration", mode="before")
+    @classmethod
+    def refuse_unstorable_text(cls, value: Any, info: ValidationInfo) -> Any:
+        """A variant's text the database cannot store answers 422 at the
+        field. ``visual_changes`` refuses it in its own models."""
+        return _refuse_unstorable_text(value, info)
+
     @field_validator("traffic_allocation")
     @classmethod
     def validate_traffic_allocation(cls, v: int) -> int:
@@ -449,6 +508,15 @@ class ExperimentBase(BaseModel):
         None, description="Rules for targeting users"
     )
     tags: Optional[List[str]] = Field(None, description="Tags for categorization")
+
+    @field_validator(
+        "name", "description", "hypothesis", "targeting_rules", "tags", mode="before"
+    )
+    @classmethod
+    def refuse_unstorable_text(cls, value: Any, info: ValidationInfo) -> Any:
+        """Text the database cannot store answers 422 at the field, before the
+        rules are read. ``key`` already answers 422 for both characters."""
+        return _refuse_unstorable_text(value, info)
 
 
 class SequentialTestingConfigInput(BaseModel):
@@ -985,6 +1053,15 @@ class ExperimentUpdate(BaseModel):
         """
         raise PydanticCustomError("value_error", SCHEDULE_ON_UPDATE_REFUSED)
 
+    @field_validator(
+        "name", "description", "hypothesis", "targeting_rules", "tags", mode="before"
+    )
+    @classmethod
+    def refuse_unstorable_text(cls, value: Any, info: ValidationInfo) -> Any:
+        """Text the database cannot store answers 422 at the field, as on a
+        create."""
+        return _refuse_unstorable_text(value, info)
+
     @field_validator("targeting_rules")
     @classmethod
     def validate_targeting_rules(
@@ -1060,6 +1137,9 @@ class MetricResponse(BaseModel):
         None, description=EVENT_VALUE_PATH_DESCRIPTION
     )
     lower_is_better: bool
+    conversion_window_hours: Optional[int] = Field(
+        None, description=CONVERSION_WINDOW_DESCRIPTION
+    )
     experiment_id: UUID4
     created_at: datetime
     updated_at: datetime
