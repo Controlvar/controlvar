@@ -108,3 +108,56 @@ def test_the_variable_is_left_as_it_was_found(
     monkeypatch.setenv("POSTGRES_SCHEMA", "somewhere_else")
     bootstrap._bootstrap_locked(object(), SCHEMA)
     assert os.environ["POSTGRES_SCHEMA"] == "somewhere_else"
+
+
+class _Table:
+    def __init__(self, name):
+        self.name = name
+
+
+class _Metadata:
+    def __init__(self, names):
+        self.tables = {name: _Table(name) for name in names}
+        self.created = []
+
+    def create_all(self, bind=None, tables=None):
+        self.created = sorted(t.name for t in tables)
+
+
+@pytest.mark.regression
+def test_creating_missing_module_tables_logs_a_warning_that_names_them(
+    monkeypatch, caplog
+):
+    """The guide says a full build meeting a core database logs a WARNING."""
+    metadata = _Metadata(["workspaces", "sso_configs", "experiments"])
+    monkeypatch.setattr(bootstrap, "schema_metadata", lambda schema: metadata)
+    monkeypatch.setattr(
+        bootstrap,
+        "missing_model_tables",
+        lambda engine, schema, md: ["workspaces", "sso_configs", "experiments"],
+    )
+    monkeypatch.setattr(bootstrap, "_add_missing_alter_constraints", lambda *a: [])
+
+    with caplog.at_level("INFO", logger=bootstrap.logger.name):
+        created, added = bootstrap.reconcile_with_models(object(), SCHEMA)
+
+    # Only module tables are created; the core table `experiments` is left alone.
+    assert created == ["workspaces", "sso_configs"]
+    assert added == []
+    assert metadata.created == ["sso_configs", "workspaces"]
+    warnings = [r for r in caplog.records if r.levelname == "WARNING"]
+    assert len(warnings) == 1
+    message = warnings[0].getMessage()
+    assert SCHEMA in message and "workspaces" in message and "sso_configs" in message
+    assert "experiments" not in message
+
+
+def test_nothing_missing_logs_no_warning(monkeypatch, caplog):
+    monkeypatch.setattr(bootstrap, "schema_metadata", lambda schema: _Metadata([]))
+    monkeypatch.setattr(bootstrap, "missing_model_tables", lambda *a: [])
+    monkeypatch.setattr(bootstrap, "_add_missing_alter_constraints", lambda *a: [])
+
+    with caplog.at_level("INFO", logger=bootstrap.logger.name):
+        assert bootstrap.reconcile_with_models(object(), SCHEMA) == ([], [])
+
+    assert [r for r in caplog.records if r.levelname == "WARNING"] == []

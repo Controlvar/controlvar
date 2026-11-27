@@ -345,11 +345,9 @@ exempt:baseline	docs/auth/sso.md	f38d10851ac2
 exempt:baseline	docs/auth/sso.md	f472da84d3ee
 exempt:baseline	docs/auth/sso.md	f4f6be364153
 exempt:baseline	docs/development/database/migrations.md	0de1cb7b952d
-exempt:baseline	docs/development/database/migrations.md	1b8648c49e13
 exempt:baseline	docs/development/database/migrations.md	3c17e0d997e8
 exempt:baseline	docs/development/database/migrations.md	8281284aeef9
 exempt:baseline	docs/development/database/migrations.md	87ba84a62258
-exempt:baseline	docs/development/database/migrations.md	bae7460ceef2
 exempt:baseline	docs/development/database/migrations.md	bd6f4b582de3
 exempt:baseline	docs/development/database/migrations.md	d846b40e248d
 exempt:baseline	docs/guides/assign-customer-list.md	01233d6c65fb

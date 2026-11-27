@@ -246,3 +246,27 @@ def test_alembic_and_the_bootstrap_connect_with_the_postgres_settings():
     result = _alembic("current", **env)
     assert result.returncode != 0
     assert '"127.0.0.1", port 1' in result.stdout + result.stderr, result.stderr[-2000:]
+
+
+@pytest.mark.regression
+def test_the_connection_defaults_are_the_postgresql_make_db_starts():
+    env = {
+        k: v
+        for k, v in os.environ.items()
+        if not k.startswith(("POSTGRES_", "DATABASE_"))
+    }
+    assert (
+        _bootstrap_url(env)
+        == "postgresql://postgres:postgres@localhost:5432/experimentation"
+    )
+
+
+@pytest.mark.regression
+def test_alembic_revision_runs_env_py_and_so_needs_the_database_connection():
+    config = Config(str(ALEMBIC_INI))
+    assert config.get_main_option("revision_environment") == "true"
+    result = _alembic(
+        "revision", "-m", "probe", POSTGRES_SERVER="127.0.0.1", POSTGRES_PORT="1"
+    )
+    assert result.returncode != 0
+    assert '"127.0.0.1", port 1' in result.stdout + result.stderr, result.stderr[-2000:]
