@@ -17,22 +17,22 @@ Given $m$ raw p-values $p_1, p_2, \ldots, p_m$ and a desired FDR threshold $\alp
 
 10 p-values with $\alpha = 0.10$:
 
-| Rank | p-value | BH threshold $k/10 \times 0.10$ | Reject? |
-|---|---|---|---|
-| 1 | 0.001 | 0.010 | Yes |
-| 2 | 0.008 | 0.020 | Yes |
-| 3 | 0.039 | 0.030 | No |
-| 4 | 0.041 | 0.040 | No |
-| 5 | 0.042 | 0.050 | Yes |
-| 6 | **0.060** | **0.060** | **Yes** ← largest k* |
-| 7 | 0.074 | 0.070 | No |
-| 8 | 0.205 | 0.080 | No |
-| 9 | 0.212 | 0.090 | No |
-| 10 | 0.391 | 0.100 | No |
+| Rank | p-value | BH threshold $k/10 \times 0.10$ | Meets its threshold? | Rejected? |
+|---|---|---|---|---|
+| 1 | 0.001 | 0.010 | Yes | Yes |
+| 2 | 0.008 | 0.020 | Yes | Yes |
+| 3 | 0.039 | 0.030 | No | Yes |
+| 4 | 0.041 | 0.040 | No | Yes |
+| 5 | 0.042 | 0.050 | Yes | Yes |
+| 6 | **0.060** | **0.060** | **Yes** ← largest k* | Yes |
+| 7 | 0.074 | 0.070 | No | No |
+| 8 | 0.205 | 0.080 | No | No |
+| 9 | 0.212 | 0.090 | No | No |
+| 10 | 0.391 | 0.100 | No | No |
 
-Result: Reject 6 hypotheses (all with rank $\leq 6$), even though ranks 3–5 individually
-don't satisfy their per-rank threshold — the step-up property means we look for the
-largest k, so ranks 1, 2, 5, 6 passing brings along ranks 3 and 4.
+Result: Reject 6 hypotheses (all with rank $\leq 6$), even though ranks 3 and 4
+individually don't satisfy their per-rank threshold — the step-up property means we look
+for the largest k, so rank 6 passing brings along ranks 3 and 4.
 
 At $\alpha = 0.05$ with the same p-values, only 2 are significant
 (k=1: 0.001≤0.005 ✓, k=2: 0.008≤0.010 ✓, k=3: 0.039>0.015 ✗).
