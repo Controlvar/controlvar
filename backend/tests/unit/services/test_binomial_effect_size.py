@@ -34,3 +34,19 @@ def test_every_metric_is_a_fisher_test_on_conversions_with_cohens_h(metric_type)
     assert treatment["statistical_test_used"] == "fisher_exact"
     cohens_h = 2 * math.asin(math.sqrt(0.2)) - 2 * math.asin(math.sqrt(0.1))
     assert treatment["effect_size"] == pytest.approx(cohens_h)
+
+
+def test_the_p_value_is_scipys_two_sided_fisher_exact_on_the_two_by_two_table():
+    from scipy import stats
+
+    metric = SimpleNamespace(
+        id="m", name="Purchase", metric_type="conversion", is_primary=True
+    )
+    result = binomial_metric_result(
+        [(CONTROL, 200, 20), (TREATMENT, 200, 40)], 0.05, "none", metric=metric
+    )
+    [treatment] = [v for v in result["variants"] if not v["is_control"]]
+    two_sided = stats.fisher_exact([[40, 160], [20, 180]])[1]
+    one_sided = stats.fisher_exact([[40, 160], [20, 180]], alternative="greater")[1]
+    assert two_sided != pytest.approx(one_sided)
+    assert treatment["p_value"] == pytest.approx(two_sided)

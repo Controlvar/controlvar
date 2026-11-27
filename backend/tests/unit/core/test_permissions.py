@@ -144,6 +144,18 @@ class TestCheckPermission:
         assert check_permission(viewer_user, ResourceType.EXPERIMENT, Action.READ)
         assert not check_permission(viewer_user, ResourceType.EXPERIMENT, Action.CREATE)
 
+    def test_the_answer_is_a_bool_whether_it_allows_or_refuses(
+        self, superuser, admin_user, developer_user
+    ):
+        """The caller raises the 403 on a False: it is a bool, never None."""
+        assert check_permission(superuser, ResourceType.USER, Action.DELETE) is True
+        assert (
+            check_permission(admin_user, ResourceType.EXPERIMENT, Action.CREATE) is True
+        )
+        assert (
+            check_permission(developer_user, ResourceType.USER, Action.CREATE) is False
+        )
+
     def test_user_with_no_role(self, mocker):
         """Test a user with no role defaults to viewer permissions."""
 
