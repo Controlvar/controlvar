@@ -198,8 +198,8 @@ python tests/sdk-contract/published_versions_check.py
 and checks the JSON it prints: a sticky assignment (`control` / `treatment`), a flag evaluation
 (`enabled: true`), one tracked event with an experiment key, and one key-less event that fans out
 to the cached assignment and flag. The smokes of the SDKs in `ATTRIBUTE_SDKS` (`js` and
-`react-native`, #1520; `java` and `dotnet`, #1718 and #1719; `android`, #2017) also evaluate
-the seed's `sdk_contract_targeted` flag (0% rollout, one rule, `plan` equals `pro`, at 100%) for
+`react-native`, #1520; `java` and `dotnet`, #1718 and #1719; `android`, #2017; and
+`python`, #1897) also evaluate the seed's `sdk_contract_targeted` flag (0% rollout, one rule, `plan` equals `pro`, at 100%) for
 one user with `{"plan": "pro"}` and then, with nothing cached,
 `{"plan": "free"}`, and must report `"targeted": {"pro": true, "free": false, "reason":
 "targeting_rule"}`; an SDK that drops the attributes is answered by the 0% rollout and its row

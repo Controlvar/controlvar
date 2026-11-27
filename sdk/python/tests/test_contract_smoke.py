@@ -28,6 +28,7 @@ VARIABLES = (
     "EXPERIMENTLY_API_KEY",
     "CONTRACT_EXPERIMENT_KEY",
     "CONTRACT_FLAG_KEY",
+    "CONTRACT_TARGETED_FLAG_KEY",
     "CONTRACT_USER_ID",
     # The sdk:ruleset key the alias step uses (#449), under both names.
     "CONTROLVAR_LOCAL_API_KEY",
@@ -44,8 +45,35 @@ def load_smoke(monkeypatch):
     return module
 
 
-def fake_api(experiment_key: str, flag_key: str) -> FakeTransport:
-    transport = FakeTransport()
+class FakeApi(FakeTransport):
+    """The routes ``fake_api`` registers, and the seed's targeted flag answered as the server
+    answers it (0% rollout, one rule plan equals pro at 100%): on with the reason
+    ``targeting_rule`` when the request's ``context`` says plan pro, off with ``rollout``
+    otherwise, a request with no context included."""
+
+    def __init__(self, targeted_key: str = "sdk_contract_targeted") -> None:
+        super().__init__()
+        self.targeted_path = f"/api/v1/feature-flags/evaluate/{targeted_key}"
+
+    def send(self, method, url, headers, body, timeout):
+        response = super().send(method, url, headers, body, timeout)
+        request = self.requests[-1]
+        if request.path != self.targeted_path:
+            return response
+        context = json.loads(request.query.get("context", "{}"))
+        on = context.get("plan") == "pro"
+        return make_response(
+            json={
+                "key": request.path.rsplit("/", 1)[1],
+                "enabled": on,
+                "config": None,
+                "reason": "targeting_rule" if on else "rollout",
+            }
+        )
+
+
+def fake_api(experiment_key: str, flag_key: str, targeted_key: str = "sdk_contract_targeted") -> FakeApi:
+    transport = FakeApi(targeted_key)
     transport.route(
         "POST",
         "/api/v1/tracking/assign",
@@ -108,6 +136,7 @@ def test_it_runs_from_the_source_tree_with_its_defaults(environment, capsys):
             "id": mock.ANY,
             "sends": 2,
         },
+        "targeted": {"pro": True, "free": False, "reason": "targeting_rule"},
         "exposure": {
             "calls": 1,
             "payload": {
@@ -124,8 +153,9 @@ def test_it_runs_the_four_contract_steps(environment, capsys):
     environment.setenv("CONTROLVAR_API_URL", "http://api.test")
     environment.setenv("CONTRACT_EXPERIMENT_KEY", "exp_a")
     environment.setenv("CONTRACT_FLAG_KEY", "flag_a")
+    environment.setenv("CONTRACT_TARGETED_FLAG_KEY", "targeted_a")
     environment.setenv("CONTRACT_USER_ID", "user-a")
-    transport = fake_api("exp_a", "flag_a")
+    transport = fake_api("exp_a", "flag_a", "targeted_a")
     environment.setattr(client_module, "UrllibTransport", lambda: transport)
 
     load_smoke(environment).main()
@@ -139,6 +169,8 @@ def test_it_runs_the_four_contract_steps(environment, capsys):
         "POST /api/v1/tracking/batch",  # the 2-event batch
         "POST /api/v1/tracking/track",  # C4: one keyed event sent twice with one event_id
         "POST /api/v1/tracking/track",
+        "GET /api/v1/feature-flags/evaluate/targeted_a",  # #1520: plan pro, then
+        "GET /api/v1/feature-flags/evaluate/targeted_a",  # plan free, the cache cleared in between
         "POST /api/v1/tracking/assign",  # the exposure hook's new client: two assigns, the second cached
         "POST /api/v1/tracking/assign",  # the client whose hook raises
     ]
@@ -164,11 +196,27 @@ def test_it_runs_the_four_contract_steps(environment, capsys):
             "experiment_key": "exp_a",
         }
     ] * 2
-    assert [(r.json()["experiment_key"], r.json()["user_id"]) for r in transport.requests[8:]] == [
+    assert [(r.query["user_id"], json.loads(r.query["context"])) for r in transport.requests[8:10]] == [
+        ("user-a", {"plan": "pro"}),
+        ("user-a", {"plan": "free"}),
+    ]
+    assert json.loads(out)["targeted"] == {"pro": True, "free": False, "reason": "targeting_rule"}
+    assert [(r.json()["experiment_key"], r.json()["user_id"]) for r in transport.requests[10:]] == [
         ("exp_a", "user-a"),
         ("exp_a", "user-a"),
     ]
     assert len(out.splitlines()) == 1
+
+
+def test_a_client_that_drops_the_attributes_reports_the_rollouts_answer(environment, capsys):
+    """What the live runner refuses (targeted.pro=False, reason rollout): with no context sent,
+    the targeted flag is answered by its 0% rollout for both plans."""
+    transport = fake_api("sdk_contract_ab", "sdk_contract_flag")
+    environment.setattr(client_module, "UrllibTransport", lambda: transport)
+    environment.setattr(client_module, "_context_param", lambda attributes: None)
+    load_smoke(environment).main()
+    report = json.loads(capsys.readouterr().out)
+    assert report["targeted"] == {"pro": False, "free": False, "reason": "rollout"}
 
 
 def test_it_fails_when_the_raising_hook_is_not_logged(environment, capsys):
@@ -265,7 +313,7 @@ def test_it_stops_without_a_key(environment, capsys):
 # to every smoke as CONTROLVAR_LOCAL_API_KEY and reads the database for what the step stored.
 
 
-class LinkingApi(FakeTransport):
+class LinkingApi(FakeApi):
     """``fake_api``'s answers, and the alias route: ``created`` for a new link, not for one
     already stored. With ``ignore_links`` the known id is assigned a variant of its own, as a
     server that does not follow the link would."""
@@ -321,8 +369,8 @@ def test_with_the_sdk_ruleset_key_it_links_two_new_ids_on_one_new_client_and_rep
     # Every step before it is unchanged and uses the plain key; the alias step alone uses the
     # sdk:ruleset key: assign the anonymous id, link it twice, a key-less event under the known
     # id (fanned out to the experiment the anonymous id was answered for), then assign the known id.
-    assert {r.headers["X-API-Key"] for r in transport.requests[:10]} == {"smoke-key"}
-    step = transport.requests[10:]
+    assert {r.headers["X-API-Key"] for r in transport.requests[:12]} == {"smoke-key"}
+    step = transport.requests[12:]
     assert [f"{r.headers['X-API-Key']} {r.method} {r.path}" for r in step] == [
         "scoped POST /api/v1/tracking/assign",
         "scoped POST /api/v1/tracking/alias",
@@ -344,7 +392,17 @@ def test_with_the_sdk_ruleset_key_it_links_two_new_ids_on_one_new_client_and_rep
         ]
     }
     assert step[4].json() == {"experiment_key": "exp_a", "user_id": alias["user_id"]}
-    assert sorted(report) == ["alias", "assign", "event_id", "exposure", "fanout", "flag", "sdk", "track"]
+    assert sorted(report) == [
+        "alias",
+        "assign",
+        "event_id",
+        "exposure",
+        "fanout",
+        "flag",
+        "sdk",
+        "targeted",
+        "track",
+    ]
 
 
 def test_it_fails_when_the_server_answers_the_known_id_another_variant(environment, capsys):
