@@ -491,10 +491,11 @@ by = [
 ]
 
 [[unit]]
-text = "A change to sequential_testing_enabled or sequential_testing_config, which can be made only while the experiment is a draft (see Permissions), therefore shows here only when the cached answer expires or POST /api/v1/results/{experiment_id}/invalidate-cache clears it, not immediately; /sequential is not cached."
+text = "A change to sequential_testing_enabled or sequential_testing_config, which can be made only while the experiment is a draft (see Permissions), therefore shows here only when the cached answer is cleared or expires, not immediately: starting the experiment clears it, and so does POST /api/v1/results/{experiment_id}/invalidate-cache; /sequential is not cached."
 by = [
     "test:backend/tests/integration/api/test_sequential_results_routes.py::test_a_settings_change_reaches_the_cached_results_only_once_cleared",
     "test:backend/tests/integration/api/test_sequential_results_routes.py::test_once_running_nobody_changes_the_sequential_settings",
+    "test:backend/tests/integration/api/test_results_cache_status_change.py::test_a_status_change_through_the_routes_clears_the_cached_results",
 ]
 
 [[unit]]

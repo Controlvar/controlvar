@@ -886,13 +886,31 @@ def uncached_superuser_client(db_session, admin_user, monkeypatch):
     )
 
 
+def _results_clear(experiment_id) -> list:
+    """The commands of ``clear_cached_results(experiment_id)`` against
+    ``test_with_the_cache_off_no_writer_calls_redis``'s spy, which answers a
+    SCAN with one key, as a Redis holding one answer would."""
+    return [
+        ("SCAN", "0", b"MATCH", f"results:{experiment_id}:*"),
+        ("DEL", f"results:{experiment_id}:held"),
+    ]
+
+
 def test_with_the_cache_off_no_writer_calls_redis(
     uncached_superuser_client, db_session, monkeypatch, caplog
 ):
-    """No Redis is asked for and no command is sent: not by the group routes,
-    not by a tick that starts one experiment and completes another. Nor is a
-    failed invalidation logged, which is all a writer that went on past the
-    cache-off check would show."""
+    """The experiment cache asks for no Redis and sends no command: not for the
+    group routes, not for a tick that starts one experiment and completes
+    another. Nor is a failed invalidation logged, which is all a writer that
+    went on past the cache-off check would show.
+
+    The one thing sent is the results cache's clear, which does not read
+    ``CACHE_ENABLED`` (that cache is on whenever Redis answers, #2206): a SCAN
+    of ``results:{id}:*`` and a DEL of what it found, for the experiment
+    ``POST /start`` started and then for each one the tick started or
+    completed, in that order."""
+    from backend.app.core.scheduler import ExperimentScheduler
+
     client = uncached_superuser_client
     calls = []
     real_pool = deps.get_redis_pool
@@ -903,21 +921,34 @@ def test_with_the_cache_off_no_writer_calls_redis(
 
     async def spied_command(self, *args, **options):
         calls.append(args)
+        if args[0] == "SCAN":
+            return 0, [args[3].replace("*", "held")]
+
+    ticked = []
+    real_process_due = ExperimentScheduler._process_due
+
+    def spied_process_due(self):
+        work = real_process_due(self)
+        ticked.extend(work.activated_ids + work.completed_ids)
+        return work
 
     monkeypatch.setattr(deps, "get_redis_pool", spied_pool)
     monkeypatch.setattr(async_redis.Redis, "execute_command", spied_command)
+    monkeypatch.setattr(ExperimentScheduler, "_process_due", spied_process_due)
 
     exp = _create(client)
     group = _create_group(client)
     assert _add(client, group["id"], exp["id"]).status_code == 200
     assert _remove(client, group["id"], exp["id"]).status_code == 200
     starts = _due_to_start(client)
-    ends = _due_to_end(client, db_session)
+    ends = _due_to_end(client, db_session)  # started with POST /start
     _tick(client, db_session)
 
     assert _detail(client, starts["id"])["status"] == "active"
     assert _detail(client, ends["id"])["status"] == "completed"
-    assert calls == []
+    assert {starts["id"], ends["id"]} <= {str(i) for i in ticked}
+    cleared = [ends["id"], *ticked]
+    assert calls == [command for i in cleared for command in _results_clear(i)]
     assert INVALIDATION_FAILED not in caplog.text
 
 
