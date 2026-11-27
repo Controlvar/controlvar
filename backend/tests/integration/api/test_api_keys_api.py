@@ -441,6 +441,19 @@ class TestDelete:
         client.delete(f"{URL}/{created['id']}", headers=_auth(developer))
         assert client.get(SDK_PROBE, headers=headers).status_code == 401
 
+    def test_deleting_one_key_leaves_the_others_working(self, client, developer):
+        kept = _create(client, developer).json()
+        removed = _create(client, developer).json()
+        kept_headers = {"X-API-Key": kept["key"]}
+        removed_headers = {"X-API-Key": removed["key"]}
+        assert client.get(SDK_PROBE, headers=kept_headers).status_code == 200
+        assert client.get(SDK_PROBE, headers=removed_headers).status_code == 200
+
+        client.delete(f"{URL}/{removed['id']}", headers=_auth(developer))
+
+        assert client.get(SDK_PROBE, headers=removed_headers).status_code == 401
+        assert client.get(SDK_PROBE, headers=kept_headers).status_code == 200
+
 
 # ---------------------------------------------------------------------------
 # The key works for SDK traffic
