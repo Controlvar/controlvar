@@ -5,15 +5,18 @@ document = "docs/api/integrations.md"
 
 [[unit]]
 text = "Third-Party Integrations API"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Part of the integrations module"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Third-party integrations is one of the optional modules -- present in the full profile, absent from the core one."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/smoke/test_core_boundary.py::test_register_core_routers_mounts_no_module_route",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
 
 [[unit]]
 text = "A core deployment does not serve these routes."
@@ -21,7 +24,7 @@ by = ["test:backend/tests/smoke/test_core_boundary.py::test_register_core_router
 
 [[unit]]
 text = "See Modules and profiles for what each profile includes and how to run the full one."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "This document describes the third-party integrations endpoints: one stored configuration each for Jira, Salesforce and GitHub, and a webhook endpoint for each that authenticates what the service sends."
@@ -36,7 +39,7 @@ by = [
 
 [[unit]]
 text = "Overview"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Each integration is represented as a persisted configuration record containing the service type, credentials, and connection metadata."
@@ -44,7 +47,11 @@ by = ["docex:docs/api/integrations.md#\"integration_type\": \"jira\""]
 
 [[unit]]
 text = "Incoming events from external services are handled via per-integration webhook endpoints."
-by = ["exempt:baseline"]
+by = [
+    "test:modules/backend/tests/unit/api/test_integrations_api.py::TestWebhookEndpoints::test_jira_webhook_with_a_valid_signature_is_processed",
+    "test:modules/backend/tests/unit/api/test_integrations_api.py::TestWebhookEndpoints::test_salesforce_webhook_with_a_valid_signature_is_processed",
+    "test:modules/backend/tests/unit/api/test_integrations_api.py::TestWebhookEndpoints::test_github_webhook_with_a_valid_signature_is_processed",
+]
 
 [[unit]]
 text = "Base path: /api/v1/integrations (an optional module — a core deployment does not serve these routes)"
@@ -52,7 +59,7 @@ by = ["docex:docs/api/integrations.md#jira"]
 
 [[unit]]
 text = "One configuration per service."
-by = ["exempt:baseline"]
+by = ["test:modules/backend/tests/unit/api/test_integrations_api.py::TestCreateIntegration::test_duplicate_integration_type_returns_409"]
 
 [[unit]]
 text = "An integration is identified by its type, not by an id: there is a unique constraint on integration_type, so the platform holds at most one Jira, one Salesforce and one GitHub configuration."
@@ -89,55 +96,58 @@ by = [
 
 [[unit]]
 text = "A response shows the connection settings and names the stored secrets without their values; see What a response shows."
-by = ["exempt:baseline"]
+by = [
+    "test:modules/backend/tests/integration/api/test_integrations_api.py::TestStoredSecretsAreNotReturned::test_reads_return_no_stored_secret_value",
+    "test:modules/backend/tests/integration/api/test_integrations_api.py::TestStoredSecretsAreNotReturned::test_writes_return_no_stored_secret_value",
+]
 
 [[unit]]
 text = "The examples on this page run against a local full-profile stack (see Modules and profiles); on your own deployment, use its URL instead of localhost:8000."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Sign in as the stack's administrator, which saves a token in $TOKEN:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "It prints \"ADMIN\"."
-by = ["exempt:baseline"]
+by = ["docex:docs/api/integrations.md#\"ADMIN\""]
 
 [[unit]]
 text = "If it prints null, the sign-in failed and $TOKEN holds no token."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "IntegrationType Enum"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The value is lower case, in the body and in the path alike."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
 
 [[unit]]
 text = "Value | Description"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "jira | Atlassian Jira (Cloud or Server)"
-by = ["exempt:baseline"]
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
 
 [[unit]]
 text = "salesforce | Salesforce"
-by = ["exempt:baseline"]
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
 
 [[unit]]
 text = "github | GitHub"
-by = ["exempt:baseline"]
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
 
 [[unit]]
 text = "CRUD Endpoints"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "What a response shows"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Every response that carries a configuration (create, list, get and update) has the same shape, whoever the caller is:"
@@ -148,7 +158,7 @@ by = [
 
 [[unit]]
 text = "Field | What it holds"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "encrypted_config | Only the connection settings, with their stored values: base_url, email and project_key (Jira), instance_url and client_id (Salesforce), repo_owner and repo_name (GitHub)"
@@ -168,7 +178,7 @@ by = ["docex:docs/api/integrations.md#\"email\": \"new-automation@your-org.com\"
 
 [[unit]]
 text = "A secret that is lost cannot be read back: generate a new one, PUT it, and set it at the provider."
-by = ["exempt:baseline"]
+by = ["test:modules/backend/tests/integration/api/test_integrations_api.py::TestStoredSecretsAreNotReturned::test_reads_return_no_stored_secret_value"]
 
 [[unit]]
 text = "encrypted_config is stored in the database as given."
@@ -180,15 +190,15 @@ by = ["test:modules/backend/tests/integration/api/test_integrations_api.py::Test
 
 [[unit]]
 text = "Create Integration"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Creates the configuration for one service."
-by = ["exempt:baseline"]
+by = ["test:modules/backend/tests/unit/api/test_integrations_api.py::TestCreateIntegration::test_admin_can_create_jira_config"]
 
 [[unit]]
 text = "The encrypted_config object's structure varies by integration_type (see Per-Service Config Schemas below)."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Authentication: ADMIN."
@@ -204,11 +214,11 @@ count = 3
 
 [[unit]]
 text = "Request Body"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Field | Type | Required | Description"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 count = 4
 
 [[unit]]
@@ -225,15 +235,15 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 
 [[unit]]
 text = "Example: this creates the Jira configuration with a new random webhook_secret, which stays in $WEBHOOK_SECRET."
-by = ["exempt:baseline"]
+by = ["docex:docs/api/integrations.md#\"integration_type\": \"jira\""]
 
 [[unit]]
 text = "jq -n builds the request body and curl sends it."
-by = ["exempt:baseline"]
+by = ["exempt:third-party"]
 
 [[unit]]
 text = "The Jira values are examples: use your own site, account and API token."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Response: 201 Created: the settings it was sent, without the secrets, which are named in stored_secrets: here \"api_token\" and \"webhook_secret\"."
@@ -245,7 +255,7 @@ by = ["test:modules/backend/tests/integration/api/test_integrations_api.py::Test
 
 [[unit]]
 text = "List Integrations"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Returns every configured integration — at most three records."
@@ -274,7 +284,7 @@ count = 2
 
 [[unit]]
 text = "Example Request"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 count = 3
 
 [[unit]]
@@ -287,19 +297,19 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 
 [[unit]]
 text = "Get Integration"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Returns the configuration for one service."
-by = ["exempt:baseline"]
+by = ["test:modules/backend/tests/unit/api/test_integrations_api.py::TestGetIntegration::test_get_jira_config"]
 
 [[unit]]
 text = "Path Parameters"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Parameter | Type | Description"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "integration_type | string | jira, salesforce or github"
@@ -311,7 +321,7 @@ by = ["docex:docs/api/integrations.md#{\"is_active\":true,\"stored_secrets\":[\"
 
 [[unit]]
 text = "Response: 200 OK — the object shown above."
-by = ["exempt:baseline"]
+by = ["test:modules/backend/tests/unit/api/test_integrations_api.py::TestGetIntegration::test_get_jira_config"]
 
 [[unit]]
 text = "404 Not Found when that service has no configuration."
@@ -324,11 +334,11 @@ count = 3
 
 [[unit]]
 text = "Update Integration"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Updates the configuration."
-by = ["exempt:baseline"]
+by = ["test:modules/backend/tests/unit/api/test_integrations_api.py::TestUpdateIntegration::test_admin_can_update_jira_config"]
 
 [[unit]]
 text = "Every field is optional; omitted fields are left alone."
@@ -336,7 +346,7 @@ by = ["docex:docs/api/integrations.md#New webhook_secret for jira:"]
 
 [[unit]]
 text = "encrypted_config is merged key by key:"
-by = ["exempt:baseline"]
+by = ["test:modules/backend/tests/integration/api/test_integrations_api.py::TestStoredSecretsAreNotReturned::test_put_merges_key_by_key_and_null_removes"]
 
 [[unit]]
 text = "a key sent with a value replaces the stored one, or adds it;"
@@ -352,7 +362,7 @@ by = ["docex:docs/api/integrations.md#\"email\": \"new-automation@your-org.com\"
 
 [[unit]]
 text = "So send only the keys you are changing."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Reading the configuration back first is not needed, and a response carries no secret to send back anyway."
@@ -360,11 +370,11 @@ by = ["docex:docs/api/integrations.md#\"email\": \"new-automation@your-org.com\"
 
 [[unit]]
 text = "Request Body (all fields optional)"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Field | Type | Description"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "is_active | boolean | Activate or deactivate the integration"
@@ -387,7 +397,7 @@ by = ["docex:docs/api/integrations.md#\"email\": \"new-automation@your-org.com\"
 
 [[unit]]
 text = "To remove a key, send it as null:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "It prints the settings left, [\"base_url\",\"email\"]: project_key is gone."
@@ -395,15 +405,15 @@ by = ["docex:docs/api/integrations.md#[\"base_url\",\"email\"]"]
 
 [[unit]]
 text = "Response: 200 OK — the updated object, in the shape described above."
-by = ["exempt:baseline"]
+by = ["test:modules/backend/tests/unit/api/test_integrations_api.py::TestUpdateIntegration::test_admin_can_update_jira_config"]
 
 [[unit]]
 text = "Delete Integration"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Deletes the record."
-by = ["exempt:baseline"]
+by = ["test:modules/backend/tests/unit/api/test_integrations_api.py::TestDeleteIntegration::test_admin_can_delete_integration"]
 
 [[unit]]
 text = "This is a hard delete — nothing is retained; to stop an integration without losing its credentials, PUT it with {\"is_active\": false} instead."
@@ -419,7 +429,7 @@ by = ["test:modules/backend/tests/unit/api/test_integrations_api.py::TestDeleteI
 
 [[unit]]
 text = "Webhook Endpoints"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "These three routes take no sign-in and no API key."
@@ -438,15 +448,15 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 
 [[unit]]
 text = "Authenticating a delivery."
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "A sender presents the secret one of two ways:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Method | Header | Value"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Signature (preferred) | X-Hub-Signature-256, or X-Hub-Signature (Jira and Salesforce only) | sha256= + HMAC-SHA256 of the raw request body, hex"
@@ -544,11 +554,15 @@ by = [
 
 [[unit]]
 text = "The reply must not tell an anonymous caller which integrations this deployment has."
-by = ["exempt:baseline"]
+by = ["test:modules/backend/tests/unit/api/test_integrations_api.py::TestWebhookEndpoints::test_jira_webhook_without_an_integration_is_refused_identically"]
 
 [[unit]]
 text = "Response: 200 OK — for every authenticated delivery:"
-by = ["exempt:baseline"]
+by = [
+    "test:modules/backend/tests/unit/api/test_integrations_api.py::TestWebhookEndpoints::test_jira_webhook_with_a_valid_signature_is_processed",
+    "test:modules/backend/tests/unit/api/test_integrations_api.py::TestWebhookEndpoints::test_salesforce_webhook_with_a_valid_signature_is_processed",
+    "test:modules/backend/tests/unit/api/test_integrations_api.py::TestWebhookEndpoints::test_github_webhook_with_a_valid_signature_is_processed",
+]
 
 [[unit]]
 text = "That 200 is deliberate even when processing fails: a provider must not retry forever over something it cannot fix, so an error inside the platform is logged and still answered 200."
@@ -563,7 +577,7 @@ by = [
 
 [[unit]]
 text = "What a delivery does"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "An authenticated delivery is acknowledged, and nothing in the platform changes because of it yet: no experiment, flag or other record is created or updated from a Jira, Salesforce or GitHub event."
@@ -571,15 +585,15 @@ by = ["test:modules/backend/tests/unit/services/test_integration_wiring.py::test
 
 [[unit]]
 text = "Sending a signed delivery"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "A sender signs the exact bytes it sends."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "To try it, create a receive-only Jira integration, with nothing but a new webhook_secret (the configuration above was deleted):"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "It prints {\"integration_type\":\"jira\",\"is_active\":true,\"stored_secrets\":[\"webhook_secret\"]}."
@@ -587,7 +601,7 @@ by = ["docex:docs/api/integrations.md#{\"integration_type\":\"jira\",\"is_active
 
 [[unit]]
 text = "Then sign a delivery the way the table above says: the HMAC-SHA256 of the raw body, keyed with the webhook_secret, in hex, after sha256=:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "It prints {\"status\":\"received\"}."
@@ -595,15 +609,15 @@ by = ["test:modules/backend/tests/integration/api/test_integrations_api.py::Test
 
 [[unit]]
 text = "printf '%s' adds no newline and --data-binary sends the body byte for byte, so the signature covers exactly what is sent."
-by = ["exempt:baseline"]
+by = ["exempt:third-party"]
 
 [[unit]]
 text = "openssl dgst prints the digest as the last field of its line (after SHA2-256(stdin)= with OpenSSL 3, on its own with LibreSSL), which awk keeps."
-by = ["exempt:baseline"]
+by = ["exempt:third-party"]
 
 [[unit]]
 text = "Change one byte of the body and the same signature is refused:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "It prints {\"detail\":\"Webhook authentication failed\"}."
@@ -611,7 +625,7 @@ by = ["test:modules/backend/tests/integration/api/test_integrations_api.py::Test
 
 [[unit]]
 text = "Upgrading an integration created before webhook authentication"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "An integration configured before webhook authentication has no webhook_secret, and every delivery to it answers 401."
@@ -629,15 +643,15 @@ by = [
 
 [[unit]]
 text = "The remedy is one PUT that sends the new key."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "PUT merges encrypted_config key by key, so the stored credentials are kept and nothing is read back first."
-by = ["exempt:baseline"]
+by = ["test:modules/backend/tests/integration/api/test_integrations_api.py::TestStoredSecretsAreNotReturned::test_put_merges_key_by_key_and_null_removes"]
 
 [[unit]]
 text = "$TOKEN is an ADMIN bearer token (the sign-in above sets it); set TYPE to the integration: jira below, or salesforce or github."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "The recipe prints the new secret once, on a line that starts New webhook_secret for jira:, and only when the PUT is answered 200."
@@ -645,7 +659,7 @@ by = ["docex:docs/api/integrations.md#New webhook_secret for jira:"]
 
 [[unit]]
 text = "The response body is discarded (-o /dev/null) and only its status code is kept, so that line is the only thing the recipe writes to standard output."
-by = ["exempt:baseline"]
+by = ["exempt:third-party"]
 
 [[unit]]
 text = "An error status prints nothing to standard output, shows curl's one-line error on standard error and exits non-zero: 404 for a type with no configuration (create it first), 403 for a token that is not an ADMIN's, 401 for a token that is missing, invalid or expired, 422 for a TYPE that is not jira, salesforce or github, and curl's own error when the API cannot be reached."
@@ -658,7 +672,7 @@ by = [
 
 [[unit]]
 text = "A secret that was never stored is never shown."
-by = ["exempt:baseline"]
+by = ["exempt:theory"]
 
 [[unit]]
 text = "A script written for the earlier version of this recipe, which read the configuration, added the key and sent the whole object back, still works: the stored secrets it cannot send are kept."
@@ -666,7 +680,7 @@ by = ["test:modules/backend/tests/integration/api/test_integrations_api.py::Test
 
 [[unit]]
 text = "Then set the same value at the provider: GitHub's webhook Secret field, Jira's webhook secret (Jira Cloud) or the X-Experimently-Webhook-Secret header on the relay in front of it, and the same header on the Salesforce callout (or relay)."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "From now on the secret the integration held before is refused, and the new one is accepted."
@@ -674,7 +688,7 @@ by = ["docex:docs/api/integrations.md#New webhook_secret for jira:"]
 
 [[unit]]
 text = "Here a delivery presents each in X-Experimently-Webhook-Secret, the header a Jira Server webhook sets because it cannot sign:"
-by = ["exempt:baseline"]
+by = ["exempt:third-party"]
 
 [[unit]]
 text = "The old secret prints {\"detail\":\"Webhook authentication failed\"}, and the new one {\"status\":\"received\"}."
@@ -682,7 +696,7 @@ by = ["docex:docs/api/integrations.md#New webhook_secret for jira:"]
 
 [[unit]]
 text = "Jira Webhook"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Receives Jira issue events (created, updated, transitioned)."
@@ -707,15 +721,15 @@ by = [
 
 [[unit]]
 text = "Example Payload (Jira issue transitioned to \"Done\"):"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Salesforce Webhook"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Receives a JSON object from a Salesforce Flow HTTP Callout, Apex callout or relay (Campaign updated, Opportunity stage changed)."
-by = ["exempt:baseline"]
+by = ["test:modules/backend/tests/unit/api/test_integrations_api.py::TestWebhookEndpoints::test_salesforce_webhook_with_the_shared_secret_header_is_processed"]
 
 [[unit]]
 text = "A native Salesforce Outbound Message sends SOAP/XML with no custom headers and cannot call this route: without the header it is refused with 401, and with the header added by a proxy the XML body is refused with 400."
@@ -730,11 +744,11 @@ by = ["test:modules/backend/tests/integration/api/test_integrations_api.py::Test
 
 [[unit]]
 text = "Example Payload:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "GitHub Webhook"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Receives GitHub events (push, pull_request, issues)."
@@ -762,15 +776,15 @@ by = ["test:modules/backend/tests/integration/api/test_integrations_api.py::Test
 
 [[unit]]
 text = "Example Payload (pull request opened):"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Per-Service Config Schemas"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "These are the keys of encrypted_config."
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "webhook_secret is required by all three: without it the service's webhook endpoint refuses every delivery."
@@ -792,7 +806,7 @@ by = ["test:modules/backend/tests/integration/api/test_integrations_api.py::Test
 
 [[unit]]
 text = "Jira Config"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The Jira client is written for HTTP Basic Auth (email:api_token); nothing in the platform calls it yet."
@@ -826,7 +840,7 @@ by = ["test:modules/backend/tests/integration/api/test_integrations_api.py::Test
 
 [[unit]]
 text = "Salesforce Config"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The Salesforce client is written for OAuth 2.0 Client Credentials (client_id and client_secret for an access token at the Salesforce token endpoint); nothing in the platform calls it yet."
@@ -853,7 +867,7 @@ by = ["test:modules/backend/tests/integration/api/test_integrations_api.py::Test
 
 [[unit]]
 text = "GitHub Config"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The GitHub client is written for a Bearer Token (a GitHub Personal Access Token or a GitHub App installation token in Authorization: Bearer <token>); nothing in the platform calls it yet."
@@ -891,11 +905,11 @@ by = [
 
 [[unit]]
 text = "Error Responses"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Status | Meaning"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "400 Bad Request | Webhook body is not a JSON object"
