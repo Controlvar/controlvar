@@ -1,7 +1,8 @@
 import React, { useId } from 'react';
 import { MetricType, METRIC_TYPE_LABELS } from '@/types/experiments';
-import { ExperimentFormAction, MetricFormData } from './formState';
-import { smallInputClass } from './fieldStyles';
+import { parseWindowHours, WINDOW_HELP_BLANK, WINDOW_LABEL, windowHelp } from '@/utils/conversionWindow';
+import { ExperimentFormAction, MetricField, MetricFormData } from './formState';
+import { smallInputClass, wizardInputClass } from './fieldStyles';
 
 const METRIC_TYPES: Array<{ value: MetricType; label: string }> = (
   Object.keys(METRIC_TYPE_LABELS) as MetricType[]
@@ -31,9 +32,10 @@ interface MetricsEditorProps {
   /**
    * The field a refusal shown elsewhere is about, and that refusal's element
    * id. The field then carries `aria-describedby` pointing at it, and a text
-   * field `aria-invalid` too. Unset in guided setup, which renders as before.
+   * field `aria-invalid` too. Unset in guided setup, which renders as before,
+   * except for a refused conversion window (#1934), which every view marks.
    */
-  invalid?: { index: number; field: 'name' | 'event_name' | 'is_primary' } | null;
+  invalid?: { index: number; field: MetricField } | null;
   invalidDescribedBy?: string;
 }
 
@@ -42,6 +44,10 @@ export function MetricsEditor({ metrics, dispatch, invalid = null, invalidDescri
   // One id per editor; each row's type hint suffixes its index.
   const hintBase = useId();
   const hintId = (index: number) => `${hintBase}-metric-type-hint-${index}`;
+  const windowId = (index: number) => `${hintBase}-metric-window-${index}`;
+  const windowHelpId = (index: number) => `${hintBase}-metric-window-help-${index}`;
+  const refused = (index: number, field: MetricField) =>
+    invalid !== null && invalidDescribedBy !== undefined && invalid.index === index && invalid.field === field;
   // A radio takes no aria-invalid; it is described by the refusal only.
   const marks = (index: number, field: 'name' | 'event_name' | 'is_primary') =>
     invalid && invalidDescribedBy && invalid.index === index && invalid.field === field
@@ -164,6 +170,14 @@ export function MetricsEditor({ metrics, dispatch, invalid = null, invalidDescri
                   Lower is better (for example errors or uninstalls)
                 </label>
               </div>
+              <WindowField
+                index={index}
+                metric={metric}
+                dispatch={dispatch}
+                id={windowId(index)}
+                helpId={windowHelpId(index)}
+                refusalId={refused(index, 'conversion_window_hours') ? invalidDescribedBy : undefined}
+              />
             </div>
             {metrics.length > 1 && (
               <button
@@ -180,5 +194,61 @@ export function MetricsEditor({ metrics, dispatch, invalid = null, invalidDescri
         ))}
       </div>
     </>
+  );
+}
+
+/**
+ * A metric's conversion window in hours (beta, #1934): blank by default, which
+ * sends none. The help under it says what the number means in days, so 7
+ * typed for seven days reads as 7 hours; it is not a live region. A refusal
+ * marks it `aria-invalid` and describes it first. The border and focus ring
+ * are guided setup's (`wizardInputClass`): the row's `smallInputClass` border
+ * is under 3:1 on the row's slate-50.
+ */
+function WindowField({
+  index,
+  metric,
+  dispatch,
+  id,
+  helpId,
+  refusalId,
+}: {
+  index: number;
+  metric: MetricFormData;
+  dispatch: React.Dispatch<ExperimentFormAction>;
+  id: string;
+  helpId: string;
+  /** The refusal's element id, when the refusal is about this box. */
+  refusalId?: string;
+}) {
+  const typed = parseWindowHours(metric.conversion_window_text);
+  // Nothing while the text cannot be saved: Next or Save says why.
+  const help = !typed.ok ? null : typed.hours === null ? WINDOW_HELP_BLANK : windowHelp(typed.hours);
+  const describedBy = [refusalId, help ? helpId : undefined].filter(Boolean).join(' ');
+  return (
+    <div className="space-y-1">
+      <label htmlFor={id} className="block text-xs font-medium text-slate-700">
+        {WINDOW_LABEL}
+      </label>
+      <input
+        id={id}
+        type="text"
+        inputMode="numeric"
+        name={`metric_window_${index}`}
+        value={metric.conversion_window_text ?? ''}
+        onChange={(e) =>
+          dispatch({ type: 'changeMetric', index, field: 'conversion_window_text', value: e.target.value })
+        }
+        className={`sm:max-w-[12rem] bg-white ${wizardInputClass}`}
+        data-testid={`metric-window-${index}`}
+        aria-describedby={describedBy || undefined}
+        aria-invalid={refusalId ? true : undefined}
+      />
+      {help && (
+        <p id={helpId} className="text-xs text-slate-600" data-testid={`metric-window-help-${index}`}>
+          {help}
+        </p>
+      )}
+    </div>
   );
 }

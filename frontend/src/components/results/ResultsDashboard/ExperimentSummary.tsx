@@ -23,6 +23,7 @@ import {
   showsAdjusted,
 } from '@/components/results/shared/resultFormat';
 import { LeadWithInterval } from '@/components/results/shared/IntervalText';
+import { windowSummaryLine } from '@/utils/conversionWindow';
 
 interface ExperimentSummaryProps {
   experiment: ExperimentResultsResponse;
@@ -242,6 +243,9 @@ export function ExperimentSummary({
     : RECOMMENDATION_CONFIG[summary.recommendation];
   const impact = summaryImpact(experiment, segment);
   const impactWarning = segment ? segment.srmWarning : experiment.srm?.warning === true;
+  // The primary metric's conversion window (#1934), as the impact picks the metric.
+  const primaryWindow = (experiment.metrics.find((m) => m.is_primary) ?? experiment.metrics[0])
+    ?.conversion_window_hours;
 
   // Find the winning variant name if there is one
   let winnerName = '';
@@ -335,6 +339,12 @@ export function ExperimentSummary({
       {plannedEffect && (
         <p className="text-sm text-slate-700" data-testid="planned-sample-effect">
           {plannedEffect}
+        </p>
+      )}
+
+      {typeof primaryWindow === 'number' && (
+        <p className="text-sm text-slate-700" data-testid="summary-window">
+          {windowSummaryLine(primaryWindow)}
         </p>
       )}
 

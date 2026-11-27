@@ -64,6 +64,7 @@ EXPECTED_CASES = {
     "test_js_driver.py": 8,
     "test_local_evaluation.py": 4,
     "test_missing_archived_flag.py": 2,
+    "test_segment_preview.py": 1,
     "test_targeting.py": 1,
 }
 #: What a copy needs to collect the cases: the root, the ground-truth library
@@ -269,6 +270,7 @@ def test_no_gate_here_or_under_tests_usecases_can_skip():
         "tests/usecases/test_js_driver.py",
         "tests/usecases/test_local_evaluation.py",
         "tests/usecases/test_missing_archived_flag.py",
+        "tests/usecases/test_segment_preview.py",
         "tests/usecases/test_targeting.py",
     } <= scanned
     offenders = [

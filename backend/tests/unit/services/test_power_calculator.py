@@ -14,6 +14,7 @@ No network calls are made — all tests are pure CPU.
 import math
 
 import pytest
+from scipy.stats import norm
 
 from backend.app.services.power_calculator_service import (
     MDEResult,
@@ -134,6 +135,48 @@ class TestSampleSizeComputation:
             baseline_rate=0.20, minimum_detectable_effect=0.10, n_variants=3
         )
         assert n_3v.per_variant > n_2v.per_variant
+
+    def test_a_third_variant_plans_each_comparison_at_alpha_over_two(self, calc):
+        """The page: corrected_alpha = alpha / (n_variants - 1), 0.05 / 2 = 0.025."""
+        three = calc.compute_sample_size(
+            baseline_rate=REF_BASELINE,
+            minimum_detectable_effect=REF_MDE_REL,
+            alpha=0.05,
+            n_variants=3,
+        )
+        two_at_half_the_alpha = calc.compute_sample_size(
+            baseline_rate=REF_BASELINE,
+            minimum_detectable_effect=REF_MDE_REL,
+            alpha=0.025,
+            n_variants=2,
+        )
+        assert three.per_variant == two_at_half_the_alpha.per_variant
+        assert three.per_variant > REF_N_PER_VARIANT
+
+    def test_the_size_is_the_formula_the_page_writes_out(self, calc):
+        """p1, p2, p_bar, z_alpha, z_power and n of the page's verification example."""
+        p1 = REF_BASELINE
+        p2 = p1 + p1 * REF_MDE_REL
+        p_bar = (p1 + p2) / 2
+        z_alpha = norm.ppf(1 - 0.05 / 2)
+        z_power = norm.ppf(0.80)
+        assert (p1, p2, p_bar) == pytest.approx((0.05, 0.055, 0.0525))
+        assert round(z_alpha, 4) == 1.96
+        assert round(z_power, 3) == 0.842
+        assert round(z_power, 4) == 0.8416
+        n = (
+            z_alpha * math.sqrt(2 * p_bar * (1 - p_bar))
+            + z_power * math.sqrt(p1 * (1 - p1) + p2 * (1 - p2))
+        ) ** 2 / (p2 - p1) ** 2
+
+        result = calc.compute_sample_size(
+            baseline_rate=p1,
+            minimum_detectable_effect=REF_MDE_REL,
+            alpha=0.05,
+            power=0.80,
+        )
+        assert result.per_variant == math.ceil(n) == 31234
+        assert result.total == 62468
 
     def test_one_tailed_requires_fewer_samples_than_two_tailed(self, calc):
         """One-tailed test needs fewer samples than two-tailed."""

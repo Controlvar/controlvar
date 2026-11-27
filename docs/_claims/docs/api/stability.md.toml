@@ -1159,6 +1159,24 @@ by = [
 ]
 
 [[unit]]
+text = "POST /api/v1/safety/settings | #2209 | NUL (U+0000) or an unpaired surrogate in a metric's name or its comparison_type in default_metrics answers 422 at [\"body\", \"default_metrics\"] with the msg Value error, default_metrics must not contain NUL or unpaired surrogate characters; nothing is saved and no audit entry is made. It used to answer 500, because the database cannot store such text. The message does not repeat the value sent. Authentication still answers 401 first, and a caller who is not a superuser still answers 403 first. A valid surrogate pair, such as an emoji, is saved as before, and every other body answers as before. The OpenAPI document does not change."
+by = [
+    "test:backend/tests/integration/api/test_safety_settings_text_refused.py::test_the_global_safety_settings_refuse_the_character",
+    "test:backend/tests/unit/schemas/test_safety_settings_text_refused.py::test_default_metrics_refuses_the_character",
+    "test:backend/tests/integration/api/test_safety_settings_text_refused.py::test_authentication_still_answers_401_first",
+    "test:backend/tests/integration/api/test_safety_settings_text_refused.py::test_the_403_for_a_caller_who_is_not_a_superuser_still_comes_first",
+    "test:backend/tests/integration/api/test_safety_settings_text_refused.py::test_an_emoji_in_a_metric_name_is_still_saved",
+    "test:backend/tests/integration/api/test_safety_settings_text_refused.py::test_a_body_this_check_does_not_read_answers_as_before",
+    "test:backend/tests/integration/api/test_safety_settings_text_refused.py::test_a_body_another_check_refuses_answers_as_before",
+    "test:backend/tests/integration/api/test_safety_settings_text_refused.py::test_a_key_a_threshold_does_not_have_is_still_dropped",
+    "test:backend/tests/unit/schemas/test_safety_settings_text_refused.py::test_a_key_a_threshold_does_not_have_is_still_dropped",
+    "test:backend/tests/unit/schemas/test_safety_settings_text_refused.py::test_a_body_another_check_refuses_gets_that_error",
+    "test:backend/tests/unit/schemas/test_safety_settings_text_refused.py::test_a_null_a_storable_body_and_an_emoji_are_accepted_as_before",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
 text = "POST /api/v1/feature-flags/, PUT /api/v1/feature-flags/{flag_id}, PUT /api/v1/feature-flags/{flag_id}/environments/{environment} (beta) | #2163 | A targeting_rules or tags holding NUL (U+0000) or an unpaired surrogate anywhere, in a key or a value, nested or not, answers 422 at [\"body\", \"targeting_rules\"] or [\"body\", \"tags\"] with the msg Value error, targeting_rules must not contain NUL or unpaired surrogate characters (or tags); nothing is saved and no audit entry is made. Where another check refused such a body first, as for the character in a condition's attribute, operator or semantic version, it answered that check's 422 and now answers this one; otherwise it answered 500, because the database cannot store such text. The message does not repeat the value sent. Authentication still answers 401 first, and a create by a role that may not create a flag still answers 403 first; on both PUTs the 422 now comes before the 403 for a role that may not change the flag and the 404 for an unknown flag. A valid surrogate pair, such as an emoji, is saved as before, and every other body answers as before. The OpenAPI document does not change."
 by = [
     "test:backend/tests/integration/api/test_flag_text_refused.py::test_a_create_refuses_the_character_in_targeting_rules",
@@ -1518,15 +1536,26 @@ by = [
 ]
 
 [[unit]]
-text = "GET /api/v1/results/{experiment_id}, GET /api/v1/experiments/{experiment_id}/results, GET /api/v1/results/{experiment_id}/segments/{segment_id} (beta), GET /api/v1/results/{experiment_id}/bayesian, GET /api/v1/results/{experiment_id}/cuped (beta), GET /api/v1/results/{experiment_id}/balanced-groups (beta), GET /api/v1/bandit/{experiment_id}, POST /api/v1/bandit/{experiment_id}/update, PUT /api/v1/bandit/{experiment_id}/weights | #1934 (engine 1.14.0) | Additive. Each metric of /results, of its alias and of a saved segment's results carries conversion_window_hours, and each of its variants open_window_users. Both are null for a metric with no conversion window, which is every metric: no request can set one yet. A metric with a window counts only the events within that many hours of each user's assignment, in every result that reads it, and open_window_users is how many of the variant's assigned users had less than the full window. Without a window every answer is the one before, less the two keys and with engine_version 1.14.0, so the Bayesian, CUPED, balanced-groups and bandit operations change only in their engine_version, and /results serves no answer cached before the upgrade. The OpenAPI document changes in MetricResult and VariantResult, which gain the two properties, and in the four engine_version defaults, in both snapshots."
+text = "GET /api/v1/results/{experiment_id}, GET /api/v1/experiments/{experiment_id}/results, GET /api/v1/results/{experiment_id}/segments/{segment_id} (beta), GET /api/v1/results/{experiment_id}/bayesian, GET /api/v1/results/{experiment_id}/cuped (beta), GET /api/v1/results/{experiment_id}/balanced-groups (beta), GET /api/v1/bandit/{experiment_id}, POST /api/v1/bandit/{experiment_id}/update, PUT /api/v1/bandit/{experiment_id}/weights | #1934 (engine 1.14.0) | Additive. Each metric of /results, of its alias and of a saved segment's results carries conversion_window_hours, and each of its variants open_window_users. Both are null for a metric with no conversion window. A metric with a window counts only the events within that many hours of each user's assignment, in every result that reads it, and open_window_users is how many of the variant's assigned users had less than the full window. Without a window every answer is the one before, less the two keys and with engine_version 1.14.0, so the Bayesian, CUPED, balanced-groups and bandit operations change only in their engine_version, and /results serves no answer cached before the upgrade. The OpenAPI document changes in MetricResult and VariantResult, which gain the two properties, and in the four engine_version defaults, in both snapshots."
 by = [
     "test:backend/tests/integration/api/test_metric_window_results.py::test_a_window_is_the_only_thing_that_moves_a_number",
     "test:backend/tests/integration/api/test_metric_window_results.py::test_every_view_counts_the_window",
     "test:backend/tests/integration/api/test_metric_window_open_users.py::test_the_open_windows_of_each_status",
     "test:backend/tests/integration/api/test_metric_window_open_users.py::test_an_answer_cached_by_the_engine_before_is_not_served",
     "test:backend/tests/integration/api/test_unfiltered_results_pinned.py::test_the_window_keys_are_all_that_moved_from_1_13_0",
-    "test:backend/tests/unit/services/test_metric_window_has_no_writer.py::test_no_metric_request_schema_takes_a_window",
     "test:backend/tests/unit/services/test_engine_versions_frozen.py",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "POST /api/v1/experiments/, GET /api/v1/experiments/, GET/PUT /api/v1/experiments/{experiment_id}, POST /api/v1/experiments/{experiment_id}/clone | #1934 | Additive. Each metric gains conversion_window_hours (beta): set on create or on a draft's PUT, a whole number of hours from 1 to 8760, it makes the metric count each user's events only within that many hours of their assignment (Conversion window). Every response carries it, null for a metric with no window, and a clone copies it. Anything else answers 422 at [\"body\", \"metrics\", i, \"conversion_window_hours\"] with Pydantic's own message: 0, -1 and 8761 with greater_than_equal or less_than_equal, and 1.5, true and a string such as \"24\" with int_type. Changing it after draft answers 400, as any change to metrics does. A PUT that sends metrics replaces them, so a metric sent without it no longer has one. A metric created without it has no window and is counted as before. The OpenAPI document changes in MetricBase and MetricResponse, which gain the property, in both snapshots."
+by = [
+    "test:backend/tests/integration/api/test_metric_window_writes.py::test_create_put_get_list_clone_and_audit_carry_the_window",
+    "test:backend/tests/integration/api/test_metric_window_writes.py::test_create_and_put_refuse_anything_but_1_to_8760_hours",
+    "test:backend/tests/integration/api/test_metric_window_writes.py::test_a_draft_put_without_the_window_stores_none",
+    "test:backend/tests/integration/api/test_metric_window_writes.py::test_no_role_changes_the_window_once_the_experiment_left_draft",
+    "test:backend/tests/unit/services/test_metric_window_writes.py::test_create_and_put_refuse_anything_but_a_whole_number_of_hours",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
 ]
@@ -1775,6 +1804,18 @@ by = [
     "test:backend/tests/integration/api/test_evaluate_user_id_refused.py::test_the_key_is_still_checked_first",
     "test:backend/tests/integration/api/test_evaluate_user_id_refused.py::test_the_422_comes_before_an_unknown_flag_key",
     "test:backend/tests/integration/api/test_evaluate_user_id_refused.py::test_an_id_of_255_characters_is_answered_and_recorded",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "GET /api/v1/results/{experiment_id}/daily, GET /api/v1/experiments/{experiment_id}/daily-results | #2205 | Without metric_id, /daily answers for the metric GET /api/v1/results/{experiment_id} lists first: the primary, or the first by name when none is marked primary. It used to answer for the first metric the database returned, which need not be the primary, so the Daily Trends chart on the results page could show a different metric from the page's summary. /daily-results lists each day's metrics in that same order, with the same entries. With metric_id, both answer as before. With CACHE_ENABLED on, a /daily-results answer cached before the upgrade keeps the old order for up to an hour. The OpenAPI document does not change."
+by = [
+    "test:backend/tests/integration/api/test_daily_results_primary_metric.py::test_the_daily_series_without_a_metric_id_is_the_primary_metrics",
+    "test:backend/tests/integration/api/test_daily_results_primary_metric.py::test_with_no_primary_the_daily_series_is_the_first_metric_by_name",
+    "test:backend/tests/integration/api/test_daily_results_primary_metric.py::test_the_daily_results_list_the_primary_first_then_by_name",
+    "test:backend/tests/integration/api/test_experiment_cache_redis.py::test_results_are_cached_and_served_from_the_cache",
+    "test:backend/tests/unit/api/test_experiment_cache_scope.py::test_an_entry_is_kept_for_an_hour",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
 ]

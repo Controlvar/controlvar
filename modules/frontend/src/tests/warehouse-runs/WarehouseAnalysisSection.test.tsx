@@ -429,6 +429,17 @@ describe('results', () => {
     expect(screen.getByTestId('warehouse-srm-ok')).toHaveTextContent('Sample ratio check: passed (p = 0.7200).');
   });
 
+  it('the difference ends with how the Results page counts, a metric’s own conversion window included', async () => {
+    install([{ path: RUNS_PATH, handler: () => ({ runs: [run()] }) }]);
+    renderSection();
+    const difference = await screen.findByTestId('warehouse-results-difference');
+    expect(difference.textContent?.trim().endsWith(
+      'The Results page counts each assigned user in their variant, at any time after assignment unless the ' +
+        "experiment's metric has a conversion window of its own, so the two can differ.",
+    )).toBe(true);
+    expect(difference).not.toHaveTextContent('counts every distinct converter');
+  });
+
   it('warns about a sample ratio mismatch in words, with the expected and observed split', async () => {
     install([
       {

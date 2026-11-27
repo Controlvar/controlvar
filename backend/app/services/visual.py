@@ -281,6 +281,10 @@ DESIGN_METRIC_COLUMNS = (
     "event_value_path",
     "lower_is_better",
 )
+#: Metric columns hashed only when set: the conversion window (#1934). Left
+#: out when null, so a design whose metrics have no window has the etag it had
+#: before the window was hashed.
+DESIGN_METRIC_COLUMNS_WHEN_SET = ("conversion_window_hours",)
 #: The row columns that are not part of a design, for the classification test.
 NOT_DESIGN_ROW_COLUMNS = frozenset({"id", "experiment_id", "created_at", "updated_at"})
 
@@ -297,6 +301,17 @@ def _canonical(value: Any) -> str:
     return json.dumps(
         value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str
     )
+
+
+def _metric_design(metric: Any) -> Dict[str, Any]:
+    """One metric row's design columns, and those of
+    ``DESIGN_METRIC_COLUMNS_WHEN_SET`` that are not null."""
+    design = {column: _plain(_get(metric, column)) for column in DESIGN_METRIC_COLUMNS}
+    for column in DESIGN_METRIC_COLUMNS_WHEN_SET:
+        value = _get(metric, column)
+        if value is not None:
+            design[column] = _plain(value)
+    return design
 
 
 def design_document(experiment: Any) -> Dict[str, Any]:
@@ -316,8 +331,7 @@ def design_document(experiment: Any) -> Dict[str, Any]:
         for v in (_get(experiment, "variants") or [])
     ]
     metrics = [
-        {column: _plain(_get(m, column)) for column in DESIGN_METRIC_COLUMNS}
-        for m in (_get(experiment, "metric_definitions") or [])
+        _metric_design(m) for m in (_get(experiment, "metric_definitions") or [])
     ]
     document["variants"] = sorted(
         variants, key=lambda v: (str(v["name"]), _canonical(v))

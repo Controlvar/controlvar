@@ -15,8 +15,10 @@ import {
   FORM_STEPS,
   FormStep,
   maxReachableStep,
+  metricWindowProblem,
   validateStep,
 } from './formState';
+import { parseWindowHours, windowEstimateLine, windowReviewText } from '@/utils/conversionWindow';
 import { BalanceUnavailable, BalanceWithinFields, focusBalanceField, splitProblemShown } from './BalanceWithinFields';
 import { BALANCE_BANDIT_LINE, BALANCE_SPLIT_URL_LINE, balanceSummary } from './balanceWithin';
 import { SPLIT_URL_DESCRIPTION, SplitUrlFields } from './SplitUrlFields';
@@ -238,6 +240,11 @@ export function Wizard({
       if (step === 'variants' && checkVariants(state.variants) === null) focusBalanceField('split');
       // An Advanced Bayesian setting may sit in a closed section: open it and focus it.
       if (step === 'estimate' && bayesianConfigProblem(state) !== null) setRevealBayesian((n) => n + 1);
+      // A conversion window that cannot be saved: its box takes focus.
+      const windowProblem = step === 'details' ? metricWindowProblem(state.metrics) : null;
+      if (windowProblem && windowProblem.message === problem) {
+        document.querySelector<HTMLElement>(`[data-testid="metric-window-${windowProblem.index}"]`)?.focus();
+      }
       return;
     }
     setStepError(null);
@@ -283,6 +290,15 @@ export function Wizard({
 
   const payload = step === 'review' ? buildCreatePayload(state) : null;
   const plannedEffect = plannedEffectFraction(state.plannedEffectPct);
+  // The window box the step's refusal is about, while that refusal is shown.
+  const windowProblem = step === 'details' ? metricWindowProblem(state.metrics) : null;
+  const windowInvalid =
+    windowProblem && stepError === windowProblem.message
+      ? { index: windowProblem.index, field: 'conversion_window_hours' as const }
+      : null;
+  // The estimate counts users, not their windows: said when the primary metric has one.
+  const primaryWindow = parseWindowHours(state.metrics.find((m) => m.is_primary)?.conversion_window_text);
+  const primaryWindowHours = primaryWindow.ok ? primaryWindow.hours : null;
   // A targeting problem is shown beside the targeting summary; anything else the error says goes below.
   const foot = footMessage(error);
 
@@ -416,7 +432,12 @@ export function Wizard({
                   Mark one metric as the primary metric; that is the one you decide on. Any other metrics
                   are tracked alongside it.
                 </p>
-                <MetricsEditor metrics={state.metrics} dispatch={dispatch} />
+                <MetricsEditor
+                  metrics={state.metrics}
+                  dispatch={dispatch}
+                  invalid={windowInvalid}
+                  invalidDescribedBy="wizard-step-error"
+                />
               </div>
             </>
           )}
@@ -486,6 +507,11 @@ export function Wizard({
                     {BANDIT_ESTIMATE_LINE}
                   </p>
                 )}
+                {primaryWindowHours !== null && (
+                  <p className="text-sm text-slate-700" data-testid="estimate-window-line">
+                    {windowEstimateLine(primaryWindowHours)}
+                  </p>
+                )}
                 <SampleSizeEstimate
                   value={estimate}
                   onChange={setEstimate}
@@ -530,6 +556,7 @@ export function Wizard({
                     <li key={i}>
                       {m.name} (<code className="font-mono">{m.event_name}</code>,{' '}
                       {METRIC_TYPE_LABELS[m.metric_type]}){m.is_primary ? ' — primary metric' : ''}
+                      {m.conversion_window_hours !== undefined ? windowReviewText(m.conversion_window_hours) : ''}
                     </li>
                   ))}
                 </ul>

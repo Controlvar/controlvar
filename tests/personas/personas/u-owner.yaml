@@ -114,6 +114,9 @@ day:
         source:
           path: docs/api/audit-logging.md
           anchor: "`POST /safety/settings` saves the global safety settings; one entry per save"
+  # Step 5: what the page shows when a read fails is not checked. Today both
+  # failures are hidden: "Loading preferences..." stays, and the log says "No
+  # delivery log entries found." The check lands with the fix.
   - n: 5
     intent: change one's own notification preferences
     layer: A

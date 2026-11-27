@@ -36,6 +36,7 @@ function fieldSelector(field: DesignField): string | null {
     is_control: 'variant-control',
     event_name: 'metric-event',
     is_primary: 'metric-primary',
+    conversion_window_hours: 'metric-window',
   };
   return `${ids[field.field]}-${field.index}`;
 }

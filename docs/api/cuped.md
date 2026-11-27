@@ -15,7 +15,8 @@ Reference: Deng, Xu, Kohavi & Walker — *Improving the sensitivity of online co
 ## How It Works
 
 For each conversion metric, the outcome `Y` of a user is 1 if they converted after
-assignment (counted exactly as `GET /results/{id}` counts them) and 0 otherwise. The
+assignment (counted exactly as `GET /results/{id}` counts them, so within the metric's
+conversion window when it has one) and 0 otherwise. The
 covariate `X` is 1 if the same user sent the metric's event in the `covariate_lookback_days`
 before their assignment, and 0 if they did not. A user with no history stays in the
 analysis with `X = 0`.
@@ -42,7 +43,8 @@ What counts as history, per user:
 - the event is the metric's own `event_name` (or that of `covariate_metric_id`, below),
   matched the way results match conversions: an experiment-view row never counts;
 - it happened in `[assigned_at − covariate_lookback_days, assigned_at)`: an event at the
-  moment of assignment is not history;
+  moment of assignment is not history, and the metric's conversion window does not apply to
+  history;
 - it can carry any experiment key, any flag key, or none. One event is enough; a user with
   three copies of the same purchase still has `X = 1`;
 - **History counts only if the server received it before the user was assigned. Send

@@ -61,6 +61,10 @@ by = [
 ]
 
 [[unit]]
+text = "Each experiment's converting users are counted within its primary metric's conversion window, when it has one."
+by = ["test:backend/tests/integration/api/test_metric_window_results.py::test_the_interaction_counts_the_window"]
+
+[[unit]]
 text = "An interaction does not mean either experiment is wrong."
 by = ["exempt:baseline"]
 
