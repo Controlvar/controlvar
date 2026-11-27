@@ -5,15 +5,15 @@ document = "docs/api/auth.md"
 
 [[unit]]
 text = "Authentication"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The platform uses two authentication methods, depending on who is calling:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Method | Used For"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "API Key (X-API-Key header) | SDK clients, server-to-server calls, event tracking; with the mcp:read scope, reading flags, experiments and results"
@@ -38,11 +38,11 @@ by = [
 
 [[unit]]
 text = "Each one uses the shell variables set by the ones before it."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Bearer Token Authentication"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "A bearer token is issued when a user logs in, and authenticates later requests as that user."
@@ -53,7 +53,7 @@ by = [
 
 [[unit]]
 text = "Where the login is checked depends on AUTH_PROVIDER:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "local (the default, and what the Quick Start runs): the platform checks the email address and password against its own users."
@@ -107,15 +107,15 @@ by = ["test:modules/backend/tests/unit/services/test_sso_settings_checks_and_mes
 
 [[unit]]
 text = "Obtaining a Token"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Log in with the account's email address and password."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "This saves the token in $TOKEN and prints what else the response says:"
-by = ["exempt:baseline"]
+by = ["docex:docs/api/auth.md#\"expires_in\": 43200"]
 
 [[unit]]
 text = "It prints \"token_type\": \"bearer\" and \"expires_in\": 43200, the token's lifetime in seconds (12 hours)."
@@ -149,7 +149,7 @@ by = ["test:backend/tests/unit/models/test_fast_api_setup.py::test_api_docs_avai
 
 [[unit]]
 text = "Check Who You Are Logged In As"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The profile also carries id, username, full_name, is_superuser, is_active and auth_provider."
@@ -160,11 +160,11 @@ by = [
 
 [[unit]]
 text = "Using a Bearer Token"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Pass the token in the Authorization header."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "This lists the experiments; the demo data has three:"
@@ -187,7 +187,7 @@ by = ["test:backend/tests/unit/middleware/test_relative_slash_redirect.py::test_
 
 [[unit]]
 text = "Token Expiry, Refresh and Logout"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "With the local provider there is no refresh token: when a token expires, requests answer 401 and the user logs in again."
@@ -221,7 +221,7 @@ by = ["test:backend/tests/integration/auth/test_refresh.py::TestRefreshErrors::t
 
 [[unit]]
 text = "API Key Authentication"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "API keys are long-lived credentials for programs."
@@ -229,23 +229,23 @@ by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestCreate::test
 
 [[unit]]
 text = "Use them when:"
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "integrating an SDK into your application;"
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "making server-to-server API calls from a backend service;"
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "tracking events from a client application."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Creating an API Key"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Creating a key takes a bearer token."
@@ -253,7 +253,7 @@ by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestCreate::test
 
 [[unit]]
 text = "This saves the new key in $KEY:"
-by = ["exempt:baseline"]
+by = ["docex:docs/api/auth.md#eptk_"]
 
 [[unit]]
 text = "It prints eptk_, the start of every key."
@@ -268,11 +268,11 @@ by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestCreate::test
 
 [[unit]]
 text = "If you lose it, create a new key and delete the old one."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "See API Key Management for listing, deleting and rotating keys."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "The request also accepts an optional \"scopes\" list."
@@ -323,7 +323,7 @@ by = [
 
 [[unit]]
 text = "Using an API Key"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Pass the key in the X-API-Key header on every request."
@@ -331,7 +331,7 @@ by = ["test:backend/tests/unit/api/test_route_surface_rules.py::test_the_scope_r
 
 [[unit]]
 text = "This tracks a purchase in the demo data's checkout_button_color experiment:"
-by = ["exempt:baseline"]
+by = ["docex:docs/api/auth.md#\"purchase_completed\""]
 
 [[unit]]
 text = "It prints \"purchase_completed\", the stored event's type."
@@ -339,7 +339,7 @@ by = ["docex:docs/api/auth.md#\"purchase_completed\""]
 
 [[unit]]
 text = "And this evaluates the demo data's beta_features flag for the same user:"
-by = ["exempt:baseline"]
+by = ["docex:docs/api/auth.md#true"]
 
 [[unit]]
 text = "It prints true."
@@ -376,7 +376,7 @@ by = [
 
 [[unit]]
 text = "Roles and Permissions"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Every user has one of four built-in roles."
@@ -392,7 +392,7 @@ by = [
 
 [[unit]]
 text = "Role | Description | Typical Users"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "ADMIN | Every resource; managing user accounts also needs the separate superuser flag | Platform owners, engineering leads"
@@ -426,11 +426,11 @@ by = [
 
 [[unit]]
 text = "What Each Role Can Do"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Action | VIEWER | ANALYST | DEVELOPER | ADMIN"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "View experiments, flags and results | Yes | Yes | Yes | Yes"
@@ -476,7 +476,7 @@ by = [
 
 [[unit]]
 text = "To see a refusal, create a VIEWER account as the administrator:"
-by = ["exempt:baseline"]
+by = ["docex:docs/api/auth.md#\"role\": \"VIEWER\""]
 
 [[unit]]
 text = "It prints the new account's email and \"role\": \"VIEWER\"."
@@ -499,7 +499,7 @@ by = [
 
 [[unit]]
 text = "Log in as the viewer, and try to create a flag:"
-by = ["exempt:baseline"]
+by = ["docex:docs/api/auth.md#{\"detail\":\"You don't have permission to create feature flags\"}"]
 
 [[unit]]
 text = "The API answers 403 Forbidden with {\"detail\":\"You don't have permission to create feature flags\"}."
@@ -510,7 +510,7 @@ by = [
 
 [[unit]]
 text = "Change Your Own Password"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Every user changes their own password with POST /api/v1/users/me/password, which asks for the current one."
@@ -611,11 +611,11 @@ by = [
 
 [[unit]]
 text = "See the RBAC API Reference."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Example Authenticated Requests"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Create an Experiment"
@@ -644,11 +644,11 @@ by = [
 
 [[unit]]
 text = "Error Responses"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "401 Unauthorized"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Returned when no credentials are sent, or they aren't valid:"
@@ -669,7 +669,7 @@ by = [
 
 [[unit]]
 text = "403 Forbidden"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Returned when the user is logged in but their role doesn't allow the operation, as in the viewer's attempt above."
@@ -681,19 +681,19 @@ by = ["docex:docs/api/auth.md#{\"detail\":\"You don't have permission to create 
 
 [[unit]]
 text = "Security Notes"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Never commit API keys or access tokens to source control."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Rotate API keys regularly: at least every 90 days for production keys."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Use separate API keys for each service or environment."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Access tokens expire; do not store them long-term."
@@ -701,7 +701,7 @@ by = ["test:backend/tests/unit/api/test_sign_in_and_account_rules.py::test_a_loc
 
 [[unit]]
 text = "In production, send all API traffic over HTTPS."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "An account with two-step sign-in on also gives a code from its authenticator app."
