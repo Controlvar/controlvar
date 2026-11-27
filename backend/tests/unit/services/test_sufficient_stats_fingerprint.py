@@ -30,6 +30,7 @@ from typing import Any, Callable, Dict, List
 import pytest
 
 from backend.app.core.stats_engine import ENGINE_VERSION
+from backend.app.services.mean_arms import prepared_for_tests
 from backend.app.services.sufficient_stats_analysis import (
     BinomialVariant,
     binomial_metric_result,
@@ -362,7 +363,7 @@ def _per_user_mean_outputs() -> Dict[str, Any]:
     ``per_user_mean_metric_result``."""
     return {
         name: per_user_mean_metric_result(
-            arms, alpha, "benjamini_hochberg", metric=_MEAN_METRIC
+            prepared_for_tests(arms), alpha, "benjamini_hochberg", metric=_MEAN_METRIC
         )
         for name, (alpha, arms) in _per_user_mean_cases().items()
     }

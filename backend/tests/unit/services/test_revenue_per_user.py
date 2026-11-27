@@ -30,6 +30,7 @@ import pytest
 from scipy import stats
 
 from backend.app.services import sufficient_stats_analysis as module
+from backend.app.services.mean_arms import prepared_for_tests
 from backend.app.services.sufficient_stats_analysis import (
     BinomialVariant,
     SufficientStatsRefused,
@@ -74,10 +75,12 @@ def _per_user(totals, users):
 
 def _result(alpha=0.05, correction="none", metric=None):
     return per_user_mean_metric_result(
-        [
-            (CONTROL, USERS, CONTROL_BUYERS, CONTROL_TOTALS),
-            (TREATMENT, USERS, TREATMENT_BUYERS, TREATMENT_TOTALS),
-        ],
+        prepared_for_tests(
+            [
+                (CONTROL, USERS, CONTROL_BUYERS, CONTROL_TOTALS),
+                (TREATMENT, USERS, TREATMENT_BUYERS, TREATMENT_TOTALS),
+            ]
+        ),
         alpha,
         correction,
         metric=metric or _metric(),
@@ -184,11 +187,13 @@ def test_the_difference_interval_is_welch_not_pooled():
 
 def test_a_correction_adjusts_the_p_values_and_not_the_difference():
     result = per_user_mean_metric_result(
-        [
-            (CONTROL, USERS, CONTROL_BUYERS, CONTROL_TOTALS),
-            (TREATMENT, USERS, TREATMENT_BUYERS, TREATMENT_TOTALS),
-            (SECOND, USERS, 1, [5.0]),
-        ],
+        prepared_for_tests(
+            [
+                (CONTROL, USERS, CONTROL_BUYERS, CONTROL_TOTALS),
+                (TREATMENT, USERS, TREATMENT_BUYERS, TREATMENT_TOTALS),
+                (SECOND, USERS, 1, [5.0]),
+            ]
+        ),
         0.05,
         "bonferroni",
         metric=_metric(),
@@ -220,7 +225,10 @@ def _clear_win():
 
 def test_a_significant_rise_is_the_winner_when_higher_is_better():
     result = per_user_mean_metric_result(
-        _clear_win(), 0.05, "none", metric=_metric(lower_is_better=False)
+        prepared_for_tests(_clear_win()),
+        0.05,
+        "none",
+        metric=_metric(lower_is_better=False),
     )
     _, treatment = _variants(result)
     assert treatment["is_significant"] is True
@@ -230,7 +238,10 @@ def test_a_significant_rise_is_the_winner_when_higher_is_better():
 
 def test_a_significant_rise_is_no_winner_when_lower_is_better():
     result = per_user_mean_metric_result(
-        _clear_win(), 0.05, "none", metric=_metric(lower_is_better=True)
+        prepared_for_tests(_clear_win()),
+        0.05,
+        "none",
+        metric=_metric(lower_is_better=True),
     )
     _, treatment = _variants(result)
     assert treatment["is_significant"] is True
@@ -245,7 +256,10 @@ def test_a_significant_rise_is_no_winner_when_lower_is_better():
 
 def test_before_the_first_purchase_every_arm_is_zero_and_nothing_raises():
     result = per_user_mean_metric_result(
-        [(CONTROL, 50, 0, []), (TREATMENT, 50, 0, [])], 0.05, "none", metric=_metric()
+        prepared_for_tests([(CONTROL, 50, 0, []), (TREATMENT, 50, 0, [])]),
+        0.05,
+        "none",
+        metric=_metric(),
     )
     control, treatment = _variants(result)
     _finite_json(result)
@@ -277,11 +291,13 @@ def test_a_difference_needs_2_units_in_both_arms_and_a_control():
 
 def test_an_arm_with_no_users_has_mean_0_and_no_nan_anywhere():
     result = per_user_mean_metric_result(
-        [
-            (CONTROL, USERS, CONTROL_BUYERS, CONTROL_TOTALS),
-            (TREATMENT, USERS, TREATMENT_BUYERS, TREATMENT_TOTALS),
-            (SECOND, 0, 0, []),
-        ],
+        prepared_for_tests(
+            [
+                (CONTROL, USERS, CONTROL_BUYERS, CONTROL_TOTALS),
+                (TREATMENT, USERS, TREATMENT_BUYERS, TREATMENT_TOTALS),
+                (SECOND, 0, 0, []),
+            ]
+        ),
         0.05,
         "none",
         metric=_metric(),
@@ -302,7 +318,12 @@ def test_an_arm_with_no_users_has_mean_0_and_no_nan_anywhere():
 
 def test_an_arm_with_one_user_has_its_mean_and_no_comparison():
     result = per_user_mean_metric_result(
-        [(CONTROL, USERS, CONTROL_BUYERS, CONTROL_TOTALS), (TREATMENT, 1, 1, [42.0])],
+        prepared_for_tests(
+            [
+                (CONTROL, USERS, CONTROL_BUYERS, CONTROL_TOTALS),
+                (TREATMENT, 1, 1, [42.0]),
+            ]
+        ),
         0.05,
         "none",
         metric=_metric(),
@@ -319,10 +340,12 @@ def test_an_arm_with_one_user_has_its_mean_and_no_comparison():
 
 def test_a_control_with_one_user_leaves_every_treatment_uncompared():
     result = per_user_mean_metric_result(
-        [
-            (CONTROL, 1, 1, [10.0]),
-            (TREATMENT, USERS, TREATMENT_BUYERS, TREATMENT_TOTALS),
-        ],
+        prepared_for_tests(
+            [
+                (CONTROL, 1, 1, [10.0]),
+                (TREATMENT, USERS, TREATMENT_BUYERS, TREATMENT_TOTALS),
+            ]
+        ),
         0.05,
         "none",
         metric=_metric(),
@@ -349,7 +372,7 @@ def test_a_control_with_no_buyer_has_mean_0_and_no_relative_change():
     k = (85.0 + 35.5) / 5
     assert k + (-k * 3) / 3 != 0.0  # the rounding this test is about
     result = per_user_mean_metric_result(
-        [(CONTROL, 3, 0, []), (TREATMENT, 2, 2, [85.0, 35.5])],
+        prepared_for_tests([(CONTROL, 3, 0, []), (TREATMENT, 2, 2, [85.0, 35.5])]),
         0.05,
         "none",
         metric=_metric(),
@@ -372,7 +395,7 @@ def test_an_arm_whose_users_all_have_one_value_has_no_spread():
     arm a standard deviation of about 1295.
     """
     result = per_user_mean_metric_result(
-        [(CONTROL, 6, 6, []), (TREATMENT, 6, 2, [1e12, 10.0])],
+        prepared_for_tests([(CONTROL, 6, 6, []), (TREATMENT, 6, 2, [1e12, 10.0])]),
         0.05,
         "none",
         metric=_metric(),
@@ -406,7 +429,7 @@ def test_values_offset_by_1e9_keep_their_precision():
     control = [1e9 + 3.0, 1e9 + 1.0, 1e9 + 2.0]
     treatment = [1e9 + 6.0, 1e9 + 4.0, 1e9 + 5.0, 1e9 + 4.5]
     result = per_user_mean_metric_result(
-        [(CONTROL, 3, 3, control), (TREATMENT, 4, 4, treatment)],
+        prepared_for_tests([(CONTROL, 3, 3, control), (TREATMENT, 4, 4, treatment)]),
         0.05,
         "none",
         metric=_metric(),
@@ -415,10 +438,12 @@ def test_values_offset_by_1e9_keep_their_precision():
         np.array(treatment) - 1e9, np.array(control) - 1e9, equal_var=False
     )
     without_offset = per_user_mean_metric_result(
-        [
-            (CONTROL, 3, 3, [v - 1e9 for v in control]),
-            (TREATMENT, 4, 4, [v - 1e9 for v in treatment]),
-        ],
+        prepared_for_tests(
+            [
+                (CONTROL, 3, 3, [v - 1e9 for v in control]),
+                (TREATMENT, 4, 4, [v - 1e9 for v in treatment]),
+            ]
+        ),
         0.05,
         "none",
         metric=_metric(),
@@ -442,7 +467,7 @@ def test_values_offset_by_1e9_keep_their_precision():
 def test_a_total_that_is_not_finite_is_refused(bad):
     with pytest.raises(SufficientStatsRefused, match="not finite"):
         per_user_mean_metric_result(
-            [(CONTROL, 3, 1, [bad]), (TREATMENT, 3, 0, [])],
+            prepared_for_tests([(CONTROL, 3, 1, [bad]), (TREATMENT, 3, 0, [])]),
             0.05,
             "none",
             metric=_metric(),
@@ -452,14 +477,14 @@ def test_a_total_that_is_not_finite_is_refused(bad):
 def test_no_control_is_a_value_error():
     with pytest.raises(ValueError, match="control"):
         per_user_mean_metric_result(
-            [(TREATMENT, 3, 0, [])], 0.05, "none", metric=_metric()
+            prepared_for_tests([(TREATMENT, 3, 0, [])]), 0.05, "none", metric=_metric()
         )
 
 
 def test_a_user_read_with_a_total_is_one_of_the_arms_users():
     """A user assigned between the two reads counts in n, never as -1 zeros."""
     result = per_user_mean_metric_result(
-        [(CONTROL, 1, 2, [10.0, 20.0]), (TREATMENT, 2, 0, [])],
+        prepared_for_tests([(CONTROL, 1, 2, [10.0, 20.0]), (TREATMENT, 2, 0, [])]),
         0.05,
         "none",
         metric=_metric(),

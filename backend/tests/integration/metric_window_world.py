@@ -280,6 +280,19 @@ def metric(
 #: The default: one conversion metric on purchases, 24 hours, primary.
 IN_A_DAY = metric("Purchase in a day", is_primary=True)
 
+#: A revenue metric on the same purchases and window, primary.  A view that
+#: reads a metric's share of users counts the same users as for ``IN_A_DAY``;
+#: one that reads its values per user answers ``REVENUE_MEANS``.
+REVENUE_IN_A_DAY = metric(
+    "Revenue in a day", metric_type=MetricType.REVENUE, is_primary=True
+)
+
+#: The revenue per assigned user inside the window: 70 over the control's 12
+#: users and 40 over the treatment's 11.  u08's 100 before the window starts
+#: and u09's 1,000 after it ends are not added, and every assigned user is in
+#: the denominator.
+REVENUE_MEANS = {"control": 70 / 12, "treatment": 40 / 11}
+
 
 def build(
     db: Session,

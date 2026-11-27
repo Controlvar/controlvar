@@ -323,6 +323,44 @@ def test_every_view_counts_the_window(zoned, client, admin_user, worlds, segment
     assert _bandit_counts(zoned, exp) == EXPECTED
 
 
+def test_every_view_counts_the_window_for_a_revenue_primary(
+    zoned, client, admin_user, worlds
+):
+    """The same rows with a revenue primary (``mw.REVENUE_IN_A_DAY``).
+    ``/results`` reads its values per user inside the window
+    (``mw.REVENUE_MEANS``).  Every other view here still reads the share of
+    users who sent the event, so it counts the same 7 of 12 and 4 of 11 as for
+    a conversion primary; a view that moves to the mean changes its own line
+    to ``mw.REVENUE_MEANS``."""
+    world = _build(zoned, admin_user, worlds, metrics=[mw.REVENUE_IN_A_DAY])
+    exp = world.experiment
+    base = f"/api/v1/results/{exp.id}"
+    means = {
+        name: (pytest.approx(mean, rel=1e-12),)
+        for name, mean in mw.REVENUE_MEANS.items()
+    }
+
+    results = _get(client, base, breakdown="country")
+    assert _by_variant(_metric(results, "Revenue in a day"), "mean") == means
+    assert _results_counts(results) == EXPECTED
+    assert _bayesian_counts(results["bayesian_results"]) == EXPECTED
+    assert _breakdown_conversions(results) == EXPECTED
+    assert _bayesian_counts(_get(client, f"{base}/bayesian")) == EXPECTED
+    assert _sequential_inputs(client, exp) == EXPECTED
+    assert _cumulative_counts(_get(client, f"{base}/daily")) == EXPECTED
+    sample_size = _get(client, f"{base}/sample-size")
+    assert (sample_size["baseline_users"], sample_size["baseline_rate"]) == (
+        12,
+        pytest.approx(7 / 12),
+    )
+    assert _streaming_counts(zoned, exp) == EXPECTED
+
+    batched = AnalysisService(zoned).get_experiment_results_many([exp.id])
+    assert _by_variant(_metric(batched[str(exp.id)], "Revenue in a day"), "mean") == (
+        means
+    )
+
+
 def test_the_balanced_groups_count_the_window(zoned, client, admin_user, worlds):
     world = _build(zoned, admin_user, worlds, balanced=True)
     body = _get(client, f"/api/v1/results/{world.experiment.id}/balanced-groups")

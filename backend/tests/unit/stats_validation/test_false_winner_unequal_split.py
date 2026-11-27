@@ -83,6 +83,7 @@ import pytest
 from scipy.stats import binom
 
 from backend.app.services.analysis_service import AnalysisService
+from backend.app.services.mean_arms import prepared_for_tests
 from backend.app.services.sufficient_stats_analysis import (
     BinomialVariant,
     mean_metric_result,
@@ -252,7 +253,7 @@ def battery(
             variant = BinomialVariant(variant_id, roles[index], index == 0)
             rows.append((variant, users, converted, totals))
         result = per_user_mean_metric_result(
-            rows, alpha, CORRECTION_METHOD, metric=metric
+            prepared_for_tests(rows), alpha, CORRECTION_METHOD, metric=metric
         )
         decision = AnalysisService._summarise_decision(experiment, [result], adequate)
         if decision["recommendation"] == "SHIP_VARIANT":

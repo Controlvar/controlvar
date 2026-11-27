@@ -533,6 +533,7 @@ def _twin_results(case: Dict[str, int], identity: int) -> Dict[str, Any]:
     """``per_user_mean_metric_result`` on the journey's population *case*,
     every buyer's value from the ramp (a 0 and the refunds included), under
     the metric and variant ids ``uuid5`` gives for *identity*."""
+    from backend.app.services.mean_arms import prepared_for_tests
     from backend.app.services.sufficient_stats_analysis import (
         BinomialVariant,
         per_user_mean_metric_result,
@@ -547,20 +548,22 @@ def _twin_results(case: Dict[str, int], identity: int) -> Dict[str, Any]:
     control = _values(case["control_converted"], case["control_converted"], *ramp)
     treatment = _values(case["treatment_converted"], case["treatment_converted"], *ramp)
     return per_user_mean_metric_result(
-        [
-            (
-                BinomialVariant(control_id, "Control", True),
-                case["control_users"],
-                case["control_converted"],
-                [float(v) for v in control],
-            ),
-            (
-                BinomialVariant(treatment_id, "Treatment", False),
-                case["treatment_users"],
-                case["treatment_converted"],
-                [float(v) for v in treatment],
-            ),
-        ],
+        prepared_for_tests(
+            [
+                (
+                    BinomialVariant(control_id, "Control", True),
+                    case["control_users"],
+                    case["control_converted"],
+                    [float(v) for v in control],
+                ),
+                (
+                    BinomialVariant(treatment_id, "Treatment", False),
+                    case["treatment_users"],
+                    case["treatment_converted"],
+                    [float(v) for v in treatment],
+                ),
+            ]
+        ),
         1 - DEFAULT_CONFIDENCE,
         "benjamini_hochberg",
         metric=types.SimpleNamespace(

@@ -1241,7 +1241,7 @@ def _permutation_p_values(
 
 
 def per_user_mean_metric_result(
-    variants: Sequence[PerUserTotals],
+    prepared: Any,
     alpha: float,
     correction_method: str,
     *,
@@ -1249,9 +1249,11 @@ def per_user_mean_metric_result(
 ) -> Dict[str, Any]:
     """One metric's result as its mean per assigned user (``MEAN_METRIC_TYPES``).
 
-    Every user assigned to a variant is one unit, and their value is what the
-    caller read for them (the total of their counted values, or for a count
-    metric their number of events): 0 for a user with none.  The metric's type
+    ``prepared`` is the ``PreparedMeanArms`` that ``mean_arms.prepare_mean_arms``
+    read: one ``(variant, n, n_converted, values)`` per arm.  Every user
+    assigned to a variant is one unit, and their value is what was read for
+    them (the total of their counted values, or for a count metric their
+    number of events): 0 for a user with none.  The metric's type
     is only echoed here; nothing below reads it.  The arms are compared
     with ``mean_metric_result`` on sums centred on the grand mean ``k``, the
     total of every value over every assigned user.
@@ -1292,6 +1294,8 @@ def per_user_mean_metric_result(
         ``analysis`` ``"mean"``.
 
     Raises:
+        TypeError: ``prepared`` is not a ``PreparedMeanArms``: per-user values
+            are read by ``prepare_mean_arms`` and nowhere else.
         SufficientStatsRefused: a count is not a non-negative integer, or a
             total is not finite.
         ValueError: when no variant is the control.
@@ -1299,8 +1303,17 @@ def per_user_mean_metric_result(
             or one that is not a UUID, so its comparison has no seed.  It is
             not caught here: there is no fallback to Welch's p-value.
     """
+    # Imported here: mean_arms imports this module.
+    from backend.app.services.mean_arms import PreparedMeanArms
+
+    if not isinstance(prepared, PreparedMeanArms):
+        raise TypeError(
+            "per_user_mean_metric_result takes the PreparedMeanArms that "
+            "mean_arms.prepare_mean_arms reads, not "
+            f"{type(prepared).__name__}: every per-user value is read there"
+        )
     arms: List[Tuple[Any, int, int, List[float]]] = []
-    for variant, n, n_converted, totals in variants:
+    for variant, n, n_converted, totals in prepared.arms:
         if isinstance(n, bool) or not isinstance(n, int) or n < 0:
             raise SufficientStatsRefused("n is not a non-negative integer")
         values = [float(total) for total in totals]
