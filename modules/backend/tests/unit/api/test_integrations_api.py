@@ -1050,6 +1050,24 @@ class TestWebhookEndpoints:
         assert response.json()["status"] == "received"
         parse.assert_called_once_with("issues", payload)
 
+    @pytest.mark.parametrize("body", [b"not-json", b'["a", "b"]'])
+    def test_github_webhook_signed_body_that_is_not_a_json_object_is_400(self, body):
+        """The signature is checked first; then a body that is no object is 400."""
+        client = self._client(_github_config())
+        with patch.object(GitHubService, "parse_webhook_event") as parse:
+            response = client.post(
+                "/api/v1/integrations/webhooks/github",
+                content=body,
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Hub-Signature-256": _sign(GITHUB_SECRET, body),
+                    "X-GitHub-Event": "issues",
+                },
+            )
+        assert response.status_code == 400
+        assert response.json() == {"detail": "Invalid JSON payload"}
+        parse.assert_not_called()
+
     @pytest.mark.regression
     def test_github_webhook_with_no_configured_secret_is_refused(self):
         """Nothing to verify against means nothing is accepted."""
