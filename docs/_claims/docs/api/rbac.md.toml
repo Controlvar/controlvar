@@ -5,11 +5,11 @@ document = "docs/api/rbac.md"
 
 [[unit]]
 text = "RBAC API Reference"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Part of the rbac module"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Custom roles is one of the optional modules -- present in the full profile, absent from the core one."
@@ -27,11 +27,11 @@ by = [
 
 [[unit]]
 text = "See Modules and profiles for what each profile includes and how to run the full one."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Overview"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "A user may do what their built-in role allows, plus what their custom roles and unexpired direct grants hold."
@@ -293,7 +293,7 @@ by = ["exempt:navigation"]
 
 [[unit]]
 text = "Authentication"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "All RBAC endpoints require a valid bearer token in the Authorization header:"
@@ -301,15 +301,15 @@ by = ["test:modules/backend/tests/unit/api/test_rbac_endpoints.py::TestListRoles
 
 [[unit]]
 text = "The examples on this page run in one terminal, in order, against the full profile (Modules and profiles)."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Each uses the shell variables set by the ones before it."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Sign in as the stack's administrator, which saves a token in $TOKEN:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "It prints \"ADMIN\"."
@@ -317,15 +317,15 @@ by = ["docex:docs/api/rbac.md#\"ADMIN\""]
 
 [[unit]]
 text = "If it prints null, the sign-in failed and $TOKEN holds no token."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "The examples give roles and grants to the stack's demo analyst, analyst@demo.com."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "This saves the analyst's user id in $ANALYST_ID:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "It prints the analyst's email and \"role\": \"ANALYST\"."
@@ -333,11 +333,11 @@ by = ["docex:docs/api/rbac.md#\"role\": \"ANALYST\""]
 
 [[unit]]
 text = "Endpoints"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "List Custom Roles"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Returns all custom roles."
@@ -357,11 +357,11 @@ count = 2
 
 [[unit]]
 text = "Query Parameters"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Parameter | Type | Default | Description"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "include_system | boolean | true | When false, leaves out roles marked is_system_role. Nothing in this release creates one, so both forms list the custom roles you created."
@@ -381,7 +381,7 @@ count = 6
 
 [[unit]]
 text = "Example"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 count = 4
 
 [[unit]]
@@ -390,7 +390,7 @@ by = ["docex:docs/api/rbac.md#[]"]
 
 [[unit]]
 text = "Create Custom Role"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Creates a new custom role."
@@ -423,12 +423,12 @@ count = 7
 
 [[unit]]
 text = "Request Body"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 count = 4
 
 [[unit]]
 text = "Name validation rules:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Minimum 2 characters, maximum 64 characters"
@@ -485,7 +485,7 @@ count = 2
 
 [[unit]]
 text = "Error responses:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 count = 7
 
 [[unit]]
@@ -545,7 +545,7 @@ by = ["test:modules/backend/tests/integration/api/test_rbac_grantable_routes.py:
 
 [[unit]]
 text = "This creates the data-scientist role that the examples below assign:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "It prints \"name\": \"data-scientist\", \"is_system_role\": false and \"user_count\": 0."
@@ -556,7 +556,7 @@ by = [
 
 [[unit]]
 text = "Get Custom Role"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Get details of a specific role."
@@ -564,12 +564,12 @@ by = ["test:modules/backend/tests/integration/api/test_rbac_api.py::TestGetRole:
 
 [[unit]]
 text = "Path Parameters"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 count = 2
 
 [[unit]]
 text = "Parameter | Type | Description"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 count = 2
 
 [[unit]]
@@ -588,7 +588,7 @@ count = 4
 
 [[unit]]
 text = "Update Custom Role"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Update a custom role's description or permission set."
@@ -636,7 +636,7 @@ by = ["test:modules/backend/tests/integration/api/test_rbac_grantable_routes.py:
 
 [[unit]]
 text = "Delete Custom Role"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Delete a custom role."
@@ -662,7 +662,7 @@ by = ["test:modules/backend/tests/unit/api/test_rbac_endpoints.py::TestDeleteRol
 
 [[unit]]
 text = "Assign Role to User"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Assign a custom role to a user."
@@ -691,7 +691,7 @@ by = ["test:modules/backend/tests/integration/rbac/test_rbac_activation.py::test
 
 [[unit]]
 text = "This assigns the data-scientist role created above to the analyst:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "It prints \"status\": \"assigned\" and \"role\": \"data-scientist\"."
@@ -714,7 +714,7 @@ count = 2
 
 [[unit]]
 text = "Revoke Role from User"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Revoke a custom role from a user."
@@ -722,7 +722,7 @@ by = ["test:modules/backend/tests/integration/api/test_rbac_api.py::TestAssignRe
 
 [[unit]]
 text = "Get Effective Permissions"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Returns what the permission checks allow the user: for experiment and feature_flag, the actions the checks admit (from the built-in role, active custom roles and unexpired direct grants), and audit_log with read when the user may read other users' audit entries."
@@ -788,7 +788,7 @@ by = ["test:modules/backend/tests/unit/api/test_rbac_endpoints.py::TestEffective
 
 [[unit]]
 text = "GET /api/v1/auth/me gives your user id:"
-by = ["exempt:baseline"]
+by = ["docex:docs/api/rbac.md#\"base_role\": \"admin\""]
 
 [[unit]]
 text = "For the administrator it prints \"base_role\": \"admin\", no custom roles and \"is_superuser\": true."
@@ -810,7 +810,7 @@ by = ["docex:docs/api/rbac.md#\"experiment\":[\"create\",\"list\",\"read\"]"]
 
 [[unit]]
 text = "Grant Direct Permission"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Grant a specific resource permission directly to a user, without assigning a role."
@@ -873,7 +873,7 @@ by = ["test:modules/backend/tests/integration/api/test_rbac_grantable_routes.py:
 
 [[unit]]
 text = "Example — Temporary permission with expiry"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "expires_at must be in the future: a grant whose expires_at has already passed is stored, but Get Effective Permissions leaves it out from the start."
@@ -899,7 +899,7 @@ by = [
 
 [[unit]]
 text = "Revoke Direct Permission"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Revoke all direct permission grants for a user+resource combination."
@@ -931,11 +931,11 @@ by = ["test:modules/backend/tests/integration/api/test_rbac_grantable_routes.py:
 
 [[unit]]
 text = "How-To Examples"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Create a \"Read-Only Experiments\" Custom Role"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "This defines and assigns a role that holds only reading experiments and flags."
@@ -951,7 +951,7 @@ by = ["test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_t
 
 [[unit]]
 text = "Step 1: Create the role:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "It prints read-only-experiments."
@@ -959,7 +959,7 @@ by = ["docex:docs/api/rbac.md#read-only-experiments"]
 
 [[unit]]
 text = "Step 2: Assign the role to a user, here the analyst:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "It prints assigned."
@@ -1005,7 +1005,7 @@ by = [
 
 [[unit]]
 text = "To revoke early:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "It prints {\"status\":\"revoked\",\"count\":1}: the one experiment grant is deleted, and from the analyst's next request they can no longer change experiments."
@@ -1086,7 +1086,7 @@ by = ["docex:docs/api/rbac.md#{\"custom_roles\":[],\"experiment\":[\"list\",\"re
 
 [[unit]]
 text = "Service API"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Every permission check in backend/app/core/permissions.py reads custom roles and direct grants through one capability, rbac.granted_permissions, which the module registers as granted_permission_pairs in modules/backend/app/services/rbac_service.py."
@@ -1111,7 +1111,7 @@ by = [
 
 [[unit]]
 text = "Data Models"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "CustomRole"
@@ -1119,7 +1119,7 @@ by = ["test:modules/backend/tests/unit/services/test_rbac_layers_take_effect.py:
 
 [[unit]]
 text = "Column | Type | Description"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 count = 3
 
 [[unit]]
