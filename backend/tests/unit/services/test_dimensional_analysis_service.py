@@ -80,6 +80,13 @@ class TestGetAdjustedAlpha:
         result = service.get_adjusted_alpha(base_alpha=0.05, num_segments=5)
         assert result == pytest.approx(0.01, rel=1e-6)
 
+    def test_three_segments_give_the_page_s_threshold(self, service):
+        """0.05 / 3 is about 0.0167; 10 segments at 0.05 give 0.005."""
+        three = service.get_adjusted_alpha(base_alpha=0.05, num_segments=3)
+        assert round(three, 4) == 0.0167
+        ten = service.get_adjusted_alpha(base_alpha=0.05, num_segments=10)
+        assert ten == pytest.approx(0.005, rel=1e-9)
+
     def test_single_segment_returns_base_alpha(self, service):
         """No correction when there is only one segment."""
         result = service.get_adjusted_alpha(base_alpha=0.05, num_segments=1)
