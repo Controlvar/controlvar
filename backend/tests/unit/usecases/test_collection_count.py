@@ -59,6 +59,7 @@ EXPECTED = {
 }
 #: The same, for the cases under ``tests/usecases``.
 EXPECTED_CASES = {
+    "test_conversion_window.py": 1,
     "test_flags_over_time.py": 5,
     "test_is_feature_enabled.py": 2,
     "test_js_driver.py": 8,
@@ -266,6 +267,7 @@ def test_no_gate_here_or_under_tests_usecases_can_skip():
         "tests/usecases/usecases/sdks.py",
         "tests/usecases/drivers/python_driver.py",
         "tests/usecases/conftest.py",
+        "tests/usecases/test_conversion_window.py",
         "tests/usecases/test_flags_over_time.py",
         "tests/usecases/test_js_driver.py",
         "tests/usecases/test_local_evaluation.py",

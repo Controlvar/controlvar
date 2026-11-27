@@ -56,6 +56,8 @@ RULESET = "/api/v1/sdk/ruleset"
 EXPERIMENTS = "/api/v1/experiments/"
 EXPERIMENT_START = "/api/v1/experiments/{experiment_id}/start"
 ASSIGN = "/api/v1/tracking/assign"
+TRACK = "/api/v1/tracking/track"
+RESULTS = "/api/v1/results/{experiment_id}"
 SEGMENTS = "/api/v1/segments"
 SEGMENT = "/api/v1/segments/{segment_id}"
 SEGMENT_PREVIEW = "/api/v1/segments/{segment_id}/preview"
@@ -269,9 +271,11 @@ class Admin:
             params=params,
         )
 
-    def create_experiment(self, key: str) -> dict[str, Any]:
+    def create_experiment(
+        self, key: str, metrics: list[dict[str, Any]] | None = None
+    ) -> dict[str, Any]:
         """``POST /api/v1/experiments/``: a draft with a control and one
-        treatment, and a primary conversion metric."""
+        treatment, and a primary conversion metric (or *metrics*, as given)."""
         body = {
             "name": f"Use case {key}"[:100],
             "key": key,
@@ -279,7 +283,9 @@ class Admin:
                 {"name": "control", "is_control": True, "traffic_allocation": 50},
                 {"name": "treatment", "is_control": False, "traffic_allocation": 50},
             ],
-            "metrics": [
+            "metrics": metrics
+            if metrics is not None
+            else [
                 {
                     "name": "Purchase",
                     "event_name": "purchase",
@@ -323,6 +329,43 @@ class Admin:
                 "user_id": user_id,
                 "context": dict(context),
             },
+        )
+
+    def track(
+        self,
+        experiment_key: str,
+        user_id: str,
+        event_name: str,
+        timestamp: str | None = None,
+    ) -> dict[str, Any]:
+        """``POST /api/v1/tracking/track`` with the API key: one event of
+        *user_id*, dated *timestamp* (ISO 8601) or, with none, when it is
+        received."""
+        body: dict[str, Any] = {
+            "experiment_key": experiment_key,
+            "user_id": user_id,
+            "event_type": event_name,
+            "event_name": event_name,
+        }
+        if timestamp is not None:
+            body["timestamp"] = timestamp
+        return self._send(
+            "POST",
+            TRACK,
+            route=TRACK,
+            kind="evaluate",
+            headers={"X-API-Key": self._api_key},
+            json=body,
+        )
+
+    def results(self, experiment_id: str) -> dict[str, Any]:
+        """``GET /api/v1/results/{experiment_id}``: the experiment's results."""
+        return self._send(
+            "GET",
+            RESULTS.format(experiment_id=experiment_id),
+            route=RESULTS,
+            kind="admin",
+            headers=self._bearer(),
         )
 
     def create_segment(self, name: str, rules: Mapping[str, Any]) -> dict[str, Any]:
