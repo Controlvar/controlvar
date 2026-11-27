@@ -39,13 +39,13 @@ from backend.app.services.event_matching import (
     windowed,
     windowed_users,
 )
+from backend.app.services.mean_arms import prepare_mean_arms
 from backend.app.services.segment_breakdown import segment_rows
 from backend.app.services.srm_service import (
     recommendation_under_srm,
     sample_ratio_check,
 )
 from backend.app.services.sufficient_stats_analysis import (
-    EVENT_COUNT_METRIC_TYPES,
     MEAN_METRIC_TYPES,
     BinomialVariant,
     adjusted_p_values,
@@ -425,28 +425,13 @@ class AnalysisService:
 
         ``raw`` is the metric's ``calculate_metric_results`` output, which has
         each variant's assigned users and converting users; each user's value
-        is read here.  A count metric's is the number of the metric's events
-        the user sent, whatever their value (``event_counts``); a revenue,
-        duration or custom metric's is the total of those events' value
-        (``value_totals``).
+        is read by ``prepare_mean_arms`` through this service.  A count
+        metric's is the number of the metric's events the user sent, whatever
+        their value (``event_counts``); a revenue, duration or custom metric's
+        is the total of those events' value (``value_totals``).
         """
-        read = (
-            self.event_counts
-            if metric_type_name(metric) in EVENT_COUNT_METRIC_TYPES
-            else self.value_totals
-        )
         return per_user_mean_metric_result(
-            [
-                (
-                    BinomialVariant(
-                        v["variant_id"], v["variant_name"], v["is_control"]
-                    ),
-                    v["sample_size"],
-                    v["conversions"],
-                    read(experiment.id, v["variant_id"], metric_events(metric)),
-                )
-                for v in raw["variant_results"]
-            ],
+            prepare_mean_arms(self, experiment, metric, raw["variant_results"]),
             alpha,
             correction_method,
             metric=metric,

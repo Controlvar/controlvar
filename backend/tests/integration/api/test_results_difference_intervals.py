@@ -41,6 +41,7 @@ from backend.app.models.experiment import (
     MetricType,
     Variant,
 )
+from backend.app.services.mean_arms import prepared_for_tests
 from backend.app.services.sufficient_stats_analysis import (
     DIFFERENCE_FIELDS,
     MEAN_METRIC_TYPES,
@@ -187,20 +188,22 @@ def test_a_mean_metric_carries_the_relative_interval_and_the_impact(
     assert metric["analysis"] == "mean"
     control, treatment = _arms(metric)
     expected = per_user_mean_metric_result(
-        [
-            (
-                BinomialVariant(control["variant_id"], "control", True),
-                USERS["control"],
-                PURCHASES["control"],
-                [1.0] * PURCHASES["control"],
-            ),
-            (
-                BinomialVariant(treatment["variant_id"], "treatment", False),
-                USERS["treatment"],
-                PURCHASES["treatment"],
-                [1.0] * PURCHASES["treatment"],
-            ),
-        ],
+        prepared_for_tests(
+            [
+                (
+                    BinomialVariant(control["variant_id"], "control", True),
+                    USERS["control"],
+                    PURCHASES["control"],
+                    [1.0] * PURCHASES["control"],
+                ),
+                (
+                    BinomialVariant(treatment["variant_id"], "treatment", False),
+                    USERS["treatment"],
+                    PURCHASES["treatment"],
+                    [1.0] * PURCHASES["treatment"],
+                ),
+            ]
+        ),
         0.05,
         "benjamini_hochberg",
         metric=SimpleNamespace(

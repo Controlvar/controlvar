@@ -111,7 +111,7 @@ INVENTORY: Dict[str, str] = {
     "backend/app/services/results_streaming_service.py::ResultsStreamingService"
     "._compute_variant_results": PER_ROW,
     "backend/app/services/segment_breakdown.py::user_values": RESOLVED_AT_WRITE,
-    "backend/app/services/segment_results.py::_member_values": RESOLVED_AT_WRITE,
+    "backend/app/services/mean_arms.py::_member_values": RESOLVED_AT_WRITE,
     "backend/app/services/segment_results.py::experiment_users": PER_ROW,
     "backend/app/services/srm_service.py::compute_srm_for_experiment": PER_ROW,
     # BY_HAND below.

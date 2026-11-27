@@ -17,9 +17,10 @@ Nothing here changes the unfiltered path. The engine functions are called as
 ``AnalysisService.get_experiment_results`` calls them; the reads that cannot
 be shared are mirrored, each beside the function it mirrors:
 
-* ``_member_values`` mirrors ``AnalysisService.event_counts`` and
+* ``mean_arms._member_values`` mirrors ``AnalysisService.event_counts`` and
   ``AnalysisService.value_totals`` (they return bare values, so their rows
-  cannot be filtered afterwards);
+  cannot be filtered afterwards), and ``prepare_mean_arms`` reads a mean
+  metric's values with it for P's members;
 * ``_summary`` mirrors ``AnalysisService.calculate_experiment_summary``;
 * ``population_srm`` mirrors ``srm_service.compute_srm_for_experiment``.
 
@@ -56,7 +57,7 @@ import logging
 import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, Optional, Set
 
 from sqlalchemy import String, any_, bindparam, func
 from sqlalchemy.dialects.postgresql import ARRAY
@@ -66,7 +67,6 @@ from backend.app.models.assignment import Assignment
 from backend.app.models.event import Event
 from backend.app.models.experiment import Experiment, Metric
 from backend.app.models.segment import SegmentMember
-from backend.app.schemas.tracking import VALUE_BOUND
 from backend.app.services.analysis_service import AnalysisService, add_window_keys
 from backend.app.services.analysis_settings import resolve_analysis_settings
 from backend.app.services.event_matching import (
@@ -74,11 +74,10 @@ from backend.app.services.event_matching import (
     any_metric_event_filter,
     converter_pairs_any,
     converting_user_ids,
-    metric_event_filter,
     metric_events,
     windowed,
-    windowed_users,
 )
+from backend.app.services.mean_arms import prepare_mean_arms
 from backend.app.services.srm_service import (
     _is_fixed_allocation,
     compute_srm,
@@ -86,7 +85,6 @@ from backend.app.services.srm_service import (
     sample_ratio_check,
 )
 from backend.app.services.sufficient_stats_analysis import (
-    EVENT_COUNT_METRIC_TYPES,
     MEAN_METRIC_TYPES,
     BinomialVariant,
     binomial_metric_result,
@@ -197,55 +195,6 @@ def _metric_counts(
     }
 
 
-def _member_values(
-    db: Session,
-    experiment_id: Any,
-    variant_id: Any,
-    metric: Metric,
-    members: Set[str],
-) -> List[float]:
-    """Each member's value for a mean metric, for those who have one.
-
-    Mirrors ``AnalysisService.event_counts`` (a count metric: the number of the
-    metric's events, whatever their value) and ``AnalysisService.value_totals``
-    (any other mean metric: the total of the values with ``abs(value) <=
-    VALUE_BOUND``): the same events, tagged with the variant, kept for the
-    variant's members. A member with no such event is not listed, so their
-    value is 0. With a conversion window, only the events inside it count
-    (``windowed_users``), as there.
-    """
-    events = metric_events(metric)
-    if windowed(events):
-        found = windowed_users(db, experiment_id, variant_id, events)
-        if metric_type_name(metric) in EVENT_COUNT_METRIC_TYPES:
-            return [float(r.events) for (_, u), r in found.items() if u in members]
-        return [r.value for (_, u), r in found.items() if r.valued and u in members]
-    if metric_type_name(metric) in EVENT_COUNT_METRIC_TYPES:
-        rows = (
-            db.query(Event.user_id, func.count(Event.id))
-            .filter(
-                Event.experiment_id == experiment_id,
-                Event.variant_id == variant_id,
-                metric_event_filter(metric_events(metric)),
-            )
-            .group_by(Event.user_id)
-            .all()
-        )
-    else:
-        rows = (
-            db.query(Event.user_id, func.sum(Event.value))
-            .filter(
-                Event.experiment_id == experiment_id,
-                Event.variant_id == variant_id,
-                metric_event_filter(metric_events(metric)),
-                func.abs(Event.value) <= VALUE_BOUND,
-            )
-            .group_by(Event.user_id)
-            .all()
-        )
-    return [float(value) for user_id, value in rows if str(user_id) in members]
-
-
 def _metric_result(
     db: Session,
     experiment: Experiment,
@@ -260,23 +209,13 @@ def _metric_result(
     otherwise."""
     if metric_type_name(metric) in MEAN_METRIC_TYPES:
         return per_user_mean_metric_result(
-            [
-                (
-                    BinomialVariant(
-                        v["variant_id"], v["variant_name"], v["is_control"]
-                    ),
-                    v["sample_size"],
-                    v["conversions"],
-                    _member_values(
-                        db,
-                        experiment.id,
-                        v["variant_id"],
-                        metric,
-                        population.by_variant.get(str(v["variant_id"]), set()),
-                    ),
-                )
-                for v in raw["variant_results"]
-            ],
+            prepare_mean_arms(
+                AnalysisService(db),
+                experiment,
+                metric,
+                raw["variant_results"],
+                members=population.by_variant,
+            ),
             alpha,
             correction_method,
             metric=metric,

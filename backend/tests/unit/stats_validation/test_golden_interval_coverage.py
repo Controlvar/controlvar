@@ -49,6 +49,7 @@ from typing import Dict, Tuple
 import numpy as np
 import pytest
 
+from backend.app.services.mean_arms import prepared_for_tests
 from backend.app.services.sufficient_stats_analysis import (
     BinomialVariant,
     binomial_metric_result,
@@ -154,10 +155,12 @@ def test_the_mean_intervals_cover_the_true_difference():
         treatment = rng.exponential(MEAN_TREATMENT, size=MEAN_USERS)
         row = _treatment(
             per_user_mean_metric_result(
-                [
-                    (CONTROL, MEAN_USERS, MEAN_USERS, control.tolist()),
-                    (TREATMENT, MEAN_USERS, MEAN_USERS, treatment.tolist()),
-                ],
+                prepared_for_tests(
+                    [
+                        (CONTROL, MEAN_USERS, MEAN_USERS, control.tolist()),
+                        (TREATMENT, MEAN_USERS, MEAN_USERS, treatment.tolist()),
+                    ]
+                ),
                 1.0 - CONFIDENCE_LEVEL,
                 "none",
                 metric=metric,

@@ -30,6 +30,7 @@ from typing import Any, Dict, List
 import pytest
 
 from backend.app.services.analysis_service import AnalysisService
+from backend.app.services.mean_arms import prepared_for_tests
 from backend.app.services.sufficient_stats_analysis import (
     CORRECTION_METHODS,
     BinomialVariant,
@@ -220,7 +221,7 @@ class TestTheSummary:
             lower_is_better=True,
         )
         result = per_user_mean_metric_result(
-            [(CONTROL, 50, 0, []), (T1, 50, 30, [1.0] * 30)],
+            prepared_for_tests([(CONTROL, 50, 0, []), (T1, 50, 30, [1.0] * 30)]),
             0.05,
             "none",
             metric=metric,

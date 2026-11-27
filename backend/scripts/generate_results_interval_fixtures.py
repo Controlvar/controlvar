@@ -6,8 +6,10 @@ Every metric in the file is what ``GET /api/v1/results/{experiment_id}`` puts in
 ``metrics`` for the counts or per-user values given here: each case runs the
 results path's own builder (``binomial_metric_result`` for a conversion metric,
 ``per_user_mean_metric_result`` for a revenue, count, duration or custom
-metric, exactly as ``AnalysisService`` calls them, with ``alpha = 1 - level``),
-then the response schema (``MetricResult``) serialises it as the API does.
+metric, exactly as ``AnalysisService`` calls them, with ``alpha = 1 - level``;
+a mean case's values are wrapped with ``mean_arms.prepared_for_tests``, where
+``AnalysisService`` reads them with ``prepare_mean_arms``), then the response
+schema (``MetricResult``) serialises it as the API does.
 Nothing in a metric is typed by hand, so a dashboard test that renders one of
 these is checking the server's numbers, not numbers someone chose.
 
@@ -49,6 +51,7 @@ from types import SimpleNamespace
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from backend.app.schemas.results import MetricResult
+from backend.app.services.mean_arms import prepared_for_tests
 from backend.app.services.sufficient_stats_analysis import (
     BinomialVariant,
     binomial_metric_result,
@@ -112,10 +115,17 @@ def _mean(
     correction: str,
 ) -> Dict[str, Any]:
     return per_user_mean_metric_result(
-        [
-            (BinomialVariant(_id(case, arm), arm, is_control), n, sent, list(values))
-            for arm, is_control, n, sent, values in arms
-        ],
+        prepared_for_tests(
+            [
+                (
+                    BinomialVariant(_id(case, arm), arm, is_control),
+                    n,
+                    sent,
+                    list(values),
+                )
+                for arm, is_control, n, sent, values in arms
+            ]
+        ),
         1.0 - level,
         correction,
         metric=_metric(case, name, metric_type),

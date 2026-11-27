@@ -36,6 +36,7 @@ import pytest
 from freezegun import freeze_time
 
 from backend.app.core.stats_engine import derive_test_seed
+from backend.app.services.mean_arms import prepared_for_tests
 from backend.app.services.permutation_test import (
     ComparisonIdentityError,
     comparison_seed,
@@ -79,20 +80,22 @@ def _result(
 ) -> dict:
     """``per_user_mean_metric_result`` on one control and one treatment."""
     return per_user_mean_metric_result(
-        [
-            (
-                BinomialVariant(control_id, "Control", True),
-                n_control,
-                len(control),
-                list(control),
-            ),
-            (
-                BinomialVariant(treatment_id, "Treatment", False),
-                n_treatment,
-                len(treatment),
-                list(treatment),
-            ),
-        ],
+        prepared_for_tests(
+            [
+                (
+                    BinomialVariant(control_id, "Control", True),
+                    n_control,
+                    len(control),
+                    list(control),
+                ),
+                (
+                    BinomialVariant(treatment_id, "Treatment", False),
+                    n_treatment,
+                    len(treatment),
+                    list(treatment),
+                ),
+            ]
+        ),
         0.05,
         "benjamini_hochberg",
         metric=_metric(metric_id),

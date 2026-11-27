@@ -53,6 +53,7 @@ from backend.app.schemas.export import ExperimentExportRow, VariantExportRow
 from backend.app.schemas.results import MetricResult, VariantResult
 from backend.app.services import holdout_results
 from backend.app.services import sufficient_stats_analysis as ssa
+from backend.app.services.mean_arms import prepared_for_tests
 from backend.app.services.sufficient_stats_analysis import (
     DIFFERENCE_FIELDS,
     MEAN_METRIC_TYPES,
@@ -149,7 +150,10 @@ def _mean_result(
     for arm, values in zip((_T1, _T2), treatments):
         variants.append((arm, len(values), sum(1 for y in values if y), list(values)))
     return per_user_mean_metric_result(
-        variants, 1.0 - level, correction, metric=_metric(metric_type)
+        prepared_for_tests(variants),
+        1.0 - level,
+        correction,
+        metric=_metric(metric_type),
     )
 
 
