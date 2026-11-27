@@ -1207,3 +1207,14 @@ def test_one_region():
         text = path.read_text(encoding="utf-8")
         assert "aws-region: ${{ env.AWS_REGION }}" in text
         assert "aws-region: us-" not in text
+
+
+@pytest.mark.regression
+def test_the_deploy_waits_thirty_minutes_for_the_migration_and_no_input_changes_it():
+    """The migration task's deadline is a literal of the workflow, 1800 s: it
+    is named once, so no input, variable or step sets another for one deploy,
+    and run_migration_task.sh's own default is the same."""
+    assert _load(DEPLOY)["env"]["MIGRATION_TIMEOUT_SECONDS"] == "1800"
+    assert DEPLOY.read_text(encoding="utf-8").count("MIGRATION_TIMEOUT_SECONDS") == 1
+    script = (SCRIPTS / "run_migration_task.sh").read_text(encoding="utf-8")
+    assert 'TIMEOUT="${MIGRATION_TIMEOUT_SECONDS:-1800}"' in script
