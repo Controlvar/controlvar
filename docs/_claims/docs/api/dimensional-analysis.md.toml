@@ -5,7 +5,7 @@ document = "docs/api/dimensional-analysis.md"
 
 [[unit]]
 text = "Dimensional Analysis & Segment Breakdown (Issue #28)"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Dimensional analysis breaks experiment results down by user segments (e.g., by device, country, plan tier, browser) to reveal heterogeneous treatment effects (HTE) — cases where the treatment works differently for different groups."
@@ -16,43 +16,43 @@ by = [
 
 [[unit]]
 text = "Overview"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "When you run an experiment, the top-level result shows the average effect across all users."
-by = ["exempt:baseline"]
+by = ["exempt:theory"]
 
 [[unit]]
 text = "Dimensional analysis answers: \"Did the effect differ by segment?\""
-by = ["exempt:baseline"]
+by = ["exempt:theory"]
 
 [[unit]]
 text = "This is useful for:"
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Discovering that a feature performs well for mobile users but poorly for desktop"
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Identifying segments where the treatment has a negative effect (safety check)"
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Informing rollout decisions (e.g., roll out to the winning segment first)"
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Statistical Approach"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Bonferroni Correction"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "When testing multiple segments simultaneously, running standard p-value tests at α = 0.05 per segment inflates the overall false positive rate."
-by = ["exempt:baseline"]
+by = ["exempt:theory"]
 
 [[unit]]
 text = "The service applies Bonferroni correction:"
@@ -68,11 +68,11 @@ by = ["docex:docs/api/dimensional-analysis.md#\"dimension\": \"device\""]
 
 [[unit]]
 text = "A significant segment finding should be validated with a dedicated follow-up experiment."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "HTE Detection"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Heterogeneous treatment effect detection compares the first treatment (the non-control variant whose name sorts first) with the control."
@@ -106,7 +106,7 @@ by = ["test:backend/tests/unit/services/test_hte_detection.py::test_each_route_h
 
 [[unit]]
 text = "Where the segments come from"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Each user is counted once, in the segment of the value the user was first assigned with, or else the first value tracked for them, so for every variant the segments add up to the experiment's users and converting users."
@@ -198,15 +198,15 @@ by = [
 
 [[unit]]
 text = "Run the commands on this page in one terminal, in order, against the stack from the Quick Start."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Each uses the shell variables set by the ones before it."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Log in first:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "It prints \"ADMIN\"."
@@ -222,7 +222,7 @@ by = ["docex:docs/api/dimensional-analysis.md#\"unknown\""]
 
 [[unit]]
 text = "That takes an API key, which this saves in $KEY, with the experiment's id in $EXP_ID."
-by = ["exempt:baseline"]
+by = ["docex:docs/api/dimensional-analysis.md#eptk_"]
 
 [[unit]]
 text = "The collection URL ends with a slash, /api/v1/experiments/; without it the API answers 307, which curl doesn't follow:"
@@ -253,7 +253,7 @@ by = [
 
 [[unit]]
 text = "jq builds the batch of eight events:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "It prints 8."
@@ -261,7 +261,7 @@ by = ["docex:docs/api/dimensional-analysis.md#8"]
 
 [[unit]]
 text = "API Reference"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "GET /api/v1/results/{experiment_id}?breakdown="
@@ -276,7 +276,10 @@ by = [
 
 [[unit]]
 text = "Without breakdown, the field is null."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/unit/api/test_dimensional_analysis_api.py::TestBreakdownQueryParam::test_without_breakdown_the_field_is_present_and_null",
+    "test:backend/tests/unit/api/test_dimensional_analysis_api.py::TestBreakdownQueryParam::test_no_breakdown_still_works",
+]
 
 [[unit]]
 text = "A user who may view the experiment can read it."
@@ -287,7 +290,7 @@ by = [
 
 [[unit]]
 text = "Parameter | Type | Required | Description"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "breakdown | string | ❌ | The metadata key to break down by (e.g. device, country, plan)"
@@ -310,7 +313,7 @@ by = [
 
 [[unit]]
 text = "With three segments the threshold is 0.05 / 3, about 0.0167."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/services/test_dimensional_analysis_service.py::TestGetAdjustedAlpha::test_three_segments_give_the_page_s_threshold"]
 
 [[unit]]
 text = "For every variant the segments add up to the experiment's users and converting users:"
@@ -336,7 +339,7 @@ by = ["docex:docs/api/dimensional-analysis.md#[{\"variant_name\":\"blue_button\"
 
 [[unit]]
 text = "The control comes first:"
-by = ["exempt:baseline"]
+by = ["docex:docs/api/dimensional-analysis.md#[{\"variant_name\":\"blue_button\",\"is_control\":true},{\"variant_name\":\"green_button\",\"is_control\":false}]"]
 
 [[unit]]
 text = "It prints blue_button, the control, then green_button."
@@ -344,7 +347,7 @@ by = ["docex:docs/api/dimensional-analysis.md#[{\"variant_name\":\"blue_button\"
 
 [[unit]]
 text = "One segment in full:"
-by = ["exempt:baseline"]
+by = ["exempt:example"]
 
 [[unit]]
 text = "The control's p_value is null; every other variant's is Fisher's exact test against the control in the same segment, the test the headline uses for a conversion rate."
@@ -611,7 +614,7 @@ by = [
 
 [[unit]]
 text = "Reading the Results"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "adjusted_alpha is the per-segment significance threshold after Bonferroni correction."
@@ -623,51 +626,51 @@ by = ["test:backend/tests/unit/services/test_dimensional_analysis_service.py::Te
 
 [[unit]]
 text = "is_exploratory: true on all segments means treat findings as signals, not conclusions."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Run a dedicated follow-up experiment to confirm."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Segments with small sample sizes (< ~200 per variant) will rarely show significance even with large effects."
-by = ["exempt:baseline"]
+by = ["exempt:theory"]
 
 [[unit]]
 text = "The p-values are still valid but the confidence intervals will be wide."
-by = ["exempt:baseline"]
+by = ["exempt:theory"]
 
 [[unit]]
 text = "Common Dimensions"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Dimension Key | Example Values"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "device | mobile, desktop, tablet"
-by = ["exempt:baseline"]
+by = ["exempt:example"]
 
 [[unit]]
 text = "country | US, GB, DE"
-by = ["exempt:baseline"]
+by = ["exempt:example"]
 
 [[unit]]
 text = "plan | free, pro, enterprise"
-by = ["exempt:baseline"]
+by = ["exempt:example"]
 
 [[unit]]
 text = "browser | chrome, safari, firefox"
-by = ["exempt:baseline"]
+by = ["exempt:example"]
 
 [[unit]]
 text = "new_user | true, false"
-by = ["exempt:baseline"]
+by = ["exempt:example"]
 
 [[unit]]
 text = "Permissions"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Reading either breakdown takes permission to view the experiment, as on the experiment page; every role has it."

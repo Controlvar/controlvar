@@ -293,6 +293,26 @@ class TestBreakdownQueryParam:
         assert data.get("breakdown") is None
 
     @pytest.mark.unit
+    def test_without_breakdown_the_field_is_present_and_null(
+        self, client, mock_experiment_results
+    ):
+        """No breakdown parameter: `breakdown` is in the answer, as null."""
+        with patch.object(
+            AnalysisService,
+            "get_experiment_results",
+            return_value=mock_experiment_results,
+        ):
+            response = client.get(
+                f"/api/v1/results/{EXPERIMENT_UUID}",
+                params={"use_cache": "false"},
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "breakdown" in data
+        assert data["breakdown"] is None
+
+    @pytest.mark.unit
     def test_breakdown_response_contains_segments(
         self, client, mock_experiment_results
     ):
