@@ -82,4 +82,4 @@ day:
           experiments
         source:
           path: frontend/src/components/RequireAuth.tsx
-          anchor: "forbidden('a superuser account')"
+          anchor: 'requirement="a superuser account"'

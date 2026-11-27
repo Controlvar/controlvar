@@ -53,7 +53,7 @@ export class ExperimentsPage {
   readonly nextButton: Locator;
   readonly backButton: Locator;
   readonly createStepButton: Locator;
-  readonly notAllowed: Locator;
+  readonly forbidden: Locator;
   readonly estimateBaseline: Locator;
   readonly estimateMde: Locator;
   readonly estimateCalculate: Locator;
@@ -114,7 +114,7 @@ export class ExperimentsPage {
     this.nextButton = page.getByTestId("wizard-next");
     this.backButton = page.getByTestId("wizard-back");
     this.createStepButton = page.getByTestId("wizard-create");
-    this.notAllowed = page.getByTestId("create-not-allowed");
+    this.forbidden = page.getByTestId("require-auth-forbidden");
     this.estimateBaseline = page.getByTestId("estimate-baseline");
     this.estimateMde = page.getByTestId("estimate-mde");
     this.estimateCalculate = page.getByTestId("estimate-calculate");

@@ -274,19 +274,22 @@ test("U-ANALYST: the analyst's day", async ({ analyst, request }) => {
     };
     page.on("request", onRequest);
     await page.goto("/experiments/new");
-    const notice = page.getByTestId("create-not-allowed");
+    const notice = page.getByTestId("require-auth-forbidden");
     await expect(notice).toBeVisible({ timeout: 15_000 });
+    const words = notice.locator("p");
     decide(
       "u-analyst.6.refusal-words",
       "text_exact",
       {
-        says: "Your role can view experiments but not create them. Ask an admin to create it or to change your role.",
+        refused: "You do not have permission to access this page.",
+        says: "Signed in as analyst@demo.com (ANALYST). This page requires permission to create experiments.",
         wayOut: "/experiments",
         forms: 0,
       },
       {
-        says: (await notice.locator("p").first().innerText()).trim(),
-        wayOut: await notice.getByRole("link", { name: "Back to experiments" }).getAttribute("href"),
+        refused: (await words.nth(1).innerText()).trim(),
+        says: (await words.nth(2).innerText()).replace(/\s+/g, " ").trim(),
+        wayOut: await notice.getByRole("link", { name: "Go to Home" }).getAttribute("href"),
         forms: await page.locator('[data-testid="new-experiment-form"], [data-testid="wizard-step-heading"]').count(),
       },
     );

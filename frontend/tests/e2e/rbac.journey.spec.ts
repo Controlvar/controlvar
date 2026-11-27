@@ -126,7 +126,7 @@ test.describe("Journey: RBAC", () => {
   // API allows it and the nav test above asserts they get the button. Only
   // ANALYST and VIEWER are refused.
   // /experiments/new asks the same question as the API (superuser, ADMIN or
-  // DEVELOPER): anyone else gets a notice in place of either view, and no
+  // DEVELOPER): anyone else gets the 403 view in place of either view, and no
   // create request can be sent from it.
   for (const role of ["analyst", "viewer"] as const) {
     test(`${role} cannot create an experiment and the UI says so`, async ({ sessions }) => {
@@ -140,10 +140,8 @@ test.describe("Journey: RBAC", () => {
       try {
         for (const open of [() => experiments.gotoGuided(), () => experiments.gotoNew()]) {
           await open();
-          await expect(experiments.notAllowed).toBeVisible({ timeout: 15_000 });
-          await expect(experiments.notAllowed).toContainText(
-            "Your role can view experiments but not create them.",
-          );
+          await expect(experiments.forbidden).toBeVisible({ timeout: 15_000 });
+          await expect(experiments.forbidden).toContainText("This page requires permission to create experiments.");
           await expect(experiments.guided).toHaveCount(0);
           await expect(experiments.form).toHaveCount(0);
           await expect(experiments.nameInput).toHaveCount(0);
@@ -763,7 +761,7 @@ test.describe("Journey: RBAC", () => {
     try {
       await experiments.gotoGuided();
       await expect(experiments.guided).toBeVisible({ timeout: 15_000 });
-      await expect(experiments.notAllowed).toHaveCount(0);
+      await expect(experiments.forbidden).toHaveCount(0);
     } finally {
       await page.close();
     }

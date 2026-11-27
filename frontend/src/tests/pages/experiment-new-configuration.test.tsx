@@ -322,7 +322,8 @@ describe('who sees the fields', () => {
     mockUser = { role, is_superuser: false };
     routerAt({ advanced: '' });
     render(<NewExperimentPage />);
-    expect(screen.getByTestId('create-not-allowed')).toBeInTheDocument();
+    expect(screen.getByTestId('require-auth-forbidden')).toHaveTextContent('This page requires permission to create experiments.');
+    expect(screen.queryByTestId('create-not-allowed')).not.toBeInTheDocument();
     expect(screen.queryByTestId('variant-configuration-toggle-0')).not.toBeInTheDocument();
     expect(screen.queryByTestId('analysis-bayesian')).not.toBeInTheDocument();
   });
@@ -683,7 +684,8 @@ describe('#442: Advanced Bayesian settings, set when creating an experiment', ()
     mockUser = { role, is_superuser: false };
     routerAt({ advanced: '' });
     render(<NewExperimentPage />);
-    expect(screen.getByTestId('create-not-allowed')).toBeInTheDocument();
+    expect(screen.getByTestId('require-auth-forbidden')).toHaveTextContent('This page requires permission to create experiments.');
+    expect(screen.queryByTestId('create-not-allowed')).not.toBeInTheDocument();
     expect(screen.queryByTestId('analysis-bayesian')).not.toBeInTheDocument();
     expect(screen.queryByTestId('bayesian-config-toggle')).not.toBeInTheDocument();
   });
