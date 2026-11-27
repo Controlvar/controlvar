@@ -1148,7 +1148,6 @@ exempt:baseline	docs/security/hardening-changes.md	f7754922fa55
 exempt:baseline	docs/self-hosting/migrations.md	035ba60ee721
 exempt:baseline	docs/self-hosting/migrations.md	0f262df72ee2
 exempt:baseline	docs/self-hosting/migrations.md	2093c9849a1d
-exempt:baseline	docs/self-hosting/migrations.md	23857627f41a
 exempt:baseline	docs/self-hosting/migrations.md	24ab02419aca
 exempt:baseline	docs/self-hosting/migrations.md	417c2bb677ca
 exempt:baseline	docs/self-hosting/migrations.md	47f88a3a6bb2
