@@ -73,7 +73,7 @@ function CreateWorkspaceModal({ onClose, onCreated }: CreateModalProps) {
         <button
           type="button"
           onClick={onClose}
-          className="text-slate-400 hover:text-slate-600 text-xl leading-none"
+          className="text-slate-500 hover:text-slate-600 text-xl leading-none"
           aria-label="Close"
         >
           &times;
@@ -122,7 +122,7 @@ function CreateWorkspaceModal({ onClose, onCreated }: CreateModalProps) {
             {slugError && (
               <p className="mt-1 text-xs text-red-600">{slugError}</p>
             )}
-            <p className="mt-1 text-xs text-slate-400">
+            <p className="mt-1 text-xs text-slate-500">
               Lowercase alphanumeric and hyphens, 3-50 chars
             </p>
           </div>
@@ -174,7 +174,7 @@ function WorkspaceCard({ workspace }: { workspace: Workspace }) {
           <h3 className="font-semibold text-slate-900 group-hover:text-blue-700 truncate">
             {workspace.name}
           </h3>
-          <p className="text-xs text-slate-400 mt-0.5 font-mono">{workspace.slug}</p>
+          <p className="text-xs text-slate-500 mt-0.5 font-mono">{workspace.slug}</p>
         </div>
       </div>
 
@@ -257,12 +257,12 @@ function WorkspacesPage() {
           {!isLoading && !error && workspaces.length === 0 && (
             <div className="text-center py-20 bg-white rounded-xl border border-slate-200">
               <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-8 h-8 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                 </svg>
               </div>
               <h3 className="text-slate-700 font-medium mb-1">No workspaces yet</h3>
-              <p className="text-slate-400 text-sm mb-5">
+              <p className="text-slate-500 text-sm mb-5">
                 Create your first workspace to organize your team&apos;s experiments
               </p>
               <button

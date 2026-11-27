@@ -127,7 +127,7 @@ function NewWorkspacePage() {
                   Slug <span className="text-red-500">*</span>
                 </label>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-slate-400 whitespace-nowrap">workspaces/</span>
+                  <span className="text-sm text-slate-500 whitespace-nowrap">workspaces/</span>
                   <input
                     id="ws-slug"
                     type="text"
@@ -146,7 +146,7 @@ function NewWorkspacePage() {
                   <p className="mt-1 text-xs text-red-600">{slugError}</p>
                 )}
                 {!slugError && (
-                  <p className="mt-1 text-xs text-slate-400">
+                  <p className="mt-1 text-xs text-slate-500">
                     3-50 chars — lowercase letters, numbers and hyphens only
                   </p>
                 )}
@@ -168,7 +168,7 @@ function NewWorkspacePage() {
                   className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                   placeholder="What does this workspace contain? (optional)"
                 />
-                <p className="mt-1 text-xs text-slate-400 text-right">
+                <p className="mt-1 text-xs text-slate-500 text-right">
                   {description.length}/500
                 </p>
               </div>
