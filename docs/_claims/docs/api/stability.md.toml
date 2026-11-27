@@ -1807,3 +1807,15 @@ by = [
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
 ]
+
+[[unit]]
+text = "GET /api/v1/results/{experiment_id}/daily, GET /api/v1/experiments/{experiment_id}/daily-results | #2205 | Without metric_id, /daily answers for the metric GET /api/v1/results/{experiment_id} lists first: the primary, or the first by name when none is marked primary. It used to answer for the first metric the database returned, which need not be the primary, so the Daily Trends chart on the results page could show a different metric from the page's summary. /daily-results lists each day's metrics in that same order, with the same entries. With metric_id, both answer as before. With CACHE_ENABLED on, a /daily-results answer cached before the upgrade keeps the old order for up to an hour. The OpenAPI document does not change."
+by = [
+    "test:backend/tests/integration/api/test_daily_results_primary_metric.py::test_the_daily_series_without_a_metric_id_is_the_primary_metrics",
+    "test:backend/tests/integration/api/test_daily_results_primary_metric.py::test_with_no_primary_the_daily_series_is_the_first_metric_by_name",
+    "test:backend/tests/integration/api/test_daily_results_primary_metric.py::test_the_daily_results_list_the_primary_first_then_by_name",
+    "test:backend/tests/integration/api/test_experiment_cache_redis.py::test_results_are_cached_and_served_from_the_cache",
+    "test:backend/tests/unit/api/test_experiment_cache_scope.py::test_an_entry_is_kept_for_an_hour",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]

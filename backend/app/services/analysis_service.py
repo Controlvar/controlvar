@@ -839,10 +839,11 @@ class AnalysisService:
             dates.append(current_dt.strftime("%Y-%m-%d"))
             current_dt += timedelta(days=1)
 
-        # Filter metrics if metric_id is provided
+        # In the order the results list them (the primary first, then by
+        # name), filtered to metric_id when one is given.
         metrics = [
             m
-            for m in experiment.metric_definitions
+            for m in self._ordered_metrics(experiment)
             if not metric_id or str(m.id) == str(metric_id)
         ]
 
