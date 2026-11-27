@@ -237,6 +237,7 @@ def test_the_feature_flag_columns():
             return [(flag.id, 12)]
 
     flags = MagicMock()
+    flags.order_by.return_value = flags
     flags.all.return_value = [flag]
     db = MagicMock()
     db.query.side_effect = lambda *columns: (
@@ -410,7 +411,7 @@ def test_times_and_ids_in_the_rows():
 def test_csv_is_written_by_dictwriter_with_crlf_line_endings():
     flag = _flag()
     db = MagicMock()
-    db.query.return_value.all.return_value = [flag]
+    db.query.return_value.order_by.return_value.all.return_value = [flag]
     service = ExportService(db)
     with (
         patch.object(service, "_count_by", return_value={}),

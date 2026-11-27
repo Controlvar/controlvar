@@ -20,8 +20,10 @@ from backend.app.services.export_service import ExportService
 @pytest.fixture
 def mock_db():
     """A session in which the results' read finds no experiment, so the result
-    columns are empty."""
-    return MagicMock()
+    columns are empty. The exports' ``order_by`` hands back the same query."""
+    db = MagicMock()
+    db.query.return_value.order_by.return_value = db.query.return_value
+    return db
 
 
 @pytest.fixture
