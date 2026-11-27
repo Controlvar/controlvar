@@ -74,6 +74,13 @@ class _Rows:
     def group_by(self, *columns: Any) -> "_Rows":
         return self
 
+    def order_by(self, *columns: Any) -> "_Rows":
+        """Sorted by the columns, as the database would."""
+        return _Rows(
+            self.table,
+            sorted(self.rows, key=lambda r: tuple(getattr(r, c.key) for c in columns)),
+        )
+
     def count(self) -> int:
         return len(self.rows)
 

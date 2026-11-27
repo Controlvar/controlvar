@@ -1819,3 +1819,13 @@ by = [
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
 ]
+
+[[unit]]
+text = "GET /api/v1/export/experiments, GET /api/v1/export/variants, GET /api/v1/export/feature-flags | #2245 | /experiments and /variants list the experiments by created_at, then id, and /feature-flags lists the flags the same way. The rows used to come in the order the database read them, which an update to a row or a new query plan could change, so two exports of the same data could list them in a different order. The OpenAPI document does not change."
+by = [
+    "test:backend/tests/integration/api/test_export_api.py::test_experiment_exports_list_experiments_by_creation_then_id",
+    "test:backend/tests/integration/api/test_export_api.py::test_the_feature_flag_export_lists_flags_by_creation_then_id",
+    "test:backend/tests/integration/api/test_export_api.py::test_the_bodies_are_the_bodies_of_one_experiment_at_a_time",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]

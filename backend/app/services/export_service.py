@@ -240,7 +240,12 @@ class ExportService:
         request: ExportRequest,
         experiment_ids: Optional[List[str]],
     ) -> List[ExperimentExportRow]:
-        """Query experiments and map to ExperimentExportRow instances."""
+        """Query experiments and map to ExperimentExportRow instances.
+
+        In a fixed order, created_at then id: without an ORDER BY PostgreSQL
+        returns rows in the order its plan meets them, which an UPDATE or a
+        new plan can change between two exports.
+        """
         query = self.db.query(Experiment)
         if experiment_ids:
             query = query.filter(Experiment.id.in_(experiment_ids))
@@ -248,7 +253,7 @@ class ExportService:
             query = query.filter(Experiment.created_at >= request.start_date)
         if request.end_date:
             query = query.filter(Experiment.created_at <= request.end_date)
-        experiments = query.all()
+        experiments = query.order_by(Experiment.created_at, Experiment.id).all()
         return self._experiments_to_rows(experiments)
 
     def _build_variant_rows(
@@ -256,7 +261,11 @@ class ExportService:
         request: ExportRequest,
         experiment_ids: Optional[List[str]],
     ) -> List[VariantExportRow]:
-        """Query experiments+variants and map to VariantExportRow instances."""
+        """Query experiments+variants and map to VariantExportRow instances.
+
+        The experiments by created_at, then id; each one's variants in their
+        own order (``Experiment.variants``).
+        """
         query = self.db.query(Experiment)
         if experiment_ids:
             query = query.filter(Experiment.id.in_(experiment_ids))
@@ -264,20 +273,21 @@ class ExportService:
             query = query.filter(Experiment.created_at >= request.start_date)
         if request.end_date:
             query = query.filter(Experiment.created_at <= request.end_date)
-        experiments = query.all()
+        experiments = query.order_by(Experiment.created_at, Experiment.id).all()
         return self._variants_to_rows(experiments)
 
     def _build_feature_flag_rows(
         self,
         request: ExportRequest,
     ) -> List[FeatureFlagExportRow]:
-        """Query feature flags and map to FeatureFlagExportRow instances."""
+        """Query feature flags and map to FeatureFlagExportRow instances, by
+        created_at, then id."""
         query = self.db.query(FeatureFlag)
         if request.start_date:
             query = query.filter(FeatureFlag.created_at >= request.start_date)
         if request.end_date:
             query = query.filter(FeatureFlag.created_at <= request.end_date)
-        flags = query.all()
+        flags = query.order_by(FeatureFlag.created_at, FeatureFlag.id).all()
         evaluations = self._count_by(RawMetric.feature_flag_id, [ff.id for ff in flags])
         return [
             self._feature_flag_to_row(ff, evaluations.get(ff.id, 0)) for ff in flags

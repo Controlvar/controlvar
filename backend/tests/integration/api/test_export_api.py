@@ -28,11 +28,13 @@ import json
 import uuid
 import weakref
 from collections import Counter
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy import event as sa_event
 from sqlalchemy import null
+from sqlalchemy import text as sql_text
 from sqlalchemy.orm import Session
 
 from backend.app.models.assignment import Assignment
@@ -45,6 +47,7 @@ from backend.app.models.experiment import (
     MetricType,
     Variant,
 )
+from backend.app.models.feature_flag import FeatureFlag, FeatureFlagStatus
 from backend.app.models.metrics.metric import RawMetric
 from backend.app.schemas.export import (
     ExportFormat,
@@ -1972,3 +1975,239 @@ def test_a_user_stored_while_the_export_runs_is_never_converted_but_unassigned(
     for metric in found["metrics"]:
         for variant in metric["variants"]:
             assert variant["conversions"] <= variant["sample_size"], variant
+
+
+# ---------------------------------------------------------------------------
+# The rows are in a fixed order: created_at, then id
+# ---------------------------------------------------------------------------
+#
+# Without an ORDER BY PostgreSQL returns the rows as its plan meets them. An
+# index scan on created_at meets them in that order; a sequential or bitmap
+# scan, which it chooses for a whole table or a period that holds much of
+# one, meets them in their physical order, and an UPDATE writes a row anew
+# elsewhere in the table. So a row changed between two reads could move in
+# the next export.
+
+
+@contextmanager
+def _physical_order(db_session):
+    """Every connection opened meanwhile reads tables in their physical
+    order: no index or bitmap scan."""
+    engine = db_session.get_bind()
+
+    def no_index_scans(dbapi_connection, _record):
+        cursor = dbapi_connection.cursor()
+        for setting in (
+            "enable_indexscan",
+            "enable_indexonlyscan",
+            "enable_bitmapscan",
+        ):
+            cursor.execute(f"SET {setting} = off")
+        cursor.close()
+        # Committed, so that a rollback of the session's first transaction
+        # does not undo the settings.
+        dbapi_connection.commit()
+
+    db_session.commit()
+    sa_event.listen(engine, "connect", no_index_scans)
+    try:
+        yield
+    finally:
+        sa_event.remove(engine, "connect", no_index_scans)
+        db_session.rollback()
+
+
+def _last_ids(n):
+    """``n`` ids, in order, above every id ``uuid4`` is likely to have given
+    another row."""
+    return sorted(uuid.UUID("ffffffff" + uuid.uuid4().hex[8:]) for _ in range(n))
+
+
+#: Each row's created_at, in seconds after the period's start, the rows taken
+#: in id order. The first two share one; the last, the largest id, is the
+#: earliest. So "created_at, then id" is the last row, then the first two in
+#: id order. Id order alone gives another order; so does created_at alone once
+#: the plant has moved the first row behind the second.
+_SECONDS = (1, 1, 0)
+
+
+def _by_creation_then_id(ids):
+    return [str(row_id) for _, row_id in sorted(zip(_SECONDS, ids))]
+
+
+def _clustered_on_id(db_session, model):
+    """CLUSTER the table on its primary key: every row is written again in id
+    order, each page filled before the next, with no free line pointer and no
+    free space map. Rows of one size with the largest ids then sit last, in id
+    order, and an UPDATE of the first of them is written after the others:
+    its page has room for it only if it is the last page, where the new
+    version goes after them, and otherwise, with no free space map,
+    PostgreSQL takes the last page."""
+    db_session.commit()
+    engine = db_session.get_bind()
+    with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+        conn.execute(sql_text("SET search_path TO test_experimentation"))
+        conn.execute(sql_text("SET lock_timeout = '10s'"))
+        index = conn.execute(
+            sql_text(
+                "SELECT indexrelid::regclass::text FROM pg_index"
+                " WHERE indrelid = CAST(:table AS regclass) AND indisprimary"
+            ),
+            {"table": model.__tablename__},
+        ).scalar_one()
+        conn.execute(sql_text(f"CLUSTER {model.__tablename__} USING {index}"))
+
+
+def _ids_without_order(db_session, model, start, end):
+    """The ids as a query with no ORDER BY returns them."""
+    found = (
+        db_session.query(model.id)
+        .filter(model.created_at >= start, model.created_at <= end)
+        .all()
+    )
+    db_session.commit()
+    return [row_id for (row_id,) in found]
+
+
+def _rewrite(db_session, model, row_id):
+    """The plant: an UPDATE of the row that changes no value."""
+    db_session.query(model).filter(model.id == row_id).update(
+        {"created_at": model.created_at}, synchronize_session=False
+    )
+    db_session.commit()
+
+
+def _a_past_period():
+    """The first moment of a past period that holds no other row: the shared
+    test database is not truncated."""
+    return datetime(1980, 1, 1) + timedelta(
+        seconds=uuid.uuid4().int % (30 * 365 * 24 * 3600)
+    )
+
+
+def _exported_ids(admin_client, db_session, route, start, end, column):
+    db_session.expire_all()
+    response = admin_client.get(
+        f"/api/v1/export/{route}",
+        params={
+            "format": "json",
+            "start_date": start.isoformat(),
+            "end_date": end.isoformat(),
+        },
+    )
+    assert response.status_code == 200, response.text
+    # The variant export has a row per variant: the experiments in the order
+    # their rows first appear.
+    return list(dict.fromkeys(row[column] for row in response.json()))
+
+
+def _read_rewrite_read(admin_client, db_session, model, ids, start, end, route, column):
+    """The export read, the plant, the export read again, the rows read in
+    their physical order throughout. The table is first clustered, so the
+    rows start in id order and the plant moves the first one last."""
+    _clustered_on_id(db_session, model)
+    with _physical_order(db_session):
+        assert _ids_without_order(db_session, model, start, end) == ids
+        first = _exported_ids(admin_client, db_session, route, start, end, column)
+        _rewrite(db_session, model, ids[0])
+        assert _ids_without_order(db_session, model, start, end) != ids, (
+            "the plant did not move the row"
+        )
+        second = _exported_ids(admin_client, db_session, route, start, end, column)
+    return first, second
+
+
+@pytest.mark.integration
+@pytest.mark.requires_db
+@pytest.mark.regression
+@pytest.mark.parametrize("route", ["experiments", "variants"])
+def test_experiment_exports_list_experiments_by_creation_then_id(
+    admin_client, db_session, admin_user, route
+):
+    """The experiments and variants exports list the experiments by
+    created_at, then id, before and after one of them is written anew."""
+    start = _a_past_period()
+    end = start + timedelta(seconds=3)
+    ids = _last_ids(3)
+    suffix = uuid.uuid4().hex[:8]
+    db_session.add_all(
+        Experiment(
+            id=experiment_id,
+            name=f"Export order {suffix} {i}",
+            key=f"export-order-{suffix}-{i}",
+            status=ExperimentStatus.ACTIVE,
+            experiment_type=ExperimentType.A_B,
+            owner_id=admin_user.id,
+            start_date=datetime(2026, 9, 1, tzinfo=timezone.utc),
+            created_at=start + timedelta(seconds=_SECONDS[i]),
+            variants=[
+                Variant(name="control", is_control=True, traffic_allocation=50),
+                Variant(name="treatment", is_control=False, traffic_allocation=50),
+            ],
+        )
+        for i, experiment_id in enumerate(ids)
+    )
+    db_session.commit()
+    try:
+        first, second = _read_rewrite_read(
+            admin_client,
+            db_session,
+            Experiment,
+            ids,
+            start,
+            end,
+            route,
+            "experiment_id",
+        )
+        expected = _by_creation_then_id(ids)
+        assert first == expected
+        assert second == expected
+    finally:
+        _delete_experiments(db_session, ids)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_db
+@pytest.mark.regression
+def test_the_feature_flag_export_lists_flags_by_creation_then_id(
+    admin_client, db_session, admin_user
+):
+    """The feature-flag export lists the flags by created_at, then id, before
+    and after one of them is written anew."""
+    start = _a_past_period()
+    end = start + timedelta(seconds=3)
+    ids = _last_ids(3)
+    suffix = uuid.uuid4().hex[:8]
+    db_session.add_all(
+        FeatureFlag(
+            id=flag_id,
+            key=f"export-order-{suffix}-{i}",
+            name=f"Export order {suffix} {i}",
+            status=FeatureFlagStatus.INACTIVE,
+            owner_id=admin_user.id,
+            rollout_percentage=0,
+            created_at=start + timedelta(seconds=_SECONDS[i]),
+        )
+        for i, flag_id in enumerate(ids)
+    )
+    db_session.commit()
+    try:
+        first, second = _read_rewrite_read(
+            admin_client,
+            db_session,
+            FeatureFlag,
+            ids,
+            start,
+            end,
+            "feature-flags",
+            "flag_id",
+        )
+        expected = _by_creation_then_id(ids)
+        assert first == expected
+        assert second == expected
+    finally:
+        db_session.rollback()
+        db_session.query(FeatureFlag).filter(FeatureFlag.id.in_(ids)).delete(
+            synchronize_session=False
+        )
+        db_session.commit()
