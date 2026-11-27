@@ -54,8 +54,8 @@
 #   holdout's `holdoutLabel`, "Starts" and the start as the page drew it at
 #   the `date` step), and the note under the draft's settings
 #   (`experiment-api-settings-note`), which must read exactly "Set through the
-#   API, not on this page: a paused experiment's resume, turning sequential
-#   testing on or off after creation." (PE 1, EM-3).
+#   API, not on this page: turning sequential testing on or off after
+#   creation." (PE 1, EM-3).
 # * What each narrated claim rests on:
 #   - "Everyone else gets the control, and isn't enrolled": an ineligible user
 #     gets the control with `assigned: false` and no assignment

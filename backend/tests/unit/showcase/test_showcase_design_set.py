@@ -71,8 +71,8 @@ HOLDOUT = {
     "is_active": True,
 }
 NOTE = (
-    "Set through the API, not on this page: a paused experiment's resume, turning"
-    " sequential testing on or off after creation."
+    "Set through the API, not on this page: turning sequential testing on or off"
+    " after creation."
 )
 #: What the product draws at the payoff for the planted answer, written out by
 #: hand (not rendered by the mirrors under test).

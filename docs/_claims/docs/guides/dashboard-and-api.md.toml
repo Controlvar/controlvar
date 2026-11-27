@@ -144,7 +144,7 @@ text = "Schedule a draft experiment's start and end dates | Dashboard | Running 
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
-text = "Schedule a paused experiment's resume | API only | Running experiments"
+text = "Schedule a paused experiment's resume | Dashboard | Running experiments"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]

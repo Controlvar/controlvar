@@ -211,7 +211,7 @@ export const ExperimentsService = {
    * `end_date` are when the scheduler starts and completes it; a date the
    * body leaves out is kept, and null clears it. The answer is the
    * experiment. On a PAUSED experiment the API reads `start_date` as a
-   * resume time instead; the dashboard offers this on a draft only.
+   * resume time instead, stored as `resume_at`; a null one cancels it.
    */
   async schedule(id: string, body: ExperimentScheduleUpdate): Promise<Experiment> {
     return apiFetch<Experiment>(`${BASE}/${id}/schedule`, { method: 'PUT', json: body });

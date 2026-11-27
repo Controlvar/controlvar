@@ -79,6 +79,8 @@ export interface Experiment {
   owner_name?: string | null;
   start_date: string | null;
   end_date: string | null;
+  /** When a PAUSED experiment resumes by itself; null when none is scheduled. */
+  resume_at?: string | null;
   created_at: string;
   updated_at: string;
   variants: ExperimentVariant[];

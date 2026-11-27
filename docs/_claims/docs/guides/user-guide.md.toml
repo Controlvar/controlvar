@@ -685,6 +685,20 @@ text = "It is stored as resume_at (returned with the experiment); the experiment
 by = ["test:backend/tests/integration/services/test_scheduler_pause_semantics.py::test_p2_scheduled_resume_is_recorded_and_fires"]
 
 [[unit]]
+text = "In the dashboard, a paused experiment's page has Schedule resume, which opens one Resume at picker in your browser's time zone."
+by = [
+    "test:frontend/src/tests/pages/experiment-detail-schedule-resume.test.tsx::has one picker, \"Resume at\", and no end picker",
+    "test:frontend/src/tests/pages/experiment-detail-schedule-resume.test.tsx::opens on the stored resume_at, in the browser zone, not on the start date",
+]
+
+[[unit]]
+text = "Remove cancels a scheduled resume, and the page shows the time as Resumes."
+by = [
+    "test:frontend/src/tests/pages/experiment-detail-schedule-resume.test.tsx::Remove sends null for the resume time alone, and the page then says none is scheduled",
+    "test:frontend/src/tests/pages/experiment-detail-schedule-resume.test.tsx::every role sees when it resumes, and the page offers no form to ANALYST",
+]
+
+[[unit]]
 text = "On a paused experiment:"
 by = ["exempt:instruction"]
 

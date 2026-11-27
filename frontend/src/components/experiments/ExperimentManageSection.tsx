@@ -3,6 +3,8 @@ import { useRouter } from 'next/router';
 import { InlineConfirm } from '@/components/ui/InlineConfirm';
 import {
   ExperimentScheduleSection,
+  RESUME_HEADING,
+  RESUME_SAVED,
   SCHEDULE_HEADING,
   SCHEDULE_SAVED,
 } from '@/components/experiments/ExperimentScheduleSection';
@@ -164,6 +166,7 @@ const DANGER = `${BUTTON} bg-white text-red-700 border-red-300 hover:bg-red-50`;
  * Clone an experiment, and edit or delete a draft. It sits apart from the
  * lifecycle buttons, and offers only what the API would accept:
  * - Clone: any status, to a user who may create experiments.
+ * - Schedule resume: a PAUSED experiment, to a user who may change experiments.
  * - Schedule, Edit details and Edit variants and metrics: a DRAFT
  *   experiment, to a user who may change experiments.
  * - Delete draft: a DRAFT experiment, to a user who may delete experiments.
@@ -183,7 +186,11 @@ export function ExperimentManageSection({
   const isDraft = experiment.status === 'draft';
   const { effective } = useEffectivePermissions();
   const mayClone = canCreateExperiment(user, effective);
+  const isPaused = experiment.status === 'paused';
   const mayChangeDraft = isDraft && canChangeExperiment(user, effective);
+  // A paused experiment's resume time is the one thing besides a draft's dates
+  // the schedule route takes (#2283).
+  const mayScheduleResume = isPaused && canChangeExperiment(user, effective);
   const mayDeleteDraft = isDraft && canDeleteExperiment(user, effective);
 
   const [pending, setPending] = useState<ManageAction | null>(null);
@@ -210,7 +217,7 @@ export function ExperimentManageSection({
   const [scheduleSaved, setScheduleSaved] = useState(false);
   const [scheduleFocus, setScheduleFocus] = useState(false);
   const scheduleButton = useRef<HTMLButtonElement>(null);
-  const scheduling = scheduleOpen && mayChangeDraft;
+  const scheduling = scheduleOpen && (mayChangeDraft || mayScheduleResume);
 
   const editing = draft !== null;
   // Only a draft is ever edited: once it starts, the form goes.
@@ -233,7 +240,7 @@ export function ExperimentManageSection({
     setReturnFocus(null);
   }, [returnFocus, pending]);
 
-  if (!mayClone && !mayChangeDraft && !mayDeleteDraft) return null;
+  if (!mayClone && !mayChangeDraft && !mayScheduleResume && !mayDeleteDraft) return null;
 
   // The page hears it in the same render, so its cards and the form never
   // show together or both go missing.
@@ -404,9 +411,20 @@ export function ExperimentManageSection({
             {pending === 'clone' ? 'Cloning…' : 'Clone'}
           </button>
         )}
+        {mayScheduleResume && (
+          <button
+            ref={scheduleButton}
+            type="button"
+            onClick={openSchedule}
+            disabled={busy || scheduling}
+            className={SECONDARY}
+            data-testid="experiment-schedule"
+          >
+            {RESUME_HEADING}
+          </button>
+        )}
         {mayChangeDraft && (
           <>
-            {/* A draft only: on a PAUSED experiment the route schedules a resume, which stays in the API. */}
             <button
               ref={scheduleButton}
               type="button"
@@ -596,7 +614,7 @@ export function ExperimentManageSection({
 
       {scheduleSaved && (
         <p role="status" className="mt-3 text-sm text-green-700" data-testid="schedule-saved">
-          {SCHEDULE_SAVED}
+          {isPaused ? RESUME_SAVED : SCHEDULE_SAVED}
         </p>
       )}
 
