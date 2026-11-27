@@ -28,7 +28,9 @@ it: whether ``modules`` imports.
   ``enroll`` action an optional one, the current password; #449 added
   ``POST /api/v1/tracking/alias``; #2011 added
   ``PUT /api/v1/feature-flags/{flag_id}/environments/{environment}`` and
-  ``POST /api/v1/feature-flags/{flag_id}/environments/{target}/promote``). A new
+  ``POST /api/v1/feature-flags/{flag_id}/environments/{target}/promote``; the
+  visual editor's ``PATCH /api/v1/visual-editor/sessions/current/experiment``
+  added one more). A new
   route with a JSON body changes the count here: it is refused like the others
   (this test sends it the probe), and the number is bumped.
 * Form-body operations, named: FastAPI reads them with ``request.form()``, so
@@ -56,8 +58,8 @@ from backend.app.main import app
 
 pytestmark = [pytest.mark.smoke]
 
-CORE_JSON_BODY_COUNT = 88
-FULL_JSON_BODY_COUNT = 118
+CORE_JSON_BODY_COUNT = 89
+FULL_JSON_BODY_COUNT = 119
 
 FORM_OPERATIONS = {("POST", "/api/v1/auth/token")}
 MODULE_FORM_OPERATIONS = {("POST", "/api/v1/auth/sso/saml/{config_id}/acs")}

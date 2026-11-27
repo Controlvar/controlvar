@@ -28,6 +28,15 @@ else; no other route takes that token:
 * ``PUT /api/v1/visual-editor/sessions/current/variants/{variant_id}/changes``:
   saves one variant's page changes, through the experiment update's own
   steps (``experiments._apply_experiment_update``), as the session's user.
+* ``PATCH /api/v1/visual-editor/sessions/current/experiment``: saves the
+  draft's audience, split, metrics, goals and exclusion group, the design
+  through the same experiment update and the group through the exclusion
+  group service, refusing a request made from a version of the design that
+  has changed since.
+* ``GET /api/v1/visual-editor/sessions/current/segments`` and
+  ``GET /api/v1/visual-editor/sessions/current/exclusion-groups``: the active
+  segments and exclusion groups the editor may choose from, needing what
+  the dashboard's lists of them need.
 
 Each runs :func:`current_editor_session` first (signing out,
 :func:`signing_out_editor_session`). A session that cannot be used answers 401
@@ -41,6 +50,7 @@ import secrets
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
+from typing import List
 
 from fastapi import (
     APIRouter,
@@ -52,20 +62,35 @@ from fastapi import (
     Response,
     status,
 )
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from backend.app.api import deps
+from backend.app.api import deps, experiment_cache
 from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.api.v1.endpoints import experiments as experiments_endpoints
+from backend.app.api.v1.endpoints import (
+    mutual_exclusion_groups as exclusion_groups_endpoints,
+)
+from backend.app.api.v1.endpoints import segments as segments_endpoints
 from backend.app.core.logger import unexpected_failure
 from backend.app.core.logging import logger
+from backend.app.core.permissions import Action
 from backend.app.core.security import hash_api_key
+from backend.app.core.targeting_adapter import (
+    TargetingRulesError,
+    validate_segment_rules,
+)
 from backend.app.models.audit_log import ActionType, EntityType
 from backend.app.models.experiment import Experiment, ExperimentStatus
+from backend.app.models.mutual_exclusion_group import (
+    MutualExclusionGroup,
+    MutualExclusionGroupStatus,
+)
+from backend.app.models.segment import Segment, SegmentKind, SegmentStatus
 from backend.app.models.user import User
 from backend.app.models.visual_token import (
     EDITOR_CLAIM,
@@ -78,6 +103,9 @@ from backend.app.schemas.experiment import ExperimentUpdate, VariantBase
 from backend.app.schemas.visual import VisualChanges
 from backend.app.schemas.visual_editor import (
     ClaimExchange,
+    EditorDesignChange,
+    EditorExclusionGroup,
+    EditorSegment,
     EditorSessionOpened,
     EditorSessionState,
     TicketClaim,
@@ -85,6 +113,8 @@ from backend.app.schemas.visual_editor import (
 )
 from backend.app.services import visual_editor
 from backend.app.services.audit_service import AuditActor, AuditService
+from backend.app.services.mutual_exclusion_service import MutualExclusionService
+from backend.app.services.visual import design_etag
 from backend.app.services.visual_origins import (
     SITE_NOT_LISTED,
     dashboard_origin_refusal,
@@ -378,7 +408,7 @@ def open_editor_session(
         token = visual_editor.SESSION_TOKEN_PREFIX + secrets.token_urlsafe(32)
         expires_at = now + visual_editor.SESSION_LIFETIME
         session_id = uuid.uuid4()
-        state = visual_editor.session_state(experiment, expires_at)
+        state = visual_editor.session_state(db, experiment, expires_at, user)
         name = experiment.name
         experiment_id = experiment.id
         visual_editor.hold_editor(db, experiment_id)
@@ -557,16 +587,122 @@ _SESSION_REFUSALS = {
 def read_editor_session(
     response: Response,
     session: EditorSession = Depends(current_editor_session),
+    db: Session = Depends(deps.get_db),
 ) -> EditorSessionState:
     """
     The session's end, the experiment's sites the editor may run on, and the
     draft's design as stored now: the session's answer without its token.
-    Sent with `Cache-Control: no-store`.
+
+    The design is the draft's page changes, pages and editor page, its
+    audience (`targeting_rules`), each variant's share of the traffic, its
+    metrics (each as the experiment's own answer gives it), its goals, and
+    its exclusion group. `holdout` is the active global holdout, shown only
+    to a user who may create experiments. `capabilities` says which other
+    settings the editor may offer: none yet. Sent with
+    `Cache-Control: no-store`.
     """
     response.headers["Cache-Control"] = "no-store"
     return EditorSessionState(
-        **visual_editor.session_state(session.experiment, session.expires_at)
+        **visual_editor.session_state(
+            db, session.experiment, session.expires_at, session.user
+        )
     )
+
+
+@router.get(
+    "/sessions/current/segments",
+    response_model=List[EditorSegment],
+    summary="The segments the visual editor may choose from (beta)",
+    openapi_extra={"x-stability": "beta"},
+    responses={
+        **_SESSION_REFUSALS,
+        403: {
+            "description": (
+                "The request does not come from the dashboard, or the user may "
+                "not list experiments or may no longer change the experiment"
+            )
+        },
+    },
+)
+def list_editor_segments(
+    response: Response,
+    session: EditorSession = Depends(current_editor_session),
+    db: Session = Depends(deps.get_db),
+) -> List[EditorSegment]:
+    """
+    Every active segment, by id, name and kind, for the editor's audience
+    step. `rules_valid` says whether a segment can be used in an audience:
+    true for an id_list segment, and for a rules segment whose stored rules
+    are in the targeting rule format. Neither a segment's rules nor its
+    members are sent. Needs permission to list experiments, as
+    `GET /api/v1/segments` does. Sent with `Cache-Control: no-store`.
+    """
+    segments_endpoints._require_permission(session.user, Action.LIST)
+    rows = (
+        db.query(Segment)
+        .filter(Segment.status == SegmentStatus.ACTIVE)
+        .order_by(Segment.created_at, Segment.id)
+        .all()
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return [
+        EditorSegment(
+            id=row.id,
+            name=row.name,
+            kind=row.kind,
+            rules_valid=_rules_valid(row),
+        )
+        for row in rows
+    ]
+
+
+def _rules_valid(segment: Segment) -> bool:
+    """Whether *segment* can be used in an audience: an id list always, a
+    rules segment when its stored rules pass ``validate_segment_rules``."""
+    if segment.kind == SegmentKind.ID_LIST.value:
+        return True
+    try:
+        validate_segment_rules(segment.rules)
+    except TargetingRulesError:
+        return False
+    return True
+
+
+@router.get(
+    "/sessions/current/exclusion-groups",
+    response_model=List[EditorExclusionGroup],
+    summary="The exclusion groups the visual editor may choose from (beta)",
+    openapi_extra={"x-stability": "beta"},
+    responses={
+        **_SESSION_REFUSALS,
+        403: {
+            "description": (
+                "The request does not come from the dashboard, or the user may "
+                "not create experiments or may no longer change the experiment"
+            )
+        },
+    },
+)
+def list_editor_exclusion_groups(
+    response: Response,
+    session: EditorSession = Depends(current_editor_session),
+    db: Session = Depends(deps.get_db),
+) -> List[EditorExclusionGroup]:
+    """
+    Every active mutual exclusion group, by id and name, for the editor's
+    split step. Needs permission to create experiments, as
+    `GET /api/v1/mutual-exclusion-groups` does. Sent with
+    `Cache-Control: no-store`.
+    """
+    exclusion_groups_endpoints._require_developer(session.user)
+    rows = (
+        db.query(MutualExclusionGroup)
+        .filter(MutualExclusionGroup.status == MutualExclusionGroupStatus.ACTIVE)
+        .order_by(MutualExclusionGroup.created_at, MutualExclusionGroup.id)
+        .all()
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return [EditorExclusionGroup(id=row.id, name=row.name) for row in rows]
 
 
 @router.delete(
@@ -708,4 +844,207 @@ async def save_variant_changes(
     db.expire_all()
     saved = db.query(Experiment).filter(Experiment.id == experiment_id).first()
     response.headers["Cache-Control"] = "no-store"
-    return EditorSessionState(**visual_editor.session_state(saved, session.expires_at))
+    return EditorSessionState(
+        **visual_editor.session_state(db, saved, session.expires_at, session.user)
+    )
+
+
+def _design_update(
+    experiment: Experiment, change: EditorDesignChange, shares
+) -> ExperimentUpdate | None:
+    """The experiment update for the parts of *change* that were sent, built
+    as a dashboard save would send them, or ``None`` when none was. Every
+    variant is sent with all it stores, only its share taken from *shares*,
+    and without its page changes, so it keeps the ones stored for its name;
+    the goals are sent inside the stored visual settings. Anything the
+    update refuses here is a 422 in the request validation's own shape."""
+    sent = change.model_fields_set
+    fields = {}
+    if "targeting_rules" in sent:
+        fields["targeting_rules"] = change.targeting_rules
+    if "metrics" in sent:
+        fields["metrics"] = change.metrics
+    try:
+        if "variants" in sent:
+            fields["variants"] = [
+                _variant_body(variant, None).model_copy(
+                    update={"traffic_allocation": shares[variant.id]}
+                )
+                for variant in experiment.variants
+            ]
+        if "goals" in sent:
+            fields["visual_config"] = {
+                **(experiment.visual_config or {}),
+                "goals": [goal.model_dump(mode="json") for goal in change.goals],
+            }
+        if not fields:
+            return None
+        return ExperimentUpdate(**fields)
+    except ValidationError as exc:
+        raise RequestValidationError(
+            [
+                {**error, "loc": ("body", *error["loc"])}
+                for error in exc.errors(include_url=False)
+            ]
+        ) from None
+
+
+_DESIGN_REFUSALS = {
+    **_SESSION_REFUSALS,
+    403: {
+        "description": (
+            "The request does not come from the dashboard, the user may no "
+            "longer change the experiment, or the exclusion group changes and "
+            "the user may not create experiments"
+        )
+    },
+    409: {
+        "description": (
+            "The design changed after the editor loaded it; nothing was saved"
+        )
+    },
+    422: {
+        "description": (
+            "The request is not in the documented form, the split does not "
+            "name each variant once, the exclusion group does not exist or is "
+            "archived, or the change is refused as an experiment update "
+            "refuses it"
+        )
+    },
+}
+
+
+@router.patch(
+    "/sessions/current/experiment",
+    response_model=EditorSessionState,
+    summary="Save a draft's audience, split, metrics and goals from the visual editor (beta)",
+    openapi_extra={"x-stability": "beta"},
+    responses=_DESIGN_REFUSALS,
+)
+async def save_experiment_design(
+    response: Response,
+    change: EditorDesignChange = Body(...),
+    session: EditorSession = Depends(current_editor_session),
+    db: Session = Depends(deps.get_db),
+    cache_control: deps.CacheControl = Depends(editor_cache_control),
+) -> EditorSessionState:
+    """
+    Save the parts of the draft's design the request sends: who can join
+    (`targeting_rules`), the split (`variants`), the metrics, the goals and
+    the exclusion group. A part left out is not changed, and neither is
+    anything else: each variant's name, description, configuration and page
+    changes, the visual settings' pages and editor page, the split's balance
+    and the analysis settings.
+
+    Checked before anything is written, in this order, after the session's
+    own checks: 422 when the request is not in the documented form (any
+    other key, `start_date` and `balance_within` included) or the split
+    does not name each of the draft's variants exactly once; 409 when
+    `design_etag` is not the design's current version; when the exclusion
+    group changes, 403 unless the user may create experiments, then 422
+    unless the group exists and is active; then 422 for anything an
+    experiment update refuses, with its `detail`.
+
+    The design is saved as the experiment update's own write: one
+    "Experiment changed" entry by the session's user with the reason
+    `visual editor session <first 8 characters of the session's id>`, and
+    the cached experiment is dropped. A changed exclusion group is then
+    saved as the exclusion group routes save it, with their entry and the
+    same reason. A request with only `design_etag` saves nothing. The answer
+    is the session's, with the new `design_etag` (and, when the split was
+    saved, the variants' new ids). Sent with `Cache-Control: no-store`.
+    """
+    experiment = session.experiment
+    sent = change.model_fields_set
+    shares = None
+    if "variants" in sent:
+        shares = visual_editor.shares_by_variant(experiment.variants, change.variants)
+    if change.design_etag != design_etag(experiment):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=visual_editor.DESIGN_CHANGED
+        )
+    group_change = None
+    if "mutual_exclusion_group_id" in sent and (
+        change.mutual_exclusion_group_id != experiment.mutual_exclusion_group_id
+    ):
+        exclusion_groups_endpoints._require_developer(session.user)
+        wanted = change.mutual_exclusion_group_id
+        if wanted is not None:
+            group = db.get(MutualExclusionGroup, wanted)
+            if group is None or group.status != MutualExclusionGroupStatus.ACTIVE:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    detail=visual_editor.GROUP_NOT_AVAILABLE,
+                )
+        group_change = (experiment.mutual_exclusion_group_id, wanted)
+    update_in = _design_update(experiment, change, shares)
+
+    experiment_id = experiment.id
+    reason = f"visual editor session {session.id.hex[:8]}"
+    if update_in is not None:
+        await experiments_endpoints._apply_experiment_update(
+            db,
+            experiment_id,
+            update_in,
+            session.user,
+            cache_control,
+            audit_reason=reason,
+        )
+    if group_change is not None:
+        await _change_group(db, session.user, experiment_id, *group_change, reason)
+
+    db.expire_all()
+    saved = db.query(Experiment).filter(Experiment.id == experiment_id).first()
+    response.headers["Cache-Control"] = "no-store"
+    return EditorSessionState(
+        **visual_editor.session_state(db, saved, session.expires_at, session.user)
+    )
+
+
+async def _change_group(
+    db: Session, user: User, experiment_id, leaving, joining, reason: str
+) -> None:
+    """Move the experiment from the group *leaving* to the group *joining*
+    (either may be ``None``) as the exclusion group routes do: through
+    ``MutualExclusionService``, one entry per group changed with *reason*,
+    and the cached experiment dropped once anything is committed."""
+    service = MutualExclusionService(db)
+    moved = False
+    failure = None
+    try:
+        if leaving is not None:
+            service.remove_experiment_from_group(leaving, experiment_id)
+            moved = True
+            exclusion_groups_endpoints._record(
+                db,
+                user,
+                ActionType.MUTUAL_EXCLUSION_GROUP_UPDATE,
+                leaving,
+                exclusion_groups_endpoints._group_name(db, leaving),
+                before={"experiment_id": str(experiment_id)},
+                reason=reason,
+            )
+        if joining is not None:
+            service.add_experiment_to_group(joining, experiment_id)
+            moved = True
+            exclusion_groups_endpoints._record(
+                db,
+                user,
+                ActionType.MUTUAL_EXCLUSION_GROUP_UPDATE,
+                joining,
+                exclusion_groups_endpoints._group_name(db, joining),
+                after={"experiment_id": str(experiment_id)},
+                reason=reason,
+            )
+    except Exception as exc:
+        failure = unexpected_failure(
+            exc,
+            "Visual editor exclusion group change",
+            "Could not change the experiment's exclusion group",
+            db=db,
+            logger=logger,
+        )
+    if moved:
+        await experiment_cache.drop_cached_experiment_details([experiment_id])
+    if failure is not None:
+        raise failure

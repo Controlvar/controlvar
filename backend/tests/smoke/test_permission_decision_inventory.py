@@ -383,6 +383,14 @@ DECIDER_CALLS = {
         "check_permission",
         "ResourceType.EXPERIMENT, action",
     ),
+    # The visual editor session shows the global holdout to whoever may read
+    # it on the dashboard: experiment (create), as global_holdout.py asks.
+    (
+        "services/visual_editor.py",
+        "holdout_for",
+        "check_permission",
+        "ResourceType.EXPERIMENT, Action.CREATE",
+    ),
 }
 
 ROLE_READS = {

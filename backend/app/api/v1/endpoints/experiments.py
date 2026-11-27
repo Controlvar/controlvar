@@ -1218,7 +1218,8 @@ async def _apply_experiment_update(
     writer of a design goes through the same steps (#1545). Its callers are
     the ``PUT /{experiment_id}`` route (reason ``None``) and the visual
     editor's ``PUT /visual-editor/sessions/current/variants/{variant_id}/changes``
-    (reason ``visual editor session <8 hex>``); nothing else.
+    and ``PATCH /visual-editor/sessions/current/experiment`` (reason
+    ``visual editor session <8 hex>``); nothing else.
     """
     try:
         # Get experiment. A request that sends visual_config reads the row

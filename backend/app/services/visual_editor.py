@@ -46,8 +46,10 @@ from fastapi import HTTPException, status
 from sqlalchemy import select, text, update
 from sqlalchemy.orm import Session
 
+from backend.app.core.permissions import Action, ResourceType, check_permission
 from backend.app.models.audit_log import ActionType, EntityType
 from backend.app.models.experiment import Experiment, ExperimentStatus
+from backend.app.models.mutual_exclusion_group import MutualExclusionGroup
 from backend.app.models.visual_token import (
     EDITOR_KINDS,
     EDITOR_SESSION,
@@ -59,6 +61,7 @@ from backend.app.models.visual_token import (
     VisualToken,
 )
 from backend.app.services.audit_service import SYSTEM_VISUAL_EDITOR, AuditService
+from backend.app.services.global_holdout_service import GlobalHoldoutService
 from backend.app.services.visual import design_etag, is_visual
 from backend.app.services.visual_origins import site_origins
 
@@ -109,6 +112,20 @@ EXPERIMENT_NOT_FOUND = "Experiment not found"
 EXPERIMENT_GONE = "This experiment no longer exists."
 #: A variant id that is not one of the session's experiment's (404).
 VARIANT_NOT_FOUND = "This experiment has no variant with that id."
+#: A save made from a version of the design that has changed since (409).
+DESIGN_CHANGED = (
+    "This experiment's design changed in Controlvar after the editor loaded "
+    "it, so this step was not saved. Reload the editor to see the change."
+)
+#: A split that does not name each of the experiment's variants once (422).
+SPLIT_NOT_EACH_VARIANT = (
+    "A split names each of the experiment's variants exactly once, by its "
+    "id. Reload the editor to see the experiment's variants."
+)
+#: An exclusion group that does not exist or is archived (422).
+GROUP_NOT_AVAILABLE = (
+    "That exclusion group does not exist or has been archived. Choose an active group."
+)
 
 #: The reason codes an editor session's 401 carries besides the stored
 #: ``revoked_reason`` values: no session has that token, or it has ended.
@@ -335,9 +352,26 @@ def refuse_unless_open_to_edit(experiment: Any) -> None:
 # --- answers and audit -------------------------------------------------------------
 
 
-def session_state(experiment: Any, expires_at: datetime) -> Dict[str, Any]:
+#: What the editor may offer besides the design's own fields: nothing yet.
+CAPABILITIES: Dict[str, bool] = {"balance_within": False, "country": False}
+
+
+def session_state(
+    db: Session, experiment: Any, expires_at: datetime, user: Any
+) -> Dict[str, Any]:
     """What the editor's panel is told about its session: when it ends, the
-    sites it may run on, and the experiment's design as stored now."""
+    sites it may run on, and the experiment's design as stored now.
+
+    The audience, the split, the metrics and the goals are the experiment's
+    own answer's (``GET /api/v1/experiments/{id}``) for the same row; the
+    global holdout is shown only to *user* if they may create experiments."""
+    # Imported here: the experiment service imports this module.
+    from backend.app.schemas.experiment import ExperimentResponse
+    from backend.app.services.experiment_service import ExperimentService
+
+    shown = ExperimentResponse.model_validate(
+        ExperimentService(db).to_response_dict(experiment)
+    )
     config = experiment.visual_config or {}
     return {
         "expires_at": expires_at,
@@ -354,12 +388,54 @@ def session_state(experiment: Any, expires_at: datetime) -> Dict[str, Any]:
                     "id": variant.id,
                     "name": variant.name,
                     "is_control": bool(variant.is_control),
+                    "traffic_allocation": variant.traffic_allocation,
                     "visual_changes": variant.visual_changes,
                 }
                 for variant in experiment.variants
             ],
+            "targeting_rules": shown.targeting_rules,
+            "metrics": shown.metrics,
+            "goals": list((shown.visual_config or {}).get("goals") or []),
+            "mutual_exclusion_group": exclusion_group_of(
+                db, shown.mutual_exclusion_group_id
+            ),
+            "holdout": holdout_for(db, user),
+            "capabilities": dict(CAPABILITIES),
         },
     }
+
+
+def shares_by_variant(stored: List[Any], sent: List[Any]) -> Dict[Any, int]:
+    """Each stored variant's id to the share *sent* gives it, or the 422
+    :data:`SPLIT_NOT_EACH_VARIANT` unless *sent* names each of *stored*
+    exactly once, and nothing else."""
+    ids = [share.id for share in sent]
+    if len(ids) != len(set(ids)) or set(ids) != {variant.id for variant in stored}:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=SPLIT_NOT_EACH_VARIANT,
+        )
+    return {share.id: share.traffic_allocation for share in sent}
+
+
+def exclusion_group_of(db: Session, group_id: Any) -> Optional[Dict[str, Any]]:
+    """``{id, name}`` of the mutual exclusion group *group_id*, or ``None``
+    when it is ``None`` or no such group exists."""
+    if group_id is None:
+        return None
+    group = db.get(MutualExclusionGroup, group_id)
+    return None if group is None else {"id": group.id, "name": group.name}
+
+
+def holdout_for(db: Session, user: Any) -> Optional[Dict[str, Any]]:
+    """``{percentage}`` of the active global holdout for a *user* who may
+    create experiments; ``None`` for anyone else, and when none is active."""
+    if user is None or not check_permission(
+        user, ResourceType.EXPERIMENT, Action.CREATE
+    ):
+        return None
+    holdout = GlobalHoldoutService(db).get_active_holdout()
+    return None if holdout is None else {"percentage": holdout.holdout_percentage}
 
 
 def audit_sessions_closed(

@@ -136,6 +136,10 @@ WORDS = {
         (("experiment", "update"), "change segments and their members"),
         (("experiment", "delete"), "archive segments"),
     ],
+    # The visual editor session shows the global holdout as the dashboard does.
+    ("services/visual_editor.py", "holdout_for"): [
+        (("experiment", "create"), "read the global holdout")
+    ],
 }
 
 #: Decider calls that need no row words: pairs every built-in role holds, the

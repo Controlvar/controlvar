@@ -600,10 +600,11 @@ by = [
 ]
 
 [[unit]]
-text = "experiment_update | experiment | PUT /visual-editor/sessions/current/variants/{variant_id}/changes saves a variant's page changes from the visual editor, the actor being the session's user; reason is visual editor session and the first 8 characters of the session's id"
+text = "experiment_update | experiment | PUT /visual-editor/sessions/current/variants/{variant_id}/changes saves a variant's page changes from the visual editor, and PATCH /visual-editor/sessions/current/experiment its audience, split, metrics or goals, one entry per save, the actor being the session's user; reason is visual editor session and the first 8 characters of the session's id"
 by = [
     "test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact",
     "test:backend/tests/integration/api/test_visual_editor_sign_in.py::test_a_save_is_one_experiment_change_by_the_editors_user",
+    "test:backend/tests/integration/api/test_visual_editor_session_design.py::test_each_save_is_one_experiment_change_naming_what_changed",
 ]
 
 [[unit]]
@@ -682,10 +683,11 @@ by = [
 ]
 
 [[unit]]
-text = "mutual_exclusion_group_create, mutual_exclusion_group_update, mutual_exclusion_group_archive | mutual_exclusion_group | Create, PUT, and DELETE (which archives). Adding or removing an experiment is an update with {\"experiment_id\": ...} and the reason experiment added or experiment removed"
+text = "mutual_exclusion_group_create, mutual_exclusion_group_update, mutual_exclusion_group_archive | mutual_exclusion_group | Create, PUT, and DELETE (which archives). Adding or removing an experiment is an update with {\"experiment_id\": ...} and the reason experiment added or experiment removed; from the visual editor (PATCH /visual-editor/sessions/current/experiment) the actor is the session's user and the reason is visual editor session and the first 8 characters of the session's id"
 by = [
     "test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact",
     "test:backend/tests/integration/api/test_audit_route_events.py::test_exclusion_group_routes",
+    "test:backend/tests/integration/api/test_visual_editor_session_design.py::test_a_save_moves_the_draft_between_exclusion_groups",
 ]
 
 [[unit]]

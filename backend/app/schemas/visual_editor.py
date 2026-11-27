@@ -1,4 +1,4 @@
-"""The bodies of the visual editor's sign-in routes (#1545).
+"""The bodies of the visual editor's sign-in and session routes (#1545).
 
 ``backend/app/services/visual_editor.py`` holds what each route does with
 them. A request body refuses any key it does not name (``extra="forbid"``).
@@ -8,13 +8,22 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic_core import PydanticCustomError
 
+from backend.app.schemas.experiment import MetricBase, MetricResponse, VariantBase
+from backend.app.schemas.segment import SEGMENT_KIND_DESCRIPTION, SegmentKind
 from backend.app.schemas.storable_text import StorableTextModel
+from backend.app.schemas.visual import VisualGoal
+
+#: A variant's share of the traffic, with the bounds an experiment update
+#: puts on it (``VariantBase.traffic_allocation``'s own).
+TrafficShare = Annotated[
+    (int, *VariantBase.model_fields["traffic_allocation"].metadata)
+]
 
 #: The value the page sends with an editor link's ticket: exactly 43
 #: base64url characters, no padding.
@@ -110,8 +119,37 @@ class EditorVariant(BaseModel):
     id: UUID
     name: str
     is_control: bool
+    traffic_allocation: int = Field(
+        ..., description="The variant's share of the traffic, in percent."
+    )
     visual_changes: Optional[Dict[str, Any]] = Field(
         None, description="The variant's page changes as stored, or null."
+    )
+
+
+class EditorExclusionGroup(BaseModel):
+    """A mutual exclusion group, by id and name."""
+
+    id: UUID
+    name: str
+
+
+class EditorHoldout(BaseModel):
+    """The active global holdout."""
+
+    percentage: int = Field(
+        ..., description="The share of all users held out of every experiment."
+    )
+
+
+class EditorCapabilities(BaseModel):
+    """Which settings the editor may offer for this draft."""
+
+    balance_within: bool = Field(
+        ..., description="Whether the editor may set the split's balance: false."
+    )
+    country: bool = Field(
+        ..., description="Whether visitors' country can be targeted: false."
     )
 
 
@@ -126,6 +164,30 @@ class EditorExperiment(BaseModel):
         description="The design's version, as the experiment's own answer gives it.",
     )
     variants: List[EditorVariant]
+    targeting_rules: Optional[Dict[str, Any]] = Field(
+        None,
+        description=(
+            "Who can join, as stored: the experiment's own answer's targeting_rules."
+        ),
+    )
+    metrics: List[MetricResponse] = Field(
+        ...,
+        description="The draft's metrics, each as the experiment's own answer gives it.",
+    )
+    goals: List[Dict[str, Any]] = Field(
+        ..., description="The draft's goals, as stored in its visual settings."
+    )
+    mutual_exclusion_group: Optional[EditorExclusionGroup] = Field(
+        None, description="The exclusion group the draft is in, or null."
+    )
+    holdout: Optional[EditorHoldout] = Field(
+        None,
+        description=(
+            "The active global holdout; null when none is active, and for a "
+            "user who may not create experiments."
+        ),
+    )
+    capabilities: EditorCapabilities
 
 
 class EditorSessionState(BaseModel):
@@ -152,5 +214,87 @@ class EditorSessionOpened(EditorSessionState):
         description=(
             "`cves_` and 43 base64url characters: the session's bearer token "
             "for the visual editor's session routes and no other."
+        ),
+    )
+
+
+class EditorSegment(BaseModel):
+    """An active segment, as the editor lists it to choose from."""
+
+    id: UUID
+    name: str
+    kind: SegmentKind = Field(..., description=SEGMENT_KIND_DESCRIPTION)
+    rules_valid: bool = Field(
+        ...,
+        description=(
+            "Whether the segment can be used in an audience: true for an "
+            "id_list segment, and for a rules segment whose stored rules are "
+            "in the targeting rule format."
+        ),
+    )
+
+
+class EditorSplitShare(StorableTextModel):
+    """One variant's share of the traffic, by the variant's id."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: UUID = Field(..., description="One of the draft's variants, by its id.")
+    traffic_allocation: TrafficShare = Field(
+        ..., description="The variant's share of the traffic, in percent."
+    )
+
+
+class EditorDesignChange(StorableTextModel):
+    """What the visual editor saves of a draft's design besides its page
+    changes. Each part left out is not changed."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    design_etag: str = Field(
+        ...,
+        min_length=1,
+        max_length=128,
+        description=(
+            "The design_etag of the version the editor shows, from the "
+            "session's last answer. A different one answers 409 and nothing "
+            "is saved."
+        ),
+    )
+    targeting_rules: Optional[Dict[str, Any]] = Field(
+        None,
+        description=(
+            "Who can join, as PUT /api/v1/experiments/{id} takes it; null "
+            "removes the audience."
+        ),
+    )
+    variants: List[EditorSplitShare] = Field(
+        None,
+        description=(
+            "The split: each of the draft's variants exactly once, by id, "
+            "with its share. Everything else about a variant is kept as "
+            "stored. The variants are saved again, so each gets a new id."
+        ),
+    )
+    metrics: List[MetricBase] = Field(
+        None,
+        description=(
+            "The draft's metrics, replacing the stored ones, as "
+            "PUT /api/v1/experiments/{id} takes them."
+        ),
+    )
+    goals: List[VisualGoal] = Field(
+        None,
+        description=(
+            "The draft's goals, replacing the stored ones; its pages and "
+            "editor page are kept."
+        ),
+    )
+    mutual_exclusion_group_id: Optional[UUID] = Field(
+        None,
+        description=(
+            "The active exclusion group to put the draft in, or null to take "
+            "it out of its group. Changing it needs permission to create "
+            "experiments."
         ),
     )

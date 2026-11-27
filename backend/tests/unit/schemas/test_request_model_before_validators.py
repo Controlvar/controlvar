@@ -54,9 +54,11 @@ pytestmark = [pytest.mark.unit]
 #: added 1 to both: /admin/app-users/erase (AppUserEraseRequest). #449 added
 #: 1 to both: the body of /tracking/alias (AliasRequest). #2011 added 2 to
 #: both: the bodies of a flag's environment PUT (FlagEnvironmentUpdate) and
-#: promotion (FlagPromotion).
-CORE_MODEL_COUNT = 102
-FULL_MODEL_COUNT = 146
+#: promotion (FlagPromotion). #1545's visual editor design save added 2 to
+#: both: its body (EditorDesignChange) and a variant's share in it
+#: (EditorSplitShare).
+CORE_MODEL_COUNT = 104
+FULL_MODEL_COUNT = 148
 
 #: ``(model, field)`` pairs that a ``mode="before"`` field validator covers.
 #: #2011 added 2: FlagEnvironmentUpdate's is_active and rollout_percentage.

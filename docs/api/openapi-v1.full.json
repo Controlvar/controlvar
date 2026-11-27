@@ -5412,8 +5412,134 @@
         "title": "ETLJobType",
         "type": "string"
       },
+      "EditorCapabilities": {
+        "description": "Which settings the editor may offer for this draft.",
+        "properties": {
+          "balance_within": {
+            "description": "Whether the editor may set the split's balance: false.",
+            "title": "Balance Within",
+            "type": "boolean"
+          },
+          "country": {
+            "description": "Whether visitors' country can be targeted: false.",
+            "title": "Country",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "balance_within",
+          "country"
+        ],
+        "title": "EditorCapabilities",
+        "type": "object"
+      },
+      "EditorDesignChange": {
+        "additionalProperties": false,
+        "description": "What the visual editor saves of a draft's design besides its page\nchanges. Each part left out is not changed.",
+        "properties": {
+          "design_etag": {
+            "description": "The design_etag of the version the editor shows, from the session's last answer. A different one answers 409 and nothing is saved.",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Design Etag",
+            "type": "string"
+          },
+          "goals": {
+            "description": "The draft's goals, replacing the stored ones; its pages and editor page are kept.",
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "click": "#/components/schemas/ClickGoal",
+                  "page_view": "#/components/schemas/PageViewGoal"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/ClickGoal"
+                },
+                {
+                  "$ref": "#/components/schemas/PageViewGoal"
+                }
+              ]
+            },
+            "title": "Goals",
+            "type": "array"
+          },
+          "metrics": {
+            "description": "The draft's metrics, replacing the stored ones, as PUT /api/v1/experiments/{id} takes them.",
+            "items": {
+              "$ref": "#/components/schemas/MetricBase"
+            },
+            "title": "Metrics",
+            "type": "array"
+          },
+          "mutual_exclusion_group_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The active exclusion group to put the draft in, or null to take it out of its group. Changing it needs permission to create experiments.",
+            "title": "Mutual Exclusion Group Id"
+          },
+          "targeting_rules": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Who can join, as PUT /api/v1/experiments/{id} takes it; null removes the audience.",
+            "title": "Targeting Rules"
+          },
+          "variants": {
+            "description": "The split: each of the draft's variants exactly once, by id, with its share. Everything else about a variant is kept as stored. The variants are saved again, so each gets a new id.",
+            "items": {
+              "$ref": "#/components/schemas/EditorSplitShare"
+            },
+            "title": "Variants",
+            "type": "array"
+          }
+        },
+        "required": [
+          "design_etag"
+        ],
+        "title": "EditorDesignChange",
+        "type": "object"
+      },
+      "EditorExclusionGroup": {
+        "description": "A mutual exclusion group, by id and name.",
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "EditorExclusionGroup",
+        "type": "object"
+      },
       "EditorExperiment": {
         "properties": {
+          "capabilities": {
+            "$ref": "#/components/schemas/EditorCapabilities"
+          },
           "design_etag": {
             "anyOf": [
               {
@@ -5437,6 +5563,26 @@
             ],
             "title": "Editor Url"
           },
+          "goals": {
+            "description": "The draft's goals, as stored in its visual settings.",
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Goals",
+            "type": "array"
+          },
+          "holdout": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EditorHoldout"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The active global holdout; null when none is active, and for a user who may not create experiments."
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -5453,6 +5599,25 @@
             ],
             "title": "Key"
           },
+          "metrics": {
+            "description": "The draft's metrics, each as the experiment's own answer gives it.",
+            "items": {
+              "$ref": "#/components/schemas/MetricResponse"
+            },
+            "title": "Metrics",
+            "type": "array"
+          },
+          "mutual_exclusion_group": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EditorExclusionGroup"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The exclusion group the draft is in, or null."
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -5464,6 +5629,19 @@
             },
             "title": "Pages",
             "type": "array"
+          },
+          "targeting_rules": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Who can join, as stored: the experiment's own answer's targeting_rules.",
+            "title": "Targeting Rules"
           },
           "variants": {
             "items": {
@@ -5477,9 +5655,27 @@
           "id",
           "name",
           "pages",
-          "variants"
+          "variants",
+          "metrics",
+          "goals",
+          "capabilities"
         ],
         "title": "EditorExperiment",
+        "type": "object"
+      },
+      "EditorHoldout": {
+        "description": "The active global holdout.",
+        "properties": {
+          "percentage": {
+            "description": "The share of all users held out of every experiment.",
+            "title": "Percentage",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "percentage"
+        ],
+        "title": "EditorHoldout",
         "type": "object"
       },
       "EditorLinkOpened": {
@@ -5502,6 +5698,37 @@
           "expires_at"
         ],
         "title": "EditorLinkOpened",
+        "type": "object"
+      },
+      "EditorSegment": {
+        "description": "An active segment, as the editor lists it to choose from.",
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/SegmentKind",
+            "description": "rules: users whose attributes match `rules`. id_list: users whose user_id is in the segment's list, added with POST /segments/{segment_id}/members; an id_list segment has no rules. Set when the segment is created and never changed."
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "rules_valid": {
+            "description": "Whether the segment can be used in an audience: true for an id_list segment, and for a rules segment whose stored rules are in the targeting rule format.",
+            "title": "Rules Valid",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "kind",
+          "rules_valid"
+        ],
+        "title": "EditorSegment",
         "type": "object"
       },
       "EditorSessionOpened": {
@@ -5589,6 +5816,31 @@
         "title": "EditorSessionState",
         "type": "object"
       },
+      "EditorSplitShare": {
+        "additionalProperties": false,
+        "description": "One variant's share of the traffic, by the variant's id.",
+        "properties": {
+          "id": {
+            "description": "One of the draft's variants, by its id.",
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "traffic_allocation": {
+            "description": "The variant's share of the traffic, in percent.",
+            "maximum": 100,
+            "minimum": 0,
+            "title": "Traffic Allocation",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "traffic_allocation"
+        ],
+        "title": "EditorSplitShare",
+        "type": "object"
+      },
       "EditorVariant": {
         "properties": {
           "id": {
@@ -5603,6 +5855,11 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "traffic_allocation": {
+            "description": "The variant's share of the traffic, in percent.",
+            "title": "Traffic Allocation",
+            "type": "integer"
           },
           "visual_changes": {
             "anyOf": [
@@ -5621,7 +5878,8 @@
         "required": [
           "id",
           "name",
-          "is_control"
+          "is_control",
+          "traffic_allocation"
         ],
         "title": "EditorVariant",
         "type": "object"
@@ -39007,7 +39265,7 @@
         "x-stability": "beta"
       },
       "get": {
-        "description": "The session's end, the experiment's sites the editor may run on, and the\ndraft's design as stored now: the session's answer without its token.\nSent with `Cache-Control: no-store`.",
+        "description": "The session's end, the experiment's sites the editor may run on, and the\ndraft's design as stored now: the session's answer without its token.\n\nThe design is the draft's page changes, pages and editor page, its\naudience (`targeting_rules`), each variant's share of the traffic, its\nmetrics (each as the experiment's own answer gives it), its goals, and\nits exclusion group. `holdout` is the active global holdout, shown only\nto a user who may create experiments. `capabilities` says which other\nsettings the editor may offer: none yet. Sent with\n`Cache-Control: no-store`.",
         "operationId": "read_editor_session_api_v1_visual_editor_sessions_current_get",
         "responses": {
           "200": {
@@ -39041,6 +39299,156 @@
           }
         },
         "summary": "The visual editor session and its draft (beta)",
+        "tags": [
+          "Visual Editor"
+        ],
+        "x-stability": "beta"
+      }
+    },
+    "/api/v1/visual-editor/sessions/current/exclusion-groups": {
+      "get": {
+        "description": "Every active mutual exclusion group, by id and name, for the editor's\nsplit step. Needs permission to create experiments, as\n`GET /api/v1/mutual-exclusion-groups` does. Sent with\n`Cache-Control: no-store`.",
+        "operationId": "list_editor_exclusion_groups_api_v1_visual_editor_sessions_current_exclusion_groups_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/EditorExclusionGroup"
+                  },
+                  "title": "Response List Editor Exclusion Groups Api V1 Visual Editor Sessions Current Exclusion Groups Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "The experiment is no longer a draft, or has a start date"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EditorSessionRefusal"
+                }
+              }
+            },
+            "description": "The session cannot be used; reason says why"
+          },
+          "403": {
+            "description": "The request does not come from the dashboard, or the user may not create experiments or may no longer change the experiment"
+          },
+          "404": {
+            "description": "The experiment no longer exists"
+          }
+        },
+        "summary": "The exclusion groups the visual editor may choose from (beta)",
+        "tags": [
+          "Visual Editor"
+        ],
+        "x-stability": "beta"
+      }
+    },
+    "/api/v1/visual-editor/sessions/current/experiment": {
+      "patch": {
+        "description": "Save the parts of the draft's design the request sends: who can join\n(`targeting_rules`), the split (`variants`), the metrics, the goals and\nthe exclusion group. A part left out is not changed, and neither is\nanything else: each variant's name, description, configuration and page\nchanges, the visual settings' pages and editor page, the split's balance\nand the analysis settings.\n\nChecked before anything is written, in this order, after the session's\nown checks: 422 when the request is not in the documented form (any\nother key, `start_date` and `balance_within` included) or the split\ndoes not name each of the draft's variants exactly once; 409 when\n`design_etag` is not the design's current version; when the exclusion\ngroup changes, 403 unless the user may create experiments, then 422\nunless the group exists and is active; then 422 for anything an\nexperiment update refuses, with its `detail`.\n\nThe design is saved as the experiment update's own write: one\n\"Experiment changed\" entry by the session's user with the reason\n`visual editor session <first 8 characters of the session's id>`, and\nthe cached experiment is dropped. A changed exclusion group is then\nsaved as the exclusion group routes save it, with their entry and the\nsame reason. A request with only `design_etag` saves nothing. The answer\nis the session's, with the new `design_etag` (and, when the split was\nsaved, the variants' new ids). Sent with `Cache-Control: no-store`.",
+        "operationId": "save_experiment_design_api_v1_visual_editor_sessions_current_experiment_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditorDesignChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EditorSessionState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "The experiment is no longer a draft, or has a start date"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EditorSessionRefusal"
+                }
+              }
+            },
+            "description": "The session cannot be used; reason says why"
+          },
+          "403": {
+            "description": "The request does not come from the dashboard, the user may no longer change the experiment, or the exclusion group changes and the user may not create experiments"
+          },
+          "404": {
+            "description": "The experiment no longer exists"
+          },
+          "409": {
+            "description": "The design changed after the editor loaded it; nothing was saved"
+          },
+          "422": {
+            "description": "The request is not in the documented form, the split does not name each variant once, the exclusion group does not exist or is archived, or the change is refused as an experiment update refuses it"
+          }
+        },
+        "summary": "Save a draft's audience, split, metrics and goals from the visual editor (beta)",
+        "tags": [
+          "Visual Editor"
+        ],
+        "x-stability": "beta"
+      }
+    },
+    "/api/v1/visual-editor/sessions/current/segments": {
+      "get": {
+        "description": "Every active segment, by id, name and kind, for the editor's audience\nstep. `rules_valid` says whether a segment can be used in an audience:\ntrue for an id_list segment, and for a rules segment whose stored rules\nare in the targeting rule format. Neither a segment's rules nor its\nmembers are sent. Needs permission to list experiments, as\n`GET /api/v1/segments` does. Sent with `Cache-Control: no-store`.",
+        "operationId": "list_editor_segments_api_v1_visual_editor_sessions_current_segments_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/EditorSegment"
+                  },
+                  "title": "Response List Editor Segments Api V1 Visual Editor Sessions Current Segments Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "The experiment is no longer a draft, or has a start date"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EditorSessionRefusal"
+                }
+              }
+            },
+            "description": "The session cannot be used; reason says why"
+          },
+          "403": {
+            "description": "The request does not come from the dashboard, or the user may not list experiments or may no longer change the experiment"
+          },
+          "404": {
+            "description": "The experiment no longer exists"
+          }
+        },
+        "summary": "The segments the visual editor may choose from (beta)",
         "tags": [
           "Visual Editor"
         ],

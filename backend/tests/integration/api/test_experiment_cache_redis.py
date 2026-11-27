@@ -878,6 +878,95 @@ def test_a_visual_editor_save_drops_the_cached_detail(
     assert cached == e2, f"cached {cached} != {e2}"
 
 
+EDITOR_SHOP, EDITOR_DASHBOARD = "https://shop.example.com", "https://dash.example.com"
+
+
+def _editor_token(client: TestClient, experiment_id: str, monkeypatch) -> str:
+    """A visual editor session on *experiment_id*, opened as the panel opens it."""
+    monkeypatch.setattr(settings, "BACKEND_CORS_ORIGINS", [])
+    monkeypatch.setattr(settings, "CORS_ORIGINS", [EDITOR_SHOP])
+    monkeypatch.setattr(settings, "DASHBOARD_ORIGINS", [EDITOR_DASHBOARD])
+    monkeypatch.setattr(settings, "PUBLIC_BASE_URL", None)
+    minted = client.post(
+        f"{BASE}/{experiment_id}/visual/editor-tickets",
+        headers={"Origin": EDITOR_DASHBOARD},
+    )
+    assert minted.status_code == 201, minted.text
+    ticket = minted.json()["open_url"].partition("#controlvar-editor=")[2]
+    claim = uuid.uuid4().hex + uuid.uuid4().hex[:11]
+    claimed = client.post(
+        "/api/v1/visual-editor/tickets/claim",
+        json={"ticket": ticket, "claim": claim},
+        headers={"Origin": EDITOR_SHOP},
+    )
+    assert claimed.status_code == 201, claimed.text
+    opened = client.post(
+        "/api/v1/visual-editor/sessions",
+        json={"claim": claim, "page_origin": EDITOR_SHOP},
+        headers={"Origin": EDITOR_DASHBOARD},
+    )
+    assert opened.status_code == 201, opened.text
+    return opened.json()["token"]
+
+
+def _editor_save(client: TestClient, token: str, body: dict):
+    return client.patch(
+        "/api/v1/visual-editor/sessions/current/experiment",
+        json=body,
+        headers={"Authorization": f"Bearer {token}", "Origin": EDITOR_DASHBOARD},
+    )
+
+
+def test_a_visual_editor_design_save_drops_the_cached_detail(
+    cached_superuser_client, redis_server, detail_key_prefix, monkeypatch
+):
+    """C5 (#1545): the visual editor's design save is PUT's own write, so
+    with the detail cached (e1) the save is read back at once (e2)."""
+    client = cached_superuser_client
+    exp = _create_visual(client)
+    e1 = _warm(client, redis_server, exp["id"], detail_key_prefix)["design_etag"]
+    token = _editor_token(client, exp["id"], monkeypatch)
+
+    country = {"attribute": "country", "operator": "equals", "value": "US"}
+    rules = {
+        "logical_operator": "AND",
+        "groups": [{"logical_operator": "AND", "conditions": [country]}],
+    }
+    saved = _editor_save(client, token, {"design_etag": e1, "targeting_rules": rules})
+
+    assert saved.status_code == 200, saved.text
+    e2 = saved.json()["experiment"]["design_etag"]
+    assert e2 != e1
+    cached = _detail(client, exp["id"])["design_etag"]
+    assert cached == e2, f"cached {cached} != {e2}"
+
+
+def test_a_visual_editor_group_change_drops_the_cached_detail(
+    cached_superuser_client, redis_server, detail_key_prefix, monkeypatch
+):
+    """C5 (#1545): a group change through the visual editor goes through the
+    exclusion group service, outside PUT's write, and drops the cached detail
+    itself. With the detail cached (e1), the new group and its etag (e2) are
+    read back at once; a group change that left the cache would show e1 and
+    no group for an hour."""
+    client = cached_superuser_client
+    exp = _create_visual(client)
+    group = _create_group(client)
+    e1 = _warm(client, redis_server, exp["id"], detail_key_prefix)["design_etag"]
+    token = _editor_token(client, exp["id"], monkeypatch)
+
+    saved = _editor_save(
+        client, token, {"design_etag": e1, "mutual_exclusion_group_id": group["id"]}
+    )
+
+    assert saved.status_code == 200, saved.text
+    e2 = saved.json()["experiment"]["design_etag"]
+    assert e2 != e1
+    detail = _detail(client, exp["id"])
+    assert detail["design_etag"] == e2, f"group: cached {detail['design_etag']} != {e2}"
+    assert detail["mutual_exclusion_group_id"] == group["id"]
+
+
 @pytest.fixture
 def uncached_superuser_client(db_session, admin_user, monkeypatch):
     """The real ``get_cache_control`` with ``CACHE_ENABLED`` off, the default."""
