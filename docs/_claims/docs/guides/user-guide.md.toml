@@ -5,23 +5,23 @@ document = "docs/guides/user-guide.md"
 
 [[unit]]
 text = "User Guide"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Guide for product managers, experimenters, and analysts using Controlvar."
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Accessing the Platform"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "You'll need an account with one of the following roles:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Role | What You Can Do"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "ADMIN | Create, change, schedule and delete any experiment (which actions have a screen); create and manage any feature flag"
@@ -73,11 +73,11 @@ by = ["test:backend/tests/unit/core/test_permissions.py::TestCheckPermission::te
 
 [[unit]]
 text = "Contact your platform admin to request access, a role change, or superuser access."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "What the dashboard does not do yet"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "What the dashboard does, and what is API only lists, row by row, what has a screen and what works through the API only, with the guide for each."
@@ -129,11 +129,11 @@ by = ["test:modules/frontend/src/tests/services/request-timeouts.test.ts::a prev
 
 [[unit]]
 text = "Experiments"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Creating an Experiment"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Experiments → + New Experiment opens guided setup, five short steps."
@@ -160,7 +160,7 @@ by = ["test:frontend/src/tests/pages/experiment-new-guided.test.tsx"]
 
 [[unit]]
 text = "Step 1: Type"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Choose A/B Test, Multivariate or Bandit; a bandit also asks for its Optimization algorithm."
@@ -178,11 +178,11 @@ by = [
 
 [[unit]]
 text = "Step 2: Details"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Name: Descriptive name, e.g., \"Homepage CTA Button Color Q1 2026\""
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Key: generated from the name until you edit it, e.g., homepage_cta_button_color_q1_2026 — your code passes this as experiment_key"
@@ -194,15 +194,15 @@ by = [
 
 [[unit]]
 text = "Description: Background context, links to design doc, Jira ticket"
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Hypothesis: \"Changing the CTA button from blue to green will increase click-through rate by 10%\""
-by = ["exempt:baseline"]
+by = ["exempt:example"]
 
 [[unit]]
 text = "Then choose what to measure."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Mark one metric as the primary metric (the one you decide on); any others are tracked alongside it."
@@ -249,7 +249,7 @@ by = [
 
 [[unit]]
 text = "Step 3: Variants"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Every experiment needs a control; mark one variant as it:"
@@ -260,16 +260,16 @@ by = [
 
 [[unit]]
 text = "Variant | Is Control | Traffic %"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 count = 2
 
 [[unit]]
 text = "Control (Blue Button) | ✅ | 50%"
-by = ["exempt:baseline"]
+by = ["exempt:example"]
 
 [[unit]]
 text = "Treatment (Green Button) | — | 50%"
-by = ["exempt:baseline"]
+by = ["exempt:example"]
 
 [[unit]]
 text = "The traffic split must add up to exactly 100%."
@@ -277,19 +277,19 @@ by = ["test:frontend/src/tests/pages/experiment-new-guided.test.tsx"]
 
 [[unit]]
 text = "For multivariate tests, add more variants:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Control | ✅ | 34%"
-by = ["exempt:baseline"]
+by = ["exempt:example"]
 
 [[unit]]
 text = "Green Button | — | 33%"
-by = ["exempt:baseline"]
+by = ["exempt:example"]
 
 [[unit]]
 text = "Red Button | — | 33%"
-by = ["exempt:baseline"]
+by = ["exempt:example"]
 
 [[unit]]
 text = "Each variant can also carry a configuration: a JSON object your app receives with the assignment, so code can read values instead of branching on the variant's name."
@@ -331,15 +331,15 @@ by = ["test:frontend/src/tests/pages/experiment-new-targeting.test.tsx"]
 
 [[unit]]
 text = "Country is in [US, CA]"
-by = ["exempt:baseline"]
+by = ["exempt:example"]
 
 [[unit]]
 text = "Subscription plan is \"premium\""
-by = ["exempt:baseline"]
+by = ["exempt:example"]
 
 [[unit]]
 text = "Account age is greater than 30 days"
-by = ["exempt:baseline"]
+by = ["exempt:example"]
 
 [[unit]]
 text = "Users who don't match targeting rules are excluded from the experiment entirely."
@@ -347,7 +347,10 @@ by = ["test:backend/tests/unit/services/test_assignment_service_eligibility.py::
 
 [[unit]]
 text = "Every condition needs an attribute, an operator and (for most operators) a value."
-by = ["exempt:baseline"]
+by = [
+    "test:frontend/src/tests/pages/experiment-new-targeting.test.tsx",
+    "test:frontend/src/tests/pages/feature-flag-detail-targeting.test.tsx",
+]
 count = 2
 
 [[unit]]
@@ -356,11 +359,11 @@ by = ["test:frontend/src/tests/pages/experiment-new-targeting.test.tsx"]
 
 [[unit]]
 text = "Step 4: How results will be judged, and an estimate"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "First, How results will be judged."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "These two settings are saved with the experiment and cannot be changed after it starts:"
@@ -434,11 +437,11 @@ by = ["test:frontend/src/tests/pages/experiment-new-guided.test.tsx"]
 
 [[unit]]
 text = "Then, optionally, the estimate."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Enter your baseline conversion rate and the smallest change worth detecting — a relative change, so 5% on a 12% baseline means 12% → 12.6% — and press Calculate estimate."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/api/test_sample_size_one_formula.py::test_documented_case_on_both_routes"]
 
 [[unit]]
 text = "With two variants, at 80% power and 95% confidence that example needs 47,036 users per variant."
@@ -446,7 +449,7 @@ by = ["test:backend/tests/unit/api/test_sample_size_pinned_answer.py::test_twelv
 
 [[unit]]
 text = "Add your daily users to see roughly how many days that takes."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "The smallest change worth detecting (the minimum detectable effect) is saved with the experiment, and the results page's Planned sample plans for it; leave it blank and the results page plans for 5%."
@@ -500,7 +503,7 @@ by = ["exempt:theory"]
 
 [[unit]]
 text = "Step 5: Review and create"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Check the summary, including each variant's configuration and the Analysis row (for example \"95% confidence · Benjamini-Hochberg correction\", with \"· Bayesian analysis on\" when it is on), use Edit to go back to any step, then press Create Experiment."
@@ -520,7 +523,7 @@ by = ["journey:experiment-results#create"]
 
 [[unit]]
 text = "Then: start the experiment"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Click Start on the experiment's page."
@@ -532,7 +535,10 @@ by = ["journey:experiment-results#start"]
 
 [[unit]]
 text = "You can also schedule automatic start and end dates."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/integration/api/test_experiments_lifecycle_api.py::TestUpdateExperimentSchedule::test_admin_can_schedule_draft_experiment",
+    "test:backend/tests/integration/services/test_scheduler_pause_semantics.py::test_p8_one_tick_starts_and_ends_only_what_is_due",
+]
 
 [[unit]]
 text = "On a draft's page, Schedule opens a Start and an End (optional) picker in your browser's time zone, and shows under each the time it will be saved as, in your zone and in UTC."
@@ -608,7 +614,7 @@ by = [
 
 [[unit]]
 text = "Dates are stored in UTC."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_experiments_lifecycle_api.py::TestCompleteExperiment::test_scheduled_dates_are_stored_in_utc_whatever_the_database_time_zone"]
 
 [[unit]]
 text = "The experiment's page shows these dates in your browser's time zone, as \"Starts\" and \"Ends\" until the experiment has started or ended, then as \"Started\" and \"Ended\", and as \"Start date\" and \"End date\" once it is archived."
@@ -625,7 +631,7 @@ by = ["test:backend/tests/integration/api/test_complete_after_early_start.py::te
 
 [[unit]]
 text = "Pausing and Stopping"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Pause: Temporarily halt assignment of new users."
@@ -654,7 +660,7 @@ by = [
 
 [[unit]]
 text = "Use when you need to investigate anomalies or if there's a critical bug."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "A paused experiment stays paused until you click Start again."
@@ -680,7 +686,7 @@ by = ["test:backend/tests/integration/services/test_scheduler_pause_semantics.py
 
 [[unit]]
 text = "On a paused experiment:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "\"start_date\": null cancels a scheduled resume;"
@@ -710,11 +716,11 @@ by = ["test:frontend/src/tests/pages/experiment-detail.test.tsx"]
 
 [[unit]]
 text = "Use when you have sufficient data and are ready to make a decision."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Existing data is preserved."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_tracking_inactive_experiment_events.py::test_converting_users_per_variant_across_pause_resume_and_complete"]
 
 [[unit]]
 text = "From then on every user gets the control variant, with the reason completed."
@@ -744,7 +750,7 @@ by = ["exempt:advice"]
 
 [[unit]]
 text = "Reading Results"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Open the experiment from Experiments and choose View results (it cannot be chosen while the experiment is a draft), or go to http://localhost:3000/results/EXPERIMENT_ID."
@@ -768,11 +774,11 @@ by = ["exempt:navigation"]
 
 [[unit]]
 text = "Experiment Summary Card"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Shows at a glance:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Status: Active / Completed"
@@ -859,7 +865,7 @@ by = ["journey:experiment-results#results-page"]
 
 [[unit]]
 text = "For example \"95% confidence · Benjamini-Hochberg correction for the 2 comparisons with the control on each metric\", or, with one treatment, \"one comparison with the control on each metric, so no correction is needed\"."
-by = ["exempt:baseline"]
+by = ["test:frontend/src/tests/components/ResultsDashboard.test.tsx"]
 
 [[unit]]
 text = "To see the uncorrected numbers for an experiment with several variants and a correction, ask the API with ?correction_method=none (GET /api/v1/results/{experiment_id})."
@@ -870,7 +876,7 @@ by = [
 
 [[unit]]
 text = "Sample Ratio Check"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The results page compares how many users each variant received with its traffic allocation (a chi-square test of the assignment counts)."
@@ -881,7 +887,10 @@ by = [
 
 [[unit]]
 text = "If they differ by more than chance allows (p < 0.001), a notice above the tabs says so, with each variant's users and the number expected."
-by = ["exempt:baseline"]
+by = [
+    "journey:experiment-results#ratio-results-page",
+    "test:backend/tests/unit/services/test_srm.py::TestComputeSrm::test_warning_threshold_is_p_below_0_001",
+]
 
 [[unit]]
 text = "The recommendation is then INCONCLUSIVE, and a \"Leading\" variant and the Bayesian analysis carry a warning."
@@ -900,7 +909,7 @@ by = [
 
 [[unit]]
 text = "A mismatch usually means assignment or tracking is broken, so do not use the numbers for a decision until you find out why."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "When the split matches, one line below the summary card says so, with the check's p-value."
@@ -963,7 +972,7 @@ by = ["test:frontend/src/tests/pages/results-conversion-window.test.tsx::the sum
 
 [[unit]]
 text = "Bayesian Analysis"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "For an experiment with Bayesian analysis on, the end of the Overview tab shows a Bayesian analysis of the primary metric: its decision (Continue, Stop: a winner is clear, Stop: the variants are equivalent or Stop: a meaningful difference is unlikely) and, for each variant, the chance it is the best, the expected loss, the posterior mean and the credible interval."
@@ -982,15 +991,15 @@ by = ["test:frontend/src/tests/pages/results-reading.test.tsx::says it could not
 
 [[unit]]
 text = "The method is described in Bayesian analysis."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Recommendation Meanings"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Recommendation | Meaning | Action"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "SHIP VARIANT | Treatment is significantly better | Deploy the treatment to all users"
@@ -1019,7 +1028,7 @@ by = [
 
 [[unit]]
 text = "Metric Comparison Table"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "For each metric and variant pair:"
@@ -1027,7 +1036,7 @@ by = ["journey:experiment-results#results-page"]
 
 [[unit]]
 text = "Column | Meaning"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Sample Size | Users assigned to this variant"
@@ -1189,7 +1198,7 @@ by = ["exempt:navigation"]
 
 [[unit]]
 text = "Trend Chart"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Shows conversion rate over time for each variant."
@@ -1205,11 +1214,11 @@ by = ["test:frontend/src/tests/components/TrendChart.test.tsx"]
 
 [[unit]]
 text = "Daily: Day-by-day rate (useful for detecting novelty effects or day-of-week patterns)"
-by = ["exempt:baseline"]
+by = ["test:frontend/src/tests/components/TrendChart.test.tsx::switches to daily view when clicking Daily"]
 
 [[unit]]
 text = "Sample Size"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The Sample Size tab shows the planned sample size: how many users each variant needs to detect the smallest lift you care about, and how far the experiment has got."
@@ -1217,11 +1226,14 @@ by = ["test:frontend/src/tests/components/SampleSizeMeter.test.tsx"]
 
 [[unit]]
 text = "Calculated from."
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Every number the plan uses is shown, with where it came from:"
-by = ["exempt:baseline"]
+by = [
+    "test:frontend/src/tests/components/SampleSizeMeter.test.tsx",
+    "test:backend/tests/integration/api/test_results_sample_size_api.py::test_plans_from_the_observed_control_rate_and_counts_the_smallest_arm",
+]
 
 [[unit]]
 text = "Baseline conversion rate: the rate observed in the control variant on the primary metric so far (\"Observed in control so far: 11.8% (2,140 users)\"), or the rate you typed (\"Entered by you\")."
@@ -1233,7 +1245,7 @@ by = ["test:frontend/src/tests/components/SampleSizeMeter.test.tsx"]
 
 [[unit]]
 text = "Relative means 12% → 12.6%, not 17%."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/api/test_sample_size_one_formula.py::test_documented_case_on_both_routes"]
 
 [[unit]]
 text = "The saved effect is the primary metric's expected_effect (see The planned effect)."
@@ -1252,7 +1264,10 @@ by = ["test:frontend/src/tests/components/SampleSizeMeter.test.tsx"]
 
 [[unit]]
 text = "Correction, for three or more variants: the experiment's correction unless you choose another."
-by = ["exempt:baseline"]
+by = [
+    "test:frontend/src/tests/components/SampleSizeMeter.test.tsx",
+    "test:backend/tests/integration/api/test_results_sample_size_api.py::test_a_correction_plans_each_comparison_at_alpha_over_k_minus_1",
+]
 
 [[unit]]
 text = "Bonferroni or Benjamini-Hochberg plans each comparison with the control at significance ÷ (variants − 1)."
@@ -1268,11 +1283,11 @@ by = ["test:frontend/src/tests/components/SampleSizeMeter.test.tsx"]
 
 [[unit]]
 text = "The power shown is the power to detect your planned lift at the current size, not the effect seen so far."
-by = ["exempt:baseline"]
+by = ["test:frontend/src/tests/components/SampleSizeMeter.test.tsx"]
 
 [[unit]]
 text = "The tab also says when:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "no users have been assigned yet, or there is no rate to plan from (no control conversions, or every control user converted): type the rate you expect;"
@@ -1287,7 +1302,7 @@ by = [
 
 [[unit]]
 text = "The Power Calculator plans conversion rates only too, and the tab says so;"
-by = ["exempt:baseline"]
+by = ["test:frontend/src/tests/components/SampleSizeMeter.test.tsx"]
 
 [[unit]]
 text = "a fixed sample size is a guide only: a bandit, an uneven split, sequential testing or Bayesian analysis."
@@ -1299,7 +1314,7 @@ by = ["test:frontend/src/tests/components/ResultsDashboard.test.tsx"]
 
 [[unit]]
 text = "The tab loads its numbers separately from the rest of the page."
-by = ["exempt:baseline"]
+by = ["test:frontend/src/tests/components/ResultsDashboard.test.tsx::renders the page before the sample size answers, and the tab once it does"]
 
 [[unit]]
 text = "If they cannot be loaded, the tab says so and offers Try again; the Overview and the other tabs still work."
@@ -1307,15 +1322,15 @@ by = ["test:frontend/src/tests/components/ResultsDashboard.test.tsx"]
 
 [[unit]]
 text = "Feature Flags"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Feature flags let you control which users see a feature without deploying new code."
-by = ["exempt:baseline"]
+by = ["exempt:theory"]
 
 [[unit]]
 text = "Creating a Feature Flag"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Navigate to Feature Flags → New Flag:"
@@ -1327,19 +1342,19 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "Name: Human-readable name"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Description: What this flag controls"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Controlling Rollout"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Manual rollout:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Open the flag, move the Rollout percentage slider to the desired value and press Save Changes."
@@ -1347,7 +1362,7 @@ by = ["test:frontend/src/tests/pages/feature-flag-detail.test.tsx"]
 
 [[unit]]
 text = "Percentage | Meaning"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "0% | No user outside a targeting rule gets the feature"
@@ -1359,7 +1374,7 @@ by = ["test:backend/tests/unit/core/test_consistent_hash.py::test_every_golden_v
 
 [[unit]]
 text = "50% | Half of users"
-by = ["exempt:baseline"]
+by = ["exempt:example"]
 
 [[unit]]
 text = "100% | All users see the feature"
@@ -1370,7 +1385,7 @@ by = [
 
 [[unit]]
 text = "Who gets the feature?"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The platform uses a deterministic hash of the user's ID."
@@ -1388,11 +1403,11 @@ by = [
 
 [[unit]]
 text = "This means:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "If you set 5%, the same 5% of users will consistently see the feature"
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/ground_truth/test_flag_rollout_use_cases.py::test_a_user_keeps_their_side_as_the_rollout_moves"]
 
 [[unit]]
 text = "If you increase to 50%, the original 5% are still included (plus 45% more)"
@@ -1400,7 +1415,7 @@ by = ["test:backend/tests/integration/api/test_flag_guide_behaviour.py::test_rai
 
 [[unit]]
 text = "Adding targeting rules:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Optionally restrict to specific users:"
@@ -1411,15 +1426,15 @@ by = [
 
 [[unit]]
 text = "Enable only for users in the US"
-by = ["exempt:baseline"]
+by = ["exempt:example"]
 
 [[unit]]
 text = "Only for users on the \"enterprise\" plan"
-by = ["exempt:baseline"]
+by = ["exempt:example"]
 
 [[unit]]
 text = "Only for users who signed up before a certain date"
-by = ["exempt:baseline"]
+by = ["exempt:example"]
 
 [[unit]]
 text = "If one is missing, Create Feature Flag or Save Changes stops and the problem is shown beside the targeting rules; a condition the server cannot apply is reported there too."
@@ -1434,15 +1449,15 @@ by = ["test:frontend/src/tests/pages/feature-flag-detail-targeting.test.tsx"]
 
 [[unit]]
 text = "Saving other changes, such as the rollout percentage, leaves them as they are; Replace rules starts again with the builder."
-by = ["exempt:baseline"]
+by = ["test:frontend/src/tests/pages/feature-flag-detail-targeting.test.tsx"]
 
 [[unit]]
 text = "Scheduled Rollouts"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "For gradual rollouts on a schedule:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "On the flag's page, Create a rollout schedule under Rollout schedule takes a name and the stages, in order, and Activate starts it (see Rollouts)."
@@ -1460,23 +1475,23 @@ by = [
 
 [[unit]]
 text = "A schedule like this one:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Stage | Target % | Trigger Type | Start Date"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Stage 1 | 5% | Time-based | Apr 1, 2026"
-by = ["exempt:baseline"]
+by = ["exempt:example"]
 
 [[unit]]
 text = "Stage 2 | 25% | Time-based | Apr 8, 2026"
-by = ["exempt:baseline"]
+by = ["exempt:example"]
 
 [[unit]]
 text = "Stage 3 | 100% | Manual | —"
-by = ["exempt:baseline"]
+by = ["exempt:example"]
 
 [[unit]]
 text = "The platform automatically advances time-based stages."
@@ -1499,7 +1514,7 @@ by = [
 
 [[unit]]
 text = "Disabling / Rolling Back"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "To disable a flag, turn it off with the switch at the top of its page; it then shows Not serving."
@@ -1529,11 +1544,14 @@ by = [
 
 [[unit]]
 text = "A rollback to 0% turns the flag off for every user and pauses its rollout schedule (see Safety Monitoring)."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p1_a_rule_matched_user_is_off_after_a_rollback_to_0",
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p10_a_tick_and_a_stage_advance_after_a_rollback_leave_users_off",
+]
 
 [[unit]]
 text = "Archived Flags"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "An archived flag is retired: every evaluation answers it as off, with its off value."
@@ -1551,7 +1569,7 @@ by = [
 
 [[unit]]
 text = "Unarchive it before turning it on.\" Turning it off succeeds and changes nothing."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_archived_flag_verbs.py::test_every_status_verb_from_every_status"]
 
 [[unit]]
 text = "To archive a flag, open its page and choose Archive, then confirm; an archived flag's page offers Unarchive, and an unarchived flag comes back inactive (off)."
@@ -1581,15 +1599,15 @@ by = [
 
 [[unit]]
 text = "See Archived flags."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Analytics & Reporting"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Viewing All Experiments"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Experiments list shows all experiments with their name, status, type, number of variants and creation date."
@@ -1601,7 +1619,7 @@ by = ["test:frontend/src/tests/pages/experiments-index.test.tsx"]
 
 [[unit]]
 text = "Exporting Results"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "On an experiment's results page, Download CSV saves its variant rows as a CSV file."
@@ -1635,15 +1653,15 @@ by = ["journey:experiment-results#results-api"]
 
 [[unit]]
 text = "Advanced Statistical Methods"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Sequential Testing — Stop Experiments Early"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Standard A/B tests require a fixed sample size decided upfront."
-by = ["exempt:baseline"]
+by = ["exempt:theory"]
 
 [[unit]]
 text = "Sequential testing lets you monitor results continuously and stop as soon as you have enough evidence — without inflating your false positive rate."
@@ -1684,11 +1702,11 @@ by = [
 
 [[unit]]
 text = "See the Sequential Testing Guide for details."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "CUPED — Reach Significance Faster"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "CUPED reduces result noise by adjusting for each user's own events in the days before they were assigned; how much depends on how well that history predicts the outcome."
@@ -1696,7 +1714,7 @@ by = ["test:backend/tests/integration/api/test_cuped_results_api.py::test_cuped_
 
 [[unit]]
 text = "When to use it: When your users sent the metric's event before the experiment (returning customers who bought before, say)."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Send that history to the tracking API with no experiment key, before you start the experiment: history the server receives after a user was assigned is ignored for that user."
@@ -1722,11 +1740,11 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 
 [[unit]]
 text = "See the CUPED Guide for sending history and reading the result."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Dimensional Analysis — Did the Effect Vary by Segment?"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "After an experiment concludes, use dimensional analysis to understand whether the treatment worked differently for different groups (mobile vs desktop, new vs returning users, etc.)."
@@ -1734,11 +1752,11 @@ by = ["test:frontend/src/tests/components/ResultsDashboard.test.tsx"]
 
 [[unit]]
 text = "Important: Segment findings are always exploratory."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Use them to generate hypotheses for follow-up experiments, not as final conclusions."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Access via the Breakdowns tab on any experiment results page, which reads GET /api/v1/results/{experiment_id}?breakdown={dimension}."
@@ -1757,7 +1775,7 @@ by = [
 
 [[unit]]
 text = "See the Dimensional Analysis Guide."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "For an experiment that balances its split within groups, the Breakdowns tab opens on its balanced groups, from GET /api/v1/results/{experiment_id}/balanced-groups (beta); see Balance the split within groups."
@@ -1768,7 +1786,7 @@ by = [
 
 [[unit]]
 text = "Multi-Armed Bandit — Maximize Conversions During the Experiment"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "A bandit experiment automatically shifts traffic toward the better-performing variant as data accumulates."
@@ -1779,7 +1797,7 @@ by = [
 
 [[unit]]
 text = "Use this when maximizing conversions during the experiment matters more than getting precise effect size estimates."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "In the dashboard, choose Bandit as the experiment type and pick the Optimization algorithm; through the API, set optimization_type to thompson_sampling, ucb1, or epsilon_greedy when creating an experiment."
@@ -1796,7 +1814,7 @@ by = ["test:backend/tests/unit/services/test_bandit_routing.py::TestBanditChoose
 
 [[unit]]
 text = "See the Multi-Armed Bandit Guide."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "A bandit experiment's page has a Current traffic weights panel: each variant's share of new users, with its pulls, successes and conversion rate, and when the weights were last computed."
@@ -1827,7 +1845,7 @@ by = [
 
 [[unit]]
 text = "Before the first update it says so, and new users follow each variant's starting allocation until then."
-by = ["exempt:baseline"]
+by = ["test:frontend/src/tests/components/BanditWeightsSection.test.tsx::shows the fixed copy, not the even split the server fills in"]
 
 [[unit]]
 text = "Under it, Weight history lists the bandit's past updates, newest first, when you open it."
@@ -1838,11 +1856,11 @@ by = [
 
 [[unit]]
 text = "Interaction Detection — Are Your Experiments Interfering?"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "When multiple experiments run simultaneously on overlapping user populations, they can distort each other's results."
-by = ["exempt:baseline"]
+by = ["exempt:theory"]
 
 [[unit]]
 text = "Run an interaction scan to find the pairs that share users, then ask the pair route whether one experiment's effect differs across the other's arms (beta)."
@@ -1883,11 +1901,11 @@ by = ["test:backend/tests/integration/services/test_mutual_exclusion_sticky.py::
 
 [[unit]]
 text = "See the Interaction Detection Guide."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Getting Help"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "API Documentation: http://localhost:8000/api/v1/docs"
@@ -1895,8 +1913,8 @@ by = ["test:backend/tests/unit/models/test_fast_api_setup.py::test_api_docs_avai
 
 [[unit]]
 text = "Technical Guide: See Technical Guide for implementation details"
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Issues: https://github.com/Controlvar/controlvar/issues"
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
