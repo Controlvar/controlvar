@@ -5,7 +5,7 @@ document = "docs/statistics/fdr-correction.md"
 
 [[unit]]
 text = "Benjamini-Hochberg FDR Correction"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The Benjamini-Hochberg (BH) procedure controls the False Discovery Rate (FDR) — the expected proportion of false positives among all rejected hypotheses — when testing multiple metrics simultaneously."
@@ -16,11 +16,11 @@ by = [
 
 [[unit]]
 text = "The BH Procedure"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Given $m$ raw p-values $p_1, p_2, \\ldots, p_m$ and a desired FDR threshold $\\alpha$:"
-by = ["exempt:baseline"]
+by = ["exempt:theory"]
 
 [[unit]]
 text = "Sort p-values ascending: $p_{(1)} \\leq p_{(2)} \\leq \\cdots \\leq p_{(m)}$."
@@ -28,67 +28,73 @@ by = ["test:backend/tests/unit/services/test_fdr_correction.py::TestBHThresholdS
 
 [[unit]]
 text = "Compute the BH threshold for rank $k$: $T_k = \\frac{k}{m} \\times \\alpha$."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/services/test_fdr_correction.py::TestBHThresholdSensitivity::test_the_example_table_rows_and_the_largest_rank"]
 
 [[unit]]
 text = "Find the largest rank $k^$ such that $p_{(k^)} \\leq T_{k^}$."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/unit/services/test_fdr_correction.py::TestBHThresholdSensitivity::test_the_example_table_rows_and_the_largest_rank",
+    "test:backend/tests/unit/services/test_fdr_correction.py::TestBHThresholdSensitivity::test_known_result_6_significant_at_fdr_10",
+]
 
 [[unit]]
 text = "Reject all hypotheses with rank $\\leq k^$ (declare significant)."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/unit/services/test_fdr_correction.py::TestBHThresholdSensitivity::test_known_result_6_significant_at_fdr_10",
+    "test:backend/tests/unit/services/test_fdr_correction.py::TestBHThresholdSensitivity::test_the_example_table_rows_and_the_largest_rank",
+]
 
 [[unit]]
 text = "Example"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "10 p-values with $\\alpha = 0.10$:"
-by = ["exempt:baseline"]
+by = ["exempt:example"]
 
 [[unit]]
 text = "Rank | p-value | BH threshold $k/10 \\times 0.10$ | Reject?"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "1 | 0.001 | 0.010 | Yes"
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/services/test_fdr_correction.py::TestBHThresholdSensitivity::test_the_example_table_rows_and_the_largest_rank"]
 
 [[unit]]
 text = "2 | 0.008 | 0.020 | Yes"
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/services/test_fdr_correction.py::TestBHThresholdSensitivity::test_the_example_table_rows_and_the_largest_rank"]
 
 [[unit]]
 text = "3 | 0.039 | 0.030 | No"
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/services/test_fdr_correction.py::TestBHThresholdSensitivity::test_the_example_table_rows_and_the_largest_rank"]
 
 [[unit]]
 text = "4 | 0.041 | 0.040 | No"
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/services/test_fdr_correction.py::TestBHThresholdSensitivity::test_the_example_table_rows_and_the_largest_rank"]
 
 [[unit]]
 text = "5 | 0.042 | 0.050 | Yes"
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/services/test_fdr_correction.py::TestBHThresholdSensitivity::test_the_example_table_rows_and_the_largest_rank"]
 
 [[unit]]
 text = "6 | 0.060 | 0.060 | Yes ← largest k"
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/services/test_fdr_correction.py::TestBHThresholdSensitivity::test_the_example_table_rows_and_the_largest_rank"]
 
 [[unit]]
 text = "7 | 0.074 | 0.070 | No"
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/services/test_fdr_correction.py::TestBHThresholdSensitivity::test_the_example_table_rows_and_the_largest_rank"]
 
 [[unit]]
 text = "8 | 0.205 | 0.080 | No"
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/services/test_fdr_correction.py::TestBHThresholdSensitivity::test_the_example_table_rows_and_the_largest_rank"]
 
 [[unit]]
 text = "9 | 0.212 | 0.090 | No"
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/services/test_fdr_correction.py::TestBHThresholdSensitivity::test_the_example_table_rows_and_the_largest_rank"]
 
 [[unit]]
 text = "10 | 0.391 | 0.100 | No"
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/services/test_fdr_correction.py::TestBHThresholdSensitivity::test_the_example_table_rows_and_the_largest_rank"]
 
 [[unit]]
 text = "Result: Reject 6 hypotheses (all with rank $\\leq 6$), even though ranks 3–5 individually don't satisfy their per-rank threshold — the step-up property means we look for the largest k, so ranks 1, 2, 5, 6 passing brings along ranks 3 and 4."
@@ -104,7 +110,7 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "The BH-adjusted p-value for rank $k$ is:"
-by = ["exempt:baseline"]
+by = ["exempt:theory"]
 
 [[unit]]
 text = "$$p_{\\text{adj}}(k) = \\min\\left(\\frac{p_{(k)} \\cdot m}{k},\\ 1.0\\right)$$"
@@ -115,7 +121,7 @@ by = [
 
 [[unit]]
 text = "with monotonicity enforced from right to left: $$p_{\\text{adj,mono}}(k) = \\min\\left(p_{\\text{adj}}(k),\\ p_{\\text{adj,mono}}(k+1)\\right)$$"
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/services/test_fdr_correction.py::TestBHThresholdSensitivity::test_adjusted_values_take_the_minimum_from_the_right"]
 
 [[unit]]
 text = "A metric is significant when its rank is at most $k^$, that is, when its adjusted p-value is at most $\\alpha$."
@@ -123,11 +129,11 @@ by = ["test:backend/tests/unit/services/test_fdr_correction.py::TestBHThresholdS
 
 [[unit]]
 text = "REST API Reference"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "POST /api/v1/results/{experiment_id}/fdr-correction"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Apply Benjamini-Hochberg FDR correction to per-metric p-values."
@@ -148,11 +154,11 @@ by = [
 
 [[unit]]
 text = "Request body:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Field | Type | Required | Default | Description"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "p_values | dict[str, float] | Yes | — | Metric name → raw p-value. All values in [0,1]. Non-empty."
@@ -171,7 +177,7 @@ by = [
 
 [[unit]]
 text = "Response (200):"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The response is sorted by rank ascending (smallest raw p-value first)."
@@ -182,19 +188,19 @@ by = [
 
 [[unit]]
 text = "Run the commands on this page in one terminal, in order, against the stack from the Quick Start."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Each uses the shell variables set by the ones before it."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Log in first:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "It prints \"ADMIN\"."
-by = ["exempt:baseline"]
+by = ["docex:docs/statistics/fdr-correction.md#\"ADMIN\""]
 
 [[unit]]
 text = "This saves the id of the demo data's checkout_button_color experiment in $EXP_ID, then corrects the five p-values above:"
@@ -206,11 +212,11 @@ by = ["docex:docs/statistics/fdr-correction.md#1 revenue true"]
 
 [[unit]]
 text = "Error codes:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Status | Condition"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "404 | Experiment not found"
@@ -229,7 +235,7 @@ by = ["test:backend/tests/integration/api/test_experiment_errors_fixed_message.p
 
 [[unit]]
 text = "Integration with the Existing Results API"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Each experiment stores a correction_method (none, bonferroni or benjamini_hochberg), Benjamini-Hochberg unless it was created with another, and GET /api/v1/results/{experiment_id} applies it across the treatments of each metric: each treatment then carries an adjusted_p_value, and is_significant is decided on it."
@@ -256,7 +262,7 @@ by = ["docex:docs/statistics/fdr-correction.md#\"correction_method\": \"benjamin
 
 [[unit]]
 text = "The response's correction_method says which one was applied:"
-by = ["exempt:baseline"]
+by = ["docex:docs/statistics/fdr-correction.md#\"correction_method\": \"benjamini_hochberg\""]
 
 [[unit]]
 text = "It prints the correction applied and the experiment's metric, Checkout Completion."
