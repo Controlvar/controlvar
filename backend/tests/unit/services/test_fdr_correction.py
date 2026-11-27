@@ -311,6 +311,54 @@ class TestBHThresholdSensitivity:
             f"Expected 6 significant at FDR=0.10, got {n_significant}"
         )
 
+    def test_the_example_table_rows_and_the_largest_rank(self):
+        """Each row of the guide's 10-p-value table at alpha=0.10.
+
+        A row says whether p(k) <= k/10 * 0.10; the largest such k is 6 and
+        the service rejects ranks 1 to 6 (ranks 3 and 4 fail their own
+        threshold and are rejected with the step-up).
+        """
+        table = [
+            (1, 0.001, 0.010, True),
+            (2, 0.008, 0.020, True),
+            (3, 0.039, 0.030, False),
+            (4, 0.041, 0.040, False),
+            (5, 0.042, 0.050, True),
+            (6, 0.060, 0.060, True),
+            (7, 0.074, 0.070, False),
+            (8, 0.205, 0.080, False),
+            (9, 0.212, 0.090, False),
+            (10, 0.391, 0.100, False),
+        ]
+        for rank, p, threshold, passes in table:
+            assert round(rank / 10 * 0.10, 3) == threshold
+            assert (p <= threshold) is passes, f"rank {rank}"
+        largest_k = max(rank for rank, _, _, passes in table if passes)
+        assert largest_k == 6
+
+        results = _make_service().correct(
+            {f"m{rank}": p for rank, p, _, _ in table}, fdr_threshold=0.10
+        )
+        assert [(r.rank, r.raw_p_value) for r in results] == [
+            (rank, p) for rank, p, _, _ in table
+        ]
+        assert [r.rank for r in results if r.is_significant] == [1, 2, 3, 4, 5, 6]
+
+    def test_adjusted_values_take_the_minimum_from_the_right(self):
+        """p_adj(k) = min(p(k) * m / k, 1), then the minimum from the right.
+
+        On the 10-p-value example the raw step-up values for ranks 3, 4, 5 are
+        0.13, 0.1025 and 0.084, so ranks 3 and 4 are lowered to 0.084; rank 9
+        (0.235556) lowers rank 8 (0.25625).
+        """
+        raw_p = [0.001, 0.008, 0.039, 0.041, 0.042, 0.06, 0.074, 0.205, 0.212, 0.391]
+        results = _make_service().correct(
+            {f"m{i + 1}": p for i, p in enumerate(raw_p)}, fdr_threshold=0.10
+        )
+        expected = [0.01, 0.04, 0.084, 0.084, 0.084, 0.1, 0.105714, 0.235556]
+        expected += [0.235556, 0.391]
+        assert [round(r.adjusted_p_value, 6) for r in results] == expected
+
     def test_fdr_threshold_0_yields_no_discoveries(self):
         """FDR threshold of 0 (no discoveries allowed)."""
         service = _make_service()
