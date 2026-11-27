@@ -74,6 +74,10 @@ const FILES = [
   'components/ui/InlineConfirm.tsx',
   // #1961: the Split URL type's Pages block.
   'components/experiments/new/SplitUrlFields.tsx',
+  // The live results panel and the segment and balanced-group breakdowns.
+  'components/experiments/LiveResultsPanel.tsx',
+  'components/results/Breakdowns/SegmentComparisonTable.tsx',
+  'components/results/Breakdowns/BalancedGroupsView.tsx',
 ];
 
 /**

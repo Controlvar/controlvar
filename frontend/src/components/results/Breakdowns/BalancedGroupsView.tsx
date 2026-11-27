@@ -209,7 +209,7 @@ function Overall({ data, label }: { data: BalancedGroupsResponse; label: (value:
               <tr>
                 <th scope="row" className="px-4 py-3 text-left text-sm font-medium text-slate-900">
                   {control.variant.variant_name}
-                  <span className="ml-1 text-xs text-slate-400">(ctrl)</span>
+                  <span className="ml-1 text-xs text-slate-500">(ctrl)</span>
                 </th>
                 <td className="px-4 py-3 text-right text-sm tabular-nums text-slate-600">
                   {control.users.toLocaleString()}

@@ -111,7 +111,7 @@ function VariantsTable({ variants }: { variants: VariantResult[] }) {
                 <td className="py-2 pr-4 font-medium text-slate-800">
                   {variant.name}
                   {variant.isControl && (
-                    <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-500">
+                    <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600">
                       Control
                     </span>
                   )}
@@ -292,7 +292,7 @@ function StreamingResultsPanel({ experimentId }: LiveResultsPanelProps) {
         {/* Auto-reconnect countdown */}
         {(status === 'disconnected' || status === 'error') &&
           reconnectCountdown !== null && (
-            <p className="text-xs text-slate-400" data-testid="reconnect-countdown">
+            <p className="text-xs text-slate-500" data-testid="reconnect-countdown">
               Auto-reconnecting in {reconnectCountdown}s…
             </p>
           )}
@@ -352,14 +352,14 @@ function StreamingResultsPanel({ experimentId }: LiveResultsPanelProps) {
             <div className="h-4 rounded bg-slate-200 w-5/6" />
           </div>
         ) : (
-          <p className="text-sm text-slate-400 italic" data-testid="no-data-message">
+          <p className="text-sm text-slate-500 italic" data-testid="no-data-message">
             No data available. Connect to start streaming.
           </p>
         )}
 
         {/* Footer */}
         {lastUpdated && (
-          <p className="text-xs text-slate-400" data-testid="last-updated">
+          <p className="text-xs text-slate-500" data-testid="last-updated">
             Last updated: {lastUpdated}
           </p>
         )}
