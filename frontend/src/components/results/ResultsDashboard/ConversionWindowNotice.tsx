@@ -41,7 +41,13 @@ export function computedAtText(value: string | null | undefined): string | null 
 }
 
 const count = (n: number) => n.toLocaleString('en-US');
-const share = (part: number, whole: number) => `${Math.round((part / whole) * 100)}%`;
+/** A share above 0 that rounds to 0% reads "<1%", one below the whole that rounds to 100% reads ">99%". */
+const share = (part: number, whole: number) => {
+  const percent = Math.round((part / whole) * 100);
+  if (percent === 0 && part > 0) return '<1%';
+  if (percent === 100 && part < whole) return '>99%';
+  return `${percent}%`;
+};
 
 type Timing = Pick<ExperimentResultsResponse, 'status' | 'end_date' | 'computed_at'>;
 

@@ -72,7 +72,12 @@ async function stored(page: Page, id: string, headers: Record<string, string>): 
 // page is compared with the API's numbers rather than with its own code.
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const pad = (n: number) => String(n).padStart(2, "0");
-const share = (part: number, whole: number) => `${Math.round((part / whole) * 100)}%`;
+const share = (part: number, whole: number) => {
+  const percent = Math.round((part / whole) * 100);
+  if (percent === 0 && part > 0) return "<1%";
+  if (percent === 100 && part < whole) return ">99%";
+  return `${percent}%`;
+};
 
 /** "27 Nov 2026, 01:40 UTC"; a time the API sends without a zone is UTC. */
 function computedAt(value: string): string {
