@@ -387,6 +387,16 @@ def test_with_no_region_the_glue_client_cannot_be_built(no_region_sources):
         ETLService()._glue()
 
 
+def test_the_glue_client_does_not_read_aws_region(monkeypatch, no_region_sources):
+    """AWS_REGION, as a variable and as the setting, names no region for Glue."""
+    from backend.app.core.config import settings
+
+    monkeypatch.setattr(settings, "AWS_REGION", "eu-west-1")
+    monkeypatch.setenv("AWS_REGION", "eu-west-1")
+    with pytest.raises(NoRegionError):
+        ETLService()._glue()
+
+
 @pytest.mark.parametrize(
     ("name", "call", "sentence"),
     [
