@@ -66,6 +66,23 @@ class SafetySettingsCreate(SafetySettingsBase):
 class SafetySettingsUpdate(SafetySettingsBase):
     """Schema for updating safety settings."""
 
+    @field_validator("default_metrics", mode="after")
+    @classmethod
+    def refuse_unstorable_text(
+        cls, value: Optional[Dict[str, MetricThreshold]], info: ValidationInfo
+    ) -> Optional[Dict[str, MetricThreshold]]:
+        """Refuse NUL and unpaired surrogates in a metric's name or its
+        comparison_type: the database cannot store them, and the save answered
+        500 (#2209). Here, not on the base the response shares. It reads the
+        validated value, which is what is saved, so a key a threshold does not
+        have (dropped) and a body another check refuses answer as before. The
+        message names the field, never the value."""
+        if value is not None and contains_unstorable_text(
+            {name: threshold.model_dump() for name, threshold in value.items()}
+        ):
+            raise ValueError(unstorable_text_message(info.field_name))
+        return value
+
 
 class SafetySettingsResponse(SafetySettingsBase):
     """Response schema for safety settings."""
