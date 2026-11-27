@@ -8,7 +8,9 @@ Run from the repository root (no install needed):
 Env: CONTROLVAR_API_URL (default http://localhost:8000), CONTROLVAR_API_KEY (required;
 the former names EXPERIMENTLY_API_URL / EXPERIMENTLY_API_KEY are read when these are unset),
 CONTRACT_EXPERIMENT_KEY (default sdk_contract_ab), CONTRACT_FLAG_KEY (default sdk_contract_flag),
-CONTRACT_USER_ID (default: random "smoke-<uuid>"), CONTROLVAR_LOCAL_API_KEY (optional:
+CONTRACT_TARGETED_FLAG_KEY (default sdk_contract_targeted: evaluated with {"plan": "pro"} and
+{"plan": "free"}, step 4c), CONTRACT_USER_ID (default: random "smoke-<uuid>"),
+CONTROLVAR_LOCAL_API_KEY (optional:
 a key with the sdk:ruleset scope; with it the smoke also links two ids with alias, step 6).
 
 Prints exactly one JSON line on stdout and exits 0; on failure prints one line to stderr
@@ -85,6 +87,7 @@ def main() -> None:
         fail("CONTROLVAR_API_KEY is required")
     experiment_key = os.environ.get("CONTRACT_EXPERIMENT_KEY", "sdk_contract_ab")
     flag_key = os.environ.get("CONTRACT_FLAG_KEY", "sdk_contract_flag")
+    targeted_key = os.environ.get("CONTRACT_TARGETED_FLAG_KEY", "sdk_contract_targeted")
     user_id = os.environ.get("CONTRACT_USER_ID") or f"smoke-{uuid.uuid4()}"
     attributes = {"source": "contract_smoke", "sdk": "python"}
 
@@ -149,6 +152,18 @@ def main() -> None:
     for _ in range(2):
         if not client.track(user_id, dedup_name, experiment_key=experiment_key, event_id=dedup_id):
             fail("track(contract_dedup) with an event_id was not accepted")
+
+    # 4c. The attributes reach flag evaluation (#1520). The seeded targeted flag is at 0% with one
+    #     rule, plan equals pro, at 100%. A NEW client (so the fan-out above is untouched) asks for
+    #     it with plan=pro, then, after clear_cache() (the cache key is user + flag), with
+    #     plan=free. The runner requires on with the reason targeting_rule, then off.
+    try:
+        targeting = ExperimentationClient(api_url, api_key)
+        pro = targeting.get_feature_flag(targeted_key, user_id, {"plan": "pro"})
+        targeting.clear_cache()
+        free = targeting.get_feature_flag(targeted_key, user_id, {"plan": "free"})
+    except ExperimentationError as exc:
+        fail(f"targeted flag evaluation failed: {exc} (status={exc.status}, body={exc.body!r})")
 
     # 5. The exposure hook (#1499): a NEW client with on_exposure assigns the same user twice,
     #    with no clear_cache() in between. The server records an exposure for the first request
@@ -218,6 +233,7 @@ def main() -> None:
                 "track": {"ok": True},
                 "fanout": {"ok": True},
                 "event_id": {"user_id": user_id, "event_name": dedup_name, "id": dedup_id, "sends": 2},
+                "targeted": {"pro": pro.enabled, "free": free.enabled, "reason": pro.reason},
                 "exposure": {
                     "calls": len(exposures),
                     "payload": None

@@ -243,6 +243,7 @@ ATTRIBUTE_SDKS: frozenset[str] = frozenset(
         "java",
         "dotnet",
         "android",
+        "python",
     ]
 )
 TARGETED_FLAG_KEY = "sdk_contract_targeted"
