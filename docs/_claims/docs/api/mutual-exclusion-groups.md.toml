@@ -5,7 +5,7 @@ document = "docs/api/mutual-exclusion-groups.md"
 
 [[unit]]
 text = "Mutual Exclusion Groups & Global Holdout"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Mutual exclusion groups prevent users from being enrolled in multiple conflicting experiments simultaneously."
@@ -17,23 +17,23 @@ by = ["test:backend/tests/unit/services/test_assignment_service_eligibility.py::
 
 [[unit]]
 text = "The commands on this page run as written against the stack from the Quick Start, in one terminal, top to bottom."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Each one uses the shell variables set by the ones before it."
-by = ["exempt:baseline"]
+by = ["docex:docs/api/mutual-exclusion-groups.md#\"ok\""]
 
 [[unit]]
 text = "Log in first:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "It prints \"ADMIN\"."
-by = ["exempt:baseline"]
+by = ["docex:docs/api/mutual-exclusion-groups.md#\"ADMIN\""]
 
 [[unit]]
 text = "Mutual Exclusion Groups"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "In the dashboard, a user who may create experiments (ADMIN, DEVELOPER, and in the full profile anyone whose custom role or direct grant gives experiment (create)) opens Exclusion groups from the Experiments page: it lists the groups and creates one."
@@ -71,7 +71,7 @@ by = [
 
 [[unit]]
 text = "How It Works"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Traffic is partitioned using consistent hashing on user ID."
@@ -101,7 +101,7 @@ by = ["test:backend/tests/integration/services/test_mutual_exclusion_sticky.py::
 
 [[unit]]
 text = "Nothing is recorded for them."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/services/test_mutual_exclusion_sticky.py::TestPublicAssignRoute::test_m4_tracking_assign_refuses_with_no_row_and_no_event"]
 
 [[unit]]
 text = "Enrolment is sticky across the group."
@@ -143,11 +143,11 @@ by = ["test:backend/tests/integration/services/test_mutual_exclusion_per_request
 
 [[unit]]
 text = "Mutual Exclusion Group API"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "POST /api/v1/mutual-exclusion-groups"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Create a new mutual exclusion group."
@@ -171,7 +171,7 @@ count = 2
 
 [[unit]]
 text = "This saves the new group's id in $GROUP_ID:"
-by = ["exempt:baseline"]
+by = ["docex:docs/api/mutual-exclusion-groups.md#\"name\": \"Checkout Page Experiments\""]
 
 [[unit]]
 text = "The response also carries the group's id, description, owner_id, created_at and updated_at."
@@ -179,19 +179,19 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 
 [[unit]]
 text = "GET /api/v1/mutual-exclusion-groups"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "List all mutual exclusion groups."
-by = ["exempt:baseline"]
+by = ["docex:docs/api/mutual-exclusion-groups.md#Checkout Page Experiments"]
 
 [[unit]]
 text = "Query Parameters"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Parameter | Type | Description"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "status | string | Filter by status: active, archived"
@@ -215,11 +215,11 @@ by = ["docex:docs/api/mutual-exclusion-groups.md#1"]
 
 [[unit]]
 text = "POST /api/v1/mutual-exclusion-groups/{group_id}/experiments"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Add an experiment to a mutual exclusion group."
-by = ["exempt:baseline"]
+by = ["docex:docs/api/mutual-exclusion-groups.md#\"ok\""]
 
 [[unit]]
 text = "This adds the demo data's checkout_button_color experiment, looking up its id by its key:"
@@ -235,7 +235,7 @@ by = ["docex:docs/api/mutual-exclusion-groups.md#\"ok\""]
 
 [[unit]]
 text = "GET /api/v1/mutual-exclusion-groups/"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Retrieve a specific group, including its member experiments:"
@@ -247,7 +247,7 @@ by = ["docex:docs/api/mutual-exclusion-groups.md#\"name\":\"Checkout Button Colo
 
 [[unit]]
 text = "PUT /api/v1/mutual-exclusion-groups/"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Update group name, description, or traffic allocation."
@@ -266,11 +266,11 @@ by = [
 
 [[unit]]
 text = "Sending the group's current status back, as a form that sends every field does, is accepted from a DEVELOPER."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_holdout_admin_roles.py::test_developer_may_send_the_unchanged_status"]
 
 [[unit]]
 text = "DELETE /api/v1/mutual-exclusion-groups/"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Archive a group (soft delete)."
@@ -296,7 +296,7 @@ by = ["test:backend/tests/integration/services/test_mutual_exclusion_sticky.py::
 
 [[unit]]
 text = "DELETE /api/v1/mutual-exclusion-groups/{group_id}/experiments/"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Remove an experiment from the group."
@@ -308,11 +308,11 @@ by = ["test:backend/tests/integration/services/test_mutual_exclusion_sticky.py::
 
 [[unit]]
 text = "Their assignment in the removed experiment is kept."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/services/test_mutual_exclusion_sticky.py::TestGroupRules::test_m9_removing_a_from_the_group_keeps_its_assignment_rows"]
 
 [[unit]]
 text = "Global Holdout"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "In the dashboard, Global holdouts on the Experiments page shows the active holdout to a user who may create experiments (ADMIN, DEVELOPER, and in the full profile anyone whose custom role or direct grant gives experiment (create)), and reads a holdout's results (beta) for one event name."
@@ -343,7 +343,7 @@ by = [
 
 [[unit]]
 text = "A global holdout keeps a percentage of new users out of all experiments platform-wide."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/services/test_assignment_service_eligibility.py::TestHoldout::test_user_in_holdout_is_not_assigned"]
 
 [[unit]]
 text = "New users in the holdout are not assigned to any experiment: POST /api/v1/tracking/assign answers with the control variant."
@@ -416,11 +416,11 @@ by = [
 
 [[unit]]
 text = "In both cases, create a new holdout."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "GET /api/v1/holdout"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Returns the currently active global holdout, or null if none is active:"
@@ -432,7 +432,7 @@ by = ["docex:docs/api/mutual-exclusion-groups.md#null"]
 
 [[unit]]
 text = "GET /api/v1/holdout/all"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "List all holdout configurations (active and historical)."
@@ -443,7 +443,7 @@ by = [
 
 [[unit]]
 text = "POST /api/v1/holdout"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Create a global holdout."
@@ -459,11 +459,11 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 
 [[unit]]
 text = "PUT /api/v1/holdout/"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Update holdout configuration."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_holdout_lifecycle.py::TestRefusals::test_a_never_active_holdout_can_change_its_percentage"]
 
 [[unit]]
 text = "Sending \"is_active\": true deactivates the active holdout and activates this one; sending it to the holdout that is already active changes nothing."
@@ -483,7 +483,10 @@ by = [
 
 [[unit]]
 text = "Refused with 422:"
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/integration/api/test_holdout_lifecycle.py::TestRefusals::test_the_percentage_is_fixed_once_active",
+    "test:backend/tests/integration/api/test_holdout_lifecycle.py::TestRefusals::test_an_ended_holdout_cannot_restart",
+]
 
 [[unit]]
 text = "a different holdout_percentage once the holdout has been active: \"holdout_percentage cannot change once a holdout has been active: it would move users between the holdout and the rest and mix the two groups."
@@ -491,7 +494,7 @@ by = ["test:backend/tests/integration/api/test_holdout_lifecycle.py::TestRefusal
 
 [[unit]]
 text = "Create a new holdout instead.\" Sending the same percentage is accepted, so a form that sends every field keeps working;"
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_holdout_lifecycle.py::TestRefusals::test_the_percentage_is_fixed_once_active"]
 
 [[unit]]
 text = "\"is_active\": true on a holdout that has ended: \"A holdout that has ended cannot restart."
@@ -503,7 +506,7 @@ by = ["test:backend/tests/integration/api/test_holdout_lifecycle.py::TestRefusal
 
 [[unit]]
 text = "GET /api/v1/holdout/check/"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Check whether a specific user is in the active global holdout:"
@@ -526,7 +529,7 @@ by = [
 
 [[unit]]
 text = "Your bucket will differ, because your holdout has its own salt."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_holdout_lifecycle.py::test_holdouts_added_and_flushed_together_get_distinct_own_salts"]
 
 [[unit]]
 text = "A new user in the holdout is answered by POST /api/v1/tracking/assign with the control variant, \"assigned\": false and \"reason\": \"holdout\"."
@@ -534,7 +537,7 @@ by = ["test:backend/tests/unit/services/test_assignment_service_eligibility.py::
 
 [[unit]]
 text = "GET /api/v1/holdout/{holdout_id}/results (beta)"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Beta: this measures the combined effect of running experiments' treatment arms on users first seen while the holdout was active."
@@ -553,7 +556,7 @@ by = ["test:backend/tests/unit/services/test_holdout_results_coverage.py::test_t
 
 [[unit]]
 text = "See #445."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "For one event name (metric, required), it compares the share of users who sent at least one matching event in two groups: in_holdout, the users the holdout kept out, and not_in_holdout, everyone else first seen while it was active."
@@ -654,11 +657,16 @@ by = [
 
 [[unit]]
 text = "difference is null, and unavailable_reason and message say why, in these cases:"
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/integration/api/test_holdout_results.py::TestReasons::test_the_row_the_upgrade_ended_is_activated_before_measurement",
+    "test:backend/tests/integration/api/test_holdout_results.py::TestReasons::test_a_holdout_not_activated",
+    "test:backend/tests/integration/api/test_holdout_results.py::TestReasons::test_99_users_in_a_group_is_too_few",
+    "test:backend/tests/integration/api/test_holdout_results.py::TestReasons::test_no_events_for_the_metric",
+]
 
 [[unit]]
 text = "unavailable_reason | When"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "activated_before_measurement | The holdout was active before the release that records who a holdout covers. Create a new holdout."
@@ -685,11 +693,11 @@ by = ["docex:docs/api/mutual-exclusion-groups.md#\"unavailable_reason\": \"too_f
 
 [[unit]]
 text = "Permissions"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Action | Minimum Role"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "List groups / view holdout | DEVELOPER, or in the full profile a custom role or direct grant of experiment (create)"

@@ -547,6 +547,18 @@ class TestGroupRules:
 
         assert sum(r["assigned"] for r in results) == 200
 
+    def test_m9_removing_a_from_the_group_keeps_its_assignment_rows(
+        self, db_session, group_setup
+    ):
+        users = ENROLLED[:200]
+        _assign(db_session, users, EXP_A)
+        before = _users_in(db_session, EXP_A)
+        assert before
+
+        MutualExclusionService(db_session).remove_experiment_from_group(GROUP_ID, EXP_A)
+
+        assert _users_in(db_session, EXP_A) == before
+
     def test_m9_with_both_live_from_the_start_each_user_is_in_exactly_one(
         self, db_session, group_setup
     ):
