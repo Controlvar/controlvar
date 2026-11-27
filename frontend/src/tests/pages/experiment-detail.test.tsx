@@ -413,6 +413,18 @@ describe('ExperimentDetailPage — lifecycle actions', () => {
     expect(screen.getByTestId('experiment-actions').querySelectorAll('button')).toHaveLength(0);
   });
 
+  it("Archive's confirmation says only what happens, and promises neither a hidden experiment nor an Unarchive", async () => {
+    install(experiment({ status: 'completed' }));
+    render(<ExperimentDetailPage />);
+    await screen.findByTestId('experiment-detail');
+
+    fireEvent.click(screen.getByTestId('action-archive'));
+    const confirmation = screen.getByTestId('confirm-action');
+    expect(confirmation).toHaveTextContent('Archive this experiment? Its status becomes Archived.');
+    // The experiment list shows archived experiments under All, and no route brings one back.
+    expect(confirmation).not.toHaveTextContent(/hidden|default list|unarchive/i);
+  });
+
   it('surfaces the backend error and keeps the old status when a transition fails', async () => {
     mockedApiFetch.mockImplementation(
       routedApi([
