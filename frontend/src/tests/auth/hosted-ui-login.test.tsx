@@ -61,6 +61,7 @@ async function clickSignIn(): Promise<void> {
 
 function lastAuthorize(): URL {
   const hits = authorizeHits();
+  if (hits.length === 0) throw new Error('The browser was not sent to the Hosted UI');
   return new URL(hits[hits.length - 1]);
 }
 
