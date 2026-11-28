@@ -216,4 +216,14 @@ export const ExperimentsService = {
   async schedule(id: string, body: ExperimentScheduleUpdate): Promise<Experiment> {
     return apiFetch<Experiment>(`${BASE}/${id}/schedule`, { method: 'PUT', json: body });
   },
+
+  /**
+   * `POST /api/v1/experiments/{id}/metadata` (#2274). The body is a JSON
+   * object whose keys are merged into the stored metadata: a key the body
+   * leaves out is kept. The dashboard sends `notes` and `learnings`. The
+   * answer is the experiment, without its owner's name.
+   */
+  async updateMetadata(id: string, body: Record<string, unknown>): Promise<Experiment> {
+    return apiFetch<Experiment>(`${BASE}/${id}/metadata`, { method: 'POST', json: body });
+  },
 };

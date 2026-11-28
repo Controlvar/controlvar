@@ -99,6 +99,18 @@
       "VIEWER"
     ]
   },
+  "experiment_metadata_route": {
+    "role": [
+      "ADMIN",
+      "DEVELOPER"
+    ],
+    "superuser": [
+      "ADMIN",
+      "DEVELOPER",
+      "ANALYST",
+      "VIEWER"
+    ]
+  },
   "grantable": [
     [
       "audit_log",

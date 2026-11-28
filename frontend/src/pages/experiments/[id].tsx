@@ -6,6 +6,7 @@ import { InlineConfirm } from '@/components/ui/InlineConfirm';
 import { BanditWeightHistory } from '@/components/experiments/BanditWeightHistory';
 import { BanditWeightsSection } from '@/components/experiments/BanditWeightsSection';
 import { ExperimentManageSection } from '@/components/experiments/ExperimentManageSection';
+import { ExperimentNotesSection } from '@/components/experiments/ExperimentNotesSection';
 import { TargetingSection } from '@/components/experiments/TargetingSection';
 import { ApiKeyRouteHint } from '@/components/experiments/ApiKeyRouteHint';
 import WarehouseAnalysisSection from '@modules/components/warehouse/runs/WarehouseAnalysisSection';
@@ -882,6 +883,8 @@ export default function ExperimentDetailPage() {
 
         {/* Warehouse analysis (beta): the `warehouse` module; renders nothing without it. */}
         <WarehouseAnalysisSection experiment={experiment} />
+
+        <ExperimentNotesSection experiment={experiment} mayChange={mayChange} onSaved={onSaved} />
 
         {/* SDK hint */}
         {experiment.key && (

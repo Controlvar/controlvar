@@ -236,7 +236,7 @@ text = "Read the change history of one flag, experiment or person | API only | A
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
-text = "Write notes and learnings on an experiment | API only | Running experiments"
+text = "Write notes and learnings on an experiment | Dashboard | Running experiments"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]

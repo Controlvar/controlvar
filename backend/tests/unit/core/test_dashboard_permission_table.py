@@ -22,6 +22,10 @@ run by both profiles' Jest) holds every permission helper to:
 * ``holdout_check_route``: who ``GET /api/v1/holdout/check/{user_id}`` admits
   (what ``global_holdout._require_developer`` does for each role, once without
   and once with the superuser flag; #2276);
+* ``experiment_metadata_route``: who ``POST /experiments/{id}/metadata`` admits
+  (what ``deps.get_experiment_change_access`` does for each role, once without
+  and once with the superuser flag; the notes and learnings on an experiment's
+  page use it; #2274);
 * ``grantable``: the eleven pairs a custom role or direct grant can hold
   (``GRANTABLE``).
 
@@ -89,6 +93,26 @@ def _admitted_by(require_admin) -> List[str]:
 
 def _admitted_by_change_access(is_superuser: bool) -> List[str]:
     """The roles ``get_experiment_change_access`` admits, as the route calls it."""
+    admitted = []
+    experiment = SimpleNamespace(id=uuid.uuid4(), owner_id=uuid.uuid4())
+    for name in ROLE_ORDER:
+        user = SimpleNamespace(
+            id=uuid.uuid4(),
+            role=UserRole[name],
+            is_superuser=is_superuser,
+            is_active=True,
+        )
+        try:
+            deps.get_experiment_change_access(experiment, user)
+        except HTTPException as refused:
+            assert refused.status_code == 403
+        else:
+            admitted.append(name)
+    return admitted
+
+
+def _admitted_by_metadata_route(is_superuser: bool) -> List[str]:
+    """The roles the metadata route's own check admits, as the route calls it."""
     admitted = []
     experiment = SimpleNamespace(id=uuid.uuid4(), owner_id=uuid.uuid4())
     for name in ROLE_ORDER:
@@ -185,6 +209,10 @@ def build_table() -> Dict[str, Any]:
             "role": _admitted_by_holdout_check(False),
             "superuser": _admitted_by_holdout_check(True),
         },
+        "experiment_metadata_route": {
+            "role": _admitted_by_metadata_route(False),
+            "superuser": _admitted_by_metadata_route(True),
+        },
         "grantable": [list(pair) for pair in sorted(GRANTABLE)],
     }
 
@@ -217,6 +245,10 @@ def test_the_table_is_not_empty():
         "superuser": ["ADMIN", "DEVELOPER", "ANALYST", "VIEWER"],
     }
     assert table["holdout_check_route"] == {
+        "role": ["ADMIN", "DEVELOPER"],
+        "superuser": ["ADMIN", "DEVELOPER", "ANALYST", "VIEWER"],
+    }
+    assert table["experiment_metadata_route"] == {
         "role": ["ADMIN", "DEVELOPER"],
         "superuser": ["ADMIN", "DEVELOPER", "ANALYST", "VIEWER"],
     }

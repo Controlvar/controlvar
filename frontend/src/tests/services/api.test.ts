@@ -34,6 +34,7 @@ import { UserTable, deleteTimedOutMessage } from '@/components/admin/users/UserT
 import { overrideErrorCopy } from '@/components/experiments/BanditWeightsOverride';
 import { UNREACHABLE, errorCopy } from '@/components/experiments/ExperimentManageSection';
 import { SCHEDULE_ERROR_COPY, scheduleErrorCopy } from '@/components/experiments/ExperimentScheduleSection';
+import { NOTES_ERROR_COPY, notesErrorCopy } from '@/components/experiments/ExperimentNotesSection';
 import { flagManageErrorCopy } from '@/components/feature-flags/FlagManageSection';
 import { rolloutErrorCopy } from '@/components/feature-flags/RolloutScheduleManager';
 import { resultsErrorMessage } from '@/components/results/ResultsDashboard/ResultsDashboard';
@@ -928,6 +929,7 @@ const STATUS_ZERO_SITES: Record<string, { count: number; kind: string }> = {
   'components/experiments/BanditWeightsOverride.tsx': { count: 1, kind: 'passes-message' },
   'components/experiments/ExperimentManageSection.tsx': { count: 1, kind: 'write' },
   // SCHEDULE_ERROR_COPY's `0:` entry.
+  'components/experiments/ExperimentNotesSection.tsx': { count: 1, kind: 'write' },
   'components/experiments/ExperimentScheduleSection.tsx': { count: 1, kind: 'write' },
   'components/feature-flags/RolloutScheduleManager.tsx': { count: 1, kind: 'write' },
   // flagManageErrorCopy: archive and unarchive a flag (#442).
@@ -1126,6 +1128,10 @@ describe('each status-0 place says what a time-out means (#1040 D7)', () => {
         expect(errorCopy(action, write)).toBe(WRITE_TEXT);
         expect(errorCopy(action, unreachable())).toBe(UNREACHABLE);
       }
+    },
+    'components/experiments/ExperimentNotesSection.tsx': (write) => {
+      expect(notesErrorCopy(write)).toBe(WRITE_TEXT);
+      expect(notesErrorCopy(unreachable())).toBe(NOTES_ERROR_COPY[0]);
     },
     'components/experiments/ExperimentScheduleSection.tsx': (write) => {
       expect(scheduleErrorCopy(write)).toBe(WRITE_TEXT);
