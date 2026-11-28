@@ -5,11 +5,11 @@ document = "docs/workspaces/overview.md"
 
 [[unit]]
 text = "Team Workspaces — Overview"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Part of the workspaces module"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Team workspaces is one of the optional modules -- present in the full profile, absent from the core one."
@@ -21,11 +21,11 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 
 [[unit]]
 text = "See Modules and profiles for what each profile includes and how to run the full one."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "What Are Workspaces?"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "A workspace groups platform users into a team, with a workspace role for each member."
@@ -36,19 +36,19 @@ by = [
 
 [[unit]]
 text = "It represents a team, project, or product area — for example:"
-by = ["exempt:baseline"]
+by = ["exempt:example"]
 
 [[unit]]
 text = "acme-mobile for the mobile engineering team"
-by = ["exempt:baseline"]
+by = ["exempt:example"]
 
 [[unit]]
 text = "acme-web for the web product team"
-by = ["exempt:baseline"]
+by = ["exempt:example"]
 
 [[unit]]
 text = "acme-growth for the growth squad"
-by = ["exempt:baseline"]
+by = ["exempt:example"]
 
 [[unit]]
 text = "A workspace holds its members, their workspace roles and its pending invitations."
@@ -70,7 +70,7 @@ by = [
 
 [[unit]]
 text = "What workspaces do not do"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Workspaces do not decide which experiments, feature flags or API keys a user can see or change."
@@ -78,7 +78,10 @@ by = ["test:modules/backend/tests/integration/api/test_workspace_roles_scope.py:
 
 [[unit]]
 text = "Experiments and feature flags are not created inside a workspace, and workspace membership plays no part when they are listed, read or changed."
-by = ["exempt:baseline"]
+by = [
+    "test:modules/backend/tests/integration/api/test_workspace_roles_scope.py::test_the_platform_role_not_the_workspace_decides",
+    "test:modules/backend/tests/integration/api/test_workspace_roles_scope.py::test_a_workspace_role_neither_grants_nor_limits_a_change",
+]
 
 [[unit]]
 text = "That is decided by the user's platform role (ADMIN, DEVELOPER, ANALYST or VIEWER), plus their custom roles and direct grants, across the whole installation — see Role-based access control."
@@ -90,11 +93,11 @@ by = [
 
 [[unit]]
 text = "If you need teams to be unable to see each other's experiments and flags, run a separate installation for each team."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Role Hierarchy"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Every workspace member has exactly one workspace role."
@@ -102,11 +105,14 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "The roles form a hierarchy, and a workspace role applies only to the workspace routes:"
-by = ["exempt:baseline"]
+by = [
+    "test:modules/backend/tests/integration/api/test_workspace_roles_scope.py::test_developer_analyst_and_viewer_get_the_same_answers",
+    "test:modules/backend/tests/integration/api/test_workspace_roles_scope.py::test_a_workspace_role_neither_grants_nor_limits_a_change",
+]
 
 [[unit]]
 text = "Role | On the workspace routes"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "OWNER | Everything an ADMIN can do, and delete the workspace"
@@ -144,7 +150,7 @@ by = ["test:modules/backend/tests/integration/api/test_workspace_roles_scope.py:
 
 [[unit]]
 text = "Changing Roles"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "An ADMIN or OWNER can change a member's role among VIEWER, ANALYST, DEVELOPER and ADMIN."
@@ -170,7 +176,7 @@ by = [
 
 [[unit]]
 text = "Plans and Limits"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Workspaces have no plan and no limits: a workspace can have any number of members."
@@ -189,7 +195,7 @@ by = [
 
 [[unit]]
 text = "API Keys"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Workspaces do not issue API keys."
@@ -211,11 +217,14 @@ by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestCreate::test
 
 [[unit]]
 text = "Invitations"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Workspace members can be added in two ways:"
-by = ["exempt:baseline"]
+by = [
+    "test:modules/backend/tests/integration/api/test_workspaces_api.py::TestWorkspaceMembers",
+    "test:modules/backend/tests/integration/api/test_workspaces_api.py::TestWorkspaceInvites",
+]
 
 [[unit]]
 text = "Direct add (ADMIN+): Look up an existing platform user by their UUID and add them immediately with the desired role."
@@ -241,7 +250,7 @@ by = [
 
 [[unit]]
 text = "Send the link to the recipient."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "The token is valid for 7 days."
@@ -272,7 +281,7 @@ by = [
 
 [[unit]]
 text = "Anyone else gets 403 with code invite_email_mismatch."
-by = ["exempt:baseline"]
+by = ["test:modules/backend/tests/integration/api/test_workspace_invite_binding.py::test_another_account_cannot_accept"]
 
 [[unit]]
 text = "The address must be ASCII, and an alias is a different address: alice+work@example.com does not accept an invite sent to alice@example.com."
