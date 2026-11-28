@@ -1,27 +1,6 @@
 # The ledger of scripts/doc_claims.py (#1142): one line per registry entry whose
 # target is untested:<T|S|X|A> or exempt:baseline, as kind<TAB>document<TAB>the
 # first 12 hex digits of sha256(the unit's text). Sorted; it only shrinks.
-exempt:baseline	docs/api/alerting.md	2867b24f4cdc
-exempt:baseline	docs/api/alerting.md	299b559a9510
-exempt:baseline	docs/api/alerting.md	2aec7553b87e
-exempt:baseline	docs/api/alerting.md	34413c402160
-exempt:baseline	docs/api/alerting.md	38d7c8f2360c
-exempt:baseline	docs/api/alerting.md	436894377df9
-exempt:baseline	docs/api/alerting.md	4ead7a8fe4d3
-exempt:baseline	docs/api/alerting.md	569999738f96
-exempt:baseline	docs/api/alerting.md	5f717eb7055e
-exempt:baseline	docs/api/alerting.md	7d504ffa86b7
-exempt:baseline	docs/api/alerting.md	98abfc9b7c55
-exempt:baseline	docs/api/alerting.md	9e0ed7ea5e06
-exempt:baseline	docs/api/alerting.md	aa167bc60953
-exempt:baseline	docs/api/alerting.md	abccc78cc93c
-exempt:baseline	docs/api/alerting.md	ad705ab9d48a
-exempt:baseline	docs/api/alerting.md	b332c3492d5e
-exempt:baseline	docs/api/alerting.md	c3af076f92c5
-exempt:baseline	docs/api/alerting.md	c3bad114b96d
-exempt:baseline	docs/api/alerting.md	c9f9c8d5e30a
-exempt:baseline	docs/api/alerting.md	d21e8d23dbd7
-exempt:baseline	docs/api/alerting.md	fab1c3215f08
 exempt:baseline	docs/api/bayesian.md	00c7977c7456
 exempt:baseline	docs/api/bayesian.md	01de3b53a7b8
 exempt:baseline	docs/api/bayesian.md	2398232e1ce4

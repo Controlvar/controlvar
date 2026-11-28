@@ -5,7 +5,7 @@ document = "docs/api/alerting.md"
 
 [[unit]]
 text = "Slack & Email Alerting"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The platform sends a Slack message for each event in the table below."
@@ -30,11 +30,11 @@ by = [
 
 [[unit]]
 text = "Supported Channels"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Channel | Provider | Configuration"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Slack | Slack Block Kit via slack_sdk | SLACK_BOT_TOKEN, SLACK_DEFAULT_CHANNEL"
@@ -49,11 +49,11 @@ by = [
 
 [[unit]]
 text = "Event Types"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Event | Slack | Email | Description"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Safety rollback | ✅ | ❌ | Feature flag auto-rolled back due to error rate or latency threshold"
@@ -79,7 +79,7 @@ by = [
 
 [[unit]]
 text = "Configuration"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "These are settings of the API process: put them in its environment (on the Quick Start stack, the api service's environment: in docker-compose.yml), then restart it."
@@ -144,7 +144,7 @@ by = ["test:backend/tests/unit/services/test_notification_delivery_rules.py::tes
 
 [[unit]]
 text = "Notification Preferences API"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Each user can store which events they want to be notified about, a Slack channel of their own and another email address."
@@ -166,19 +166,19 @@ by = ["test:backend/tests/unit/api/test_notifications_api.py::test_test_notifica
 
 [[unit]]
 text = "Run the commands on this page in one terminal, in order, against the stack from the Quick Start."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Each uses the shell variables set by the ones before it."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Log in first:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "It prints \"ADMIN\"."
-by = ["exempt:baseline"]
+by = ["docex:docs/api/alerting.md#\"ADMIN\""]
 
 [[unit]]
 text = "GET /api/v1/notifications/preferences"
@@ -194,7 +194,7 @@ by = ["docex:docs/api/alerting.md#\"notify_experiment_started\": true"]
 
 [[unit]]
 text = "The full response:"
-by = ["exempt:baseline"]
+by = ["exempt:example"]
 
 [[unit]]
 text = "PUT /api/v1/notifications/preferences"
@@ -206,7 +206,10 @@ by = ["test:backend/tests/unit/api/test_notifications_api.py::test_update_prefer
 
 [[unit]]
 text = "This turns on rollout notifications and sends your Slack alerts to #my-team-alerts:"
-by = ["exempt:baseline"]
+by = [
+    "docex:docs/api/alerting.md#\"notify_rollout_advanced\": true",
+    "docex:docs/api/alerting.md#\"slack_channel\": \"#my-team-alerts\"",
+]
 
 [[unit]]
 text = "It prints the two changed values."
@@ -266,11 +269,11 @@ by = ["docex:docs/api/alerting.md#\"total\": 0"]
 
 [[unit]]
 text = "Query Parameters"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Parameter | Type | Description"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "page | int | Page number (default: 1)"
@@ -301,7 +304,10 @@ by = ["docex:docs/api/alerting.md#false"]
 
 [[unit]]
 text = "Sends a test notification, to check a channel's settings."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/unit/api/test_notifications_api.py::test_test_notification_slack_channel",
+    "test:backend/tests/unit/api/test_notifications_api.py::test_test_notification_webhook_channel",
+]
 
 [[unit]]
 text = "Requires the DEVELOPER or ADMIN role."
@@ -325,11 +331,11 @@ by = ["docex:docs/api/alerting.md#false"]
 
 [[unit]]
 text = "Permissions"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Action | Minimum Role"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "View own preferences | Any authenticated user"
@@ -355,11 +361,11 @@ by = [
 
 [[unit]]
 text = "Troubleshooting"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Slack messages not arriving"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Confirm that SLACK_ENABLED is true in the API's environment"
@@ -371,7 +377,7 @@ by = ["exempt:instruction"]
 
 [[unit]]
 text = "Emails not arriving"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Confirm that EMAIL_ENABLED is true"
