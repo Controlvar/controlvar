@@ -59,7 +59,7 @@ The table lists each capability and where you do it today:
 | Turn sequential testing (beta) on or off for an existing draft, and set its alpha | API only | [Sequential testing](../api/sequential-testing.md#turning-it-on) |
 | Set another user's password; change their name, email, username and superuser flag | API only | [Authentication user guide](../auth/auth-user-guide.md) |
 | Turn CUPED on, and choose its covariate and lookback | API only | [CUPED](../api/cuped.md) |
-| Read the change history of one flag, experiment or person | API only | [Audit logging](../api/audit-logging.md) |
+| Read the change history of one flag, experiment or person | Dashboard | [Audit logging](../api/audit-logging.md) |
 | Write notes and learnings on an experiment | Dashboard | [Running experiments](user-guide.md) |
 | See a feature flag's evaluations, latency and client error log | API only | [Safety monitoring](../feature-flags/safety.md) |
 | Check one user id against the global holdout | Dashboard | [Mutual exclusion groups and global holdout](../api/mutual-exclusion-groups.md#global-holdout) |

@@ -274,6 +274,13 @@ so. Its **Download CSV** and **Download JSON** buttons export the same entries, 
 page's current filters. The page makes the same comparison, and when the counts differ it
 says so and saves nothing.
 
+A feature flag's page, an experiment's page and each row of the Users page have a **History**
+link to this page, filtered to that item or person (`entity_type` and `entity_id`, or
+`user_id`, in the address). The page then shows a "Showing changes to" line with a button that
+removes the filter. Everyone who may open the page sees the links, and what they list is
+narrowed as above. A **Person** box, for a person's id, is shown to those who read everyone's
+entries. Both filters go to the downloads too.
+
 ---
 
 ## Action Types

@@ -141,6 +141,7 @@ export const AdminService = {
     user_id?: string;
     action_type?: string;
     entity_type?: string;
+    entity_id?: string;
     from_date?: string;
     to_date?: string;
   }): Promise<AuditLogListResponse> {
@@ -151,6 +152,7 @@ export const AdminService = {
         user_id: params?.user_id || undefined,
         action_type: params?.action_type || undefined,
         entity_type: params?.entity_type || undefined,
+        entity_id: params?.entity_id || undefined,
         from_date: params?.from_date || undefined,
         to_date: params?.to_date || undefined,
       },
@@ -164,16 +166,20 @@ export const AdminService = {
   async exportAuditLogs(
     format: 'csv' | 'json',
     params?: {
+      user_id?: string;
       action_type?: string;
       entity_type?: string;
+      entity_id?: string;
       from_date?: string;
       to_date?: string;
     },
   ): Promise<ApiDownload> {
     return apiDownload('/api/v1/audit-logs/export', {
       format,
+      user_id: params?.user_id || undefined,
       action_type: params?.action_type || undefined,
       entity_type: params?.entity_type || undefined,
+      entity_id: params?.entity_id || undefined,
       from_date: params?.from_date || undefined,
       to_date: params?.to_date || undefined,
     });
