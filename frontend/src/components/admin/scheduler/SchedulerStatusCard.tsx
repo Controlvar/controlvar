@@ -55,13 +55,13 @@ export function SchedulerStatusCard({ scheduler }: SchedulerStatusCardProps) {
       {/* Stats grid */}
       <div className="grid grid-cols-2 gap-3 text-xs text-slate-600 sm:grid-cols-4">
         <div>
-          <p className="text-slate-400 uppercase tracking-wide mb-0.5">Last Run</p>
+          <p className="text-slate-600 uppercase tracking-wide mb-0.5">Last Run</p>
           <p data-testid="last-run" className="font-medium text-slate-700">
             {formatDate(scheduler.last_run_at)}
           </p>
         </div>
         <div>
-          <p className="text-slate-400 uppercase tracking-wide mb-0.5">Last Run Status</p>
+          <p className="text-slate-600 uppercase tracking-wide mb-0.5">Last Run Status</p>
           {lastStatus ? (
             <span
               data-testid="last-run-status"
@@ -79,13 +79,13 @@ export function SchedulerStatusCard({ scheduler }: SchedulerStatusCardProps) {
           )}
         </div>
         <div>
-          <p className="text-slate-400 uppercase tracking-wide mb-0.5">Next Run</p>
+          <p className="text-slate-600 uppercase tracking-wide mb-0.5">Next Run</p>
           <p data-testid="next-run" className="font-medium text-slate-700">
             {formatDate(scheduler.next_run_at)}
           </p>
         </div>
         <div>
-          <p className="text-slate-400 uppercase tracking-wide mb-0.5">Failures in a Row</p>
+          <p className="text-slate-600 uppercase tracking-wide mb-0.5">Failures in a Row</p>
           <p data-testid="consecutive-failures" className="font-semibold text-slate-800">
             {scheduler.consecutive_failures}
           </p>

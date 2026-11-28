@@ -47,7 +47,7 @@ export function AdminDashboard() {
             className="bg-red-50 border border-red-200 rounded-lg p-6 text-center"
           >
             <p className="text-red-700 font-medium">Failed to load dashboard stats</p>
-            <p className="text-red-500 text-sm mt-1">{error}</p>
+            <p className="text-red-700 text-sm mt-1">{error}</p>
           </div>
         )}
 

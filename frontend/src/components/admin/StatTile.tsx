@@ -31,7 +31,7 @@ export function StatTile({ label, value, subtitle, color = 'slate' }: StatTilePr
       <p className="text-sm font-medium text-slate-500">{label}</p>
       <p className={['text-3xl font-bold', accent].join(' ')}>{value}</p>
       {subtitle !== undefined && (
-        <p data-testid="stat-tile-subtitle" className="text-xs text-slate-400 mt-1">
+        <p data-testid="stat-tile-subtitle" className="text-xs text-slate-600 mt-1">
           {subtitle}
         </p>
       )}

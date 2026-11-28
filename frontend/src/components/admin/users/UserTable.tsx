@@ -210,7 +210,7 @@ export function UserTable({
           className="p-8 text-center text-red-600"
         >
           <p className="font-medium">Failed to load users</p>
-          <p className="text-sm mt-1 text-red-500">{error}</p>
+          <p className="text-sm mt-1 text-red-700">{error}</p>
         </div>
       )}
 
@@ -241,7 +241,7 @@ export function UserTable({
                   <tr key={user.id} className="hover:bg-slate-50">
                     <td className="px-6 py-4 font-medium text-slate-900">{user.username}</td>
                     <td className="px-6 py-4 text-slate-600">
-                      {user.email ?? <span className="text-slate-400 italic">No email</span>}
+                      {user.email ?? <span className="text-slate-600 italic">No email</span>}
                     </td>
                     <td className="px-6 py-4">
                       {user.role ? (
