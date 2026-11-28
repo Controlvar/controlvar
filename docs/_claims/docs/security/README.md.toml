@@ -5,15 +5,15 @@ document = "docs/security/README.md"
 
 [[unit]]
 text = "Security Documentation"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "This directory contains the security compliance documentation for Controlvar."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Document | Description"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Security model | What the platform does to protect a deployment"
@@ -21,27 +21,27 @@ by = ["exempt:navigation"]
 
 [[unit]]
 text = "Responding to an incident on your deployment | Where to report a vulnerability, and how to roll back"
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Hardening Changes | Security controls implemented"
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Quick Reference"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Report a security issue: privately, as SECURITY.md describes"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "An incident on your deployment: Responding to an incident on your deployment"
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Key Security Controls (Implemented)"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Security headers: HSTS (1yr + preload), CSP (default-src 'none', except the two API reference pages, which allow the jsdelivr assets they load), X-Frame-Options: DENY — backend/app/middleware/security_middleware.py"
