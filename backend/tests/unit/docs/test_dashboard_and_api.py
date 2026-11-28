@@ -115,9 +115,8 @@ WITNESSES: Dict[str, str] = {
     ),
     # After launch (#442's checklist).
     "Change a draft experiment's variants or metrics": "experiment-edit-variants",
-    # #1454: a draft's schedule on the experiment page. A paused experiment's
-    # resume goes through the same route, which the page does not offer:
-    # reserved; no screen planned.
+    # #1454: a draft's schedule on the experiment page; #2283: a paused
+    # experiment's resume goes through the same route, with its own form.
     "Schedule a draft experiment's start and end dates": "experiment-schedule-form",
     "Schedule a paused experiment's resume": "experiment-schedule-resume",
     # #1456: the flag page's rollout schedule controls.
@@ -766,7 +765,7 @@ STALE: Tuple[Tuple[str, str], ...] = (
     (
         r"scheduling is through the api",
         "the experiment page's Schedule sets a draft's start and end (#1454); "
-        "only a paused experiment's resume is API only",
+        "a paused experiment's resume has its own form (#2283)",
     ),
     (
         r"(dashboard|page) has no schedule screen",

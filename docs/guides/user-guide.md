@@ -237,6 +237,8 @@ start date does not move. On a paused experiment:
 - `end_date` must be later than the experiment's start date and, with a resume scheduled,
   at least an hour after the resume time.
 
+In the dashboard, a paused experiment's page has **Schedule resume**, which opens one **Resume at** picker in your browser's time zone. **Remove** cancels a scheduled resume, and the page shows the time as **Resumes**.
+
 Starting, completing or archiving the experiment cancels a scheduled resume, and so does
 any other change of status.
 

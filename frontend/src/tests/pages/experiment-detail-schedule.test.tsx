@@ -189,7 +189,8 @@ describe('who sees Schedule', () => {
   const STATUSES: ExperimentStatus[] = ['draft', 'active', 'paused', 'completed', 'archived'];
   const table: [string, ExperimentStatus, boolean, Record<string, unknown>][] = [];
   for (const status of STATUSES) {
-    const writer = status === 'draft';
+    // A draft's Schedule and a paused experiment's Schedule resume (#2283) share the button.
+    const writer = status === 'draft' || status === 'paused';
     table.push(['ADMIN', status, writer, as('ADMIN')]);
     table.push(['DEVELOPER', status, writer, as('DEVELOPER')]);
     table.push(['ANALYST', status, false, as('ANALYST')]);
@@ -216,10 +217,12 @@ describe('who sees Schedule', () => {
     ]);
   });
 
-  it('a PAUSED experiment is never offered it: its resume time stays in the API', async () => {
+  it('a PAUSED experiment gets the resume form, not the dates form (#2283)', async () => {
     signIn(as('ADMIN', { is_superuser: true }));
     await renderPage(experiment({ status: 'paused', start_date: '2026-10-01T10:00:00' }));
-    expect(screen.queryByTestId('experiment-schedule')).toBeNull();
+    fireEvent.click(screen.getByTestId('experiment-schedule'));
+    expect(screen.getByTestId('experiment-schedule-resume')).toBeInTheDocument();
+    expect(screen.queryByTestId('schedule-end')).toBeNull();
   });
 
   it('the button sits with the manage controls, outside experiment-actions', async () => {

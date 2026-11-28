@@ -15,6 +15,10 @@ run by both profiles' Jest) holds every permission helper to:
   admits; #1957);
 * ``analyse_interactions_roles``: which may run the interaction scan and pair
   test (what ``interactions._require_developer`` admits, #1960);
+* ``change_experiment_route``: who the experiment change routes admit (what
+  ``deps.get_experiment_change_access`` does for each role, once without and
+  once with the superuser flag; ``PUT /experiments/{id}/schedule``, which a
+  paused experiment's resume time uses, calls it; #2283);
 * ``grantable``: the eleven pairs a custom role or direct grant can hold
   (``GRANTABLE``).
 
@@ -37,6 +41,7 @@ from typing import Any, Dict, List
 import pytest
 from fastapi import HTTPException
 
+from backend.app.api import deps
 from backend.app.api.v1.endpoints import (
     bandit,
     global_holdout,
@@ -72,6 +77,26 @@ def _admitted_by(require_admin) -> List[str]:
     for name in ROLE_ORDER:
         try:
             require_admin(SimpleNamespace(role=UserRole[name], is_superuser=False))
+        except HTTPException as refused:
+            assert refused.status_code == 403
+        else:
+            admitted.append(name)
+    return admitted
+
+
+def _admitted_by_change_access(is_superuser: bool) -> List[str]:
+    """The roles ``get_experiment_change_access`` admits, as the route calls it."""
+    admitted = []
+    experiment = SimpleNamespace(id=uuid.uuid4(), owner_id=uuid.uuid4())
+    for name in ROLE_ORDER:
+        user = SimpleNamespace(
+            id=uuid.uuid4(),
+            role=UserRole[name],
+            is_superuser=is_superuser,
+            is_active=True,
+        )
+        try:
+            deps.get_experiment_change_access(experiment, user)
         except HTTPException as refused:
             assert refused.status_code == 403
         else:
@@ -135,6 +160,10 @@ def build_table() -> Dict[str, Any]:
         "administer_eligibility_roles": holdout_admins,
         "override_bandit_weights_roles": _admitted_by_override(),
         "analyse_interactions_roles": _admitted_by(interactions._require_developer),
+        "change_experiment_route": {
+            "role": _admitted_by_change_access(False),
+            "superuser": _admitted_by_change_access(True),
+        },
         "grantable": [list(pair) for pair in sorted(GRANTABLE)],
     }
 
@@ -162,6 +191,10 @@ def test_the_table_is_not_empty():
     assert table["administer_eligibility_roles"] == ["ADMIN"]
     assert table["override_bandit_weights_roles"] == ["ADMIN"]
     assert table["analyse_interactions_roles"] == ["ADMIN", "DEVELOPER", "ANALYST"]
+    assert table["change_experiment_route"] == {
+        "role": ["ADMIN", "DEVELOPER"],
+        "superuser": ["ADMIN", "DEVELOPER", "ANALYST", "VIEWER"],
+    }
 
 
 def test_a_changed_role_list_is_a_difference():

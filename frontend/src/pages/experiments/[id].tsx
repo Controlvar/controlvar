@@ -592,19 +592,18 @@ export default function ExperimentDetailPage() {
                     </dd>
                   </div>
                 )}
+                {experiment.status === 'paused' && (
+                  <div className="flex items-center gap-1.5">
+                    <dt className="text-slate-500">Resumes</dt>
+                    <dd data-testid="experiment-resume-at">
+                      {experiment.resume_at ? formatDate(experiment.resume_at) : 'Not scheduled'}
+                    </dd>
+                  </div>
+                )}
                 <EligibilityRows groupId={experiment.mutual_exclusion_group_id} user={user} />
               </dl>
               <p className="mt-2 text-xs text-slate-600" data-testid="experiment-api-settings-note">
                 Set through the API, not on this page:{' '}
-                <a
-                  href={docsUrl('guides/user-guide', 'pausing-and-stopping')}
-                  className={NOTE_LINK}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  a paused experiment&apos;s resume
-                </a>
-                ,{' '}
                 <a
                   href={docsUrl('api/sequential-testing', 'turning-it-on')}
                   className={NOTE_LINK}

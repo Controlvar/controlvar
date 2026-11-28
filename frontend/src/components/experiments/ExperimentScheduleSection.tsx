@@ -21,9 +21,12 @@ import { parseApiTimestamp } from '@/utils/apiTimestamp';
  * - Every failure is fixed copy chosen by the answer's status, never the
  *   server's `detail`.
  *
- * A PAUSED experiment's scheduled resume stays in the API: the same route
- * reads `start_date` as the resume time there, and this form is offered on a
- * draft only.
+ * On a PAUSED experiment the same route reads `start_date` as the resume
+ * time and stores it as `resume_at` (#2283). The form then has one picker,
+ * "Resume at", prefilled from `resume_at`; only `start_date` is ever sent
+ * (null cancels a scheduled resume) and the end date is not touched. It is
+ * refused before sending when it is in the past or less than an hour before a
+ * stored end.
  */
 
 export const SCHEDULE_HEADING = 'Schedule';
@@ -33,6 +36,18 @@ export const REMOVE = 'Remove';
 export const SAVE_DATES = 'Save dates';
 export const SAVING = 'Saving…';
 export const SCHEDULE_SAVED = 'Dates saved.';
+
+/** A paused experiment's form (#2283). */
+export const RESUME_HEADING = 'Schedule resume';
+export const RESUME_LABEL = 'Resume at';
+export const SAVE_RESUME = 'Save resume time';
+export const RESUME_SAVED = 'Resume time saved.';
+export const RESUME_HELP =
+  'It resumes by itself at this time, as if Start had been clicked. A background check runs ' +
+  'every 15 minutes by default, so it can resume up to that much later. Remove the time to ' +
+  'cancel it. Starting, completing or archiving the experiment cancels it too.';
+export const RESUME_IN_PAST = 'The resume time cannot be in the past. To resume now, use Start.';
+export const RESUME_TOO_LATE = 'The resume time must be at least an hour before the end.';
 
 /** The help under each picker: what the scheduler does with the date. */
 export const START_HELP =
@@ -68,13 +83,24 @@ export const SCHEDULE_ERROR_COPY: Record<number, string> & { fallback: string } 
   fallback: 'Could not save the dates. Try again.',
 };
 
+/** The same, for a paused experiment's resume time (#2283). */
+export const RESUME_ERROR_COPY: Record<number, string> & { fallback: string } = {
+  ...SCHEDULE_ERROR_COPY,
+  400: 'The resume time was not accepted, or this experiment is no longer paused. Reload the page.',
+  403: SCHEDULE_ERROR_COPY[403],
+  404: SCHEDULE_ERROR_COPY[404],
+  422: 'The resume time was not accepted. It cannot be in the past.',
+  fallback: 'Could not save the resume time. Try again.',
+};
+
 /** A time-out shows the dashboard's own time-out sentence, not the status-0 entry (#1040). */
-export function scheduleErrorCopy(err: unknown): string {
-  if (!isApiError(err)) return SCHEDULE_ERROR_COPY.fallback;
+export function scheduleErrorCopy(err: unknown, paused = false): string {
+  const copy = paused ? RESUME_ERROR_COPY : SCHEDULE_ERROR_COPY;
+  if (!isApiError(err)) return copy.fallback;
   if (err.timedOut) return err.message;
   const demo = demoRefusalMessage(err);
   if (demo) return demo;
-  return SCHEDULE_ERROR_COPY[err.status] ?? SCHEDULE_ERROR_COPY.fallback;
+  return copy[err.status] ?? copy.fallback;
 }
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -159,6 +185,8 @@ export interface ScheduleDraft {
 }
 
 export function scheduleDraftFrom(experiment: Experiment): ScheduleDraft {
+  // A paused experiment's one picker holds its resume time; its end is not edited.
+  if (experiment.status === 'paused') return { start: toLocalInput(experiment.resume_at), end: '' };
   return { start: toLocalInput(experiment.start_date), end: toLocalInput(experiment.end_date) };
 }
 
@@ -199,6 +227,15 @@ export function scheduleProblem(
   body: ExperimentScheduleUpdate,
   nowMs: number,
 ): ScheduleProblem | null {
+  if (experiment.status === 'paused') {
+    // Only a resume time is sent; the API wants it an hour before a stored end.
+    const resume = body.start_date ? Date.parse(body.start_date) : null;
+    if (resume === null) return null;
+    if (resume < nowMs) return { field: 'start', message: RESUME_IN_PAST };
+    const end = storedMs(experiment.end_date);
+    if (end !== null && end - resume < HOUR_MS) return { field: 'start', message: RESUME_TOO_LATE };
+    return null;
+  }
   const sentStart = body.start_date ? Date.parse(body.start_date) : null;
   const sentEnd = body.end_date ? Date.parse(body.end_date) : null;
   if (sentStart !== null && sentStart < nowMs) return { field: 'start', message: START_IN_PAST };
@@ -223,6 +260,7 @@ const ERROR_ID = 'schedule-error';
 const FIELD_HINT = 'mt-1 text-xs text-slate-600';
 
 export function ExperimentScheduleSection({ experiment, onSaved, onClose }: ExperimentScheduleSectionProps) {
+  const paused = experiment.status === 'paused';
   // What the pickers held when the form opened: a picker left as it was is
   // not sent.
   const [initial] = useState<ScheduleDraft>(() => scheduleDraftFrom(experiment));
@@ -277,7 +315,7 @@ export function ExperimentScheduleSection({ experiment, onSaved, onClose }: Expe
       const updated = await ExperimentsService.schedule(experiment.id, body);
       onSaved(updated);
     } catch (err) {
-      setError(scheduleErrorCopy(err));
+      setError(scheduleErrorCopy(err, paused));
       setSaving(false);
       setFocusOn('save');
     }
@@ -299,7 +337,7 @@ export function ExperimentScheduleSection({ experiment, onSaved, onClose }: Expe
     return (
       <div>
         <label htmlFor={id} className="block text-sm font-medium text-slate-700">
-          {which === 'start' ? START_LABEL : END_LABEL}
+          {paused ? RESUME_LABEL : which === 'start' ? START_LABEL : END_LABEL}
         </label>
         <div className="mt-1 flex flex-wrap items-center gap-2">
           <input
@@ -323,7 +361,7 @@ export function ExperimentScheduleSection({ experiment, onSaved, onClose }: Expe
               data-testid={`${id}-remove`}
             >
               {REMOVE}
-              <span className="sr-only">{which === 'start' ? ' the start' : ' the end'}</span>
+              <span className="sr-only">{paused ? ' the resume time' : which === 'start' ? ' the start' : ' the end'}</span>
             </button>
           )}
         </div>
@@ -338,7 +376,7 @@ export function ExperimentScheduleSection({ experiment, onSaved, onClose }: Expe
           </p>
         )}
         <p id={`${id}-help`} className={FIELD_HINT} data-testid={`${id}-help`}>
-          {which === 'start' ? START_HELP : END_HELP}
+          {paused ? RESUME_HELP : which === 'start' ? START_HELP : END_HELP}
         </p>
       </div>
     );
@@ -346,7 +384,7 @@ export function ExperimentScheduleSection({ experiment, onSaved, onClose }: Expe
 
   const alert = problem?.message ?? error;
 
-  return (
+  const form = (
     <form
       onSubmit={(event) => void save(event)}
       aria-labelledby="schedule-heading"
@@ -355,10 +393,10 @@ export function ExperimentScheduleSection({ experiment, onSaved, onClose }: Expe
       data-testid="experiment-schedule-form"
     >
       <h2 id="schedule-heading" className="text-sm font-semibold text-slate-800">
-        {SCHEDULE_HEADING}
+        {paused ? RESUME_HEADING : SCHEDULE_HEADING}
       </h2>
       {field('start')}
-      {field('end')}
+      {!paused && field('end')}
       {alert && (
         <p
           id={ERROR_ID}
@@ -377,7 +415,7 @@ export function ExperimentScheduleSection({ experiment, onSaved, onClose }: Expe
           className="px-3 py-1.5 rounded-md text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
           data-testid="schedule-save"
         >
-          {saving ? SAVING : SAVE_DATES}
+          {saving ? SAVING : paused ? SAVE_RESUME : SAVE_DATES}
         </button>
         <button
           type="button"
@@ -391,4 +429,7 @@ export function ExperimentScheduleSection({ experiment, onSaved, onClose }: Expe
       </div>
     </form>
   );
+
+  // The wrapper is the paused form's witness (#2283); the form keeps the draft's.
+  return paused ? <div data-testid="experiment-schedule-resume">{form}</div> : form;
 }

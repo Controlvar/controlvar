@@ -35,6 +35,7 @@ interface PermissionTable {
   administer_eligibility_roles: Role[];
   override_bandit_weights_roles: Role[];
   analyse_interactions_roles: Role[];
+  change_experiment_route: { role: Role[]; superuser: Role[] };
   grantable: Array<[string, string]>;
 }
 
@@ -236,6 +237,28 @@ describe('the table the matrix reads', () => {
     const covered = HELPERS.map((row) => row.name).filter((name) => exported.includes(name));
     expect(exported).toHaveLength(13);
     expect(exported).toEqual(Array.from(new Set(covered)).sort());
+  });
+});
+
+describe("a paused experiment's resume time (#2283)", () => {
+  // PUT /experiments/{id}/schedule calls get_experiment_change_access; the
+  // table holds what it answered for each role, with and without the
+  // superuser flag, and canChangeExperiment (which the Schedule resume button
+  // uses) must give the same answer with no effective map.
+  it.each(TABLE.roles)('canChangeExperiment answers as the route does for %s, with and without the flag', (role) => {
+    const plain = { role, is_superuser: false };
+    const flagged = { role, is_superuser: true };
+    expect(experimentPermissions.canChangeExperiment(plain, undefined)).toBe(
+      TABLE.change_experiment_route.role.includes(role),
+    );
+    expect(experimentPermissions.canChangeExperiment(flagged, undefined)).toBe(
+      TABLE.change_experiment_route.superuser.includes(role),
+    );
+  });
+
+  it('reads both lists from the table: a table that lost them would pass an empty loop', () => {
+    expect(TABLE.change_experiment_route.role).toEqual(['ADMIN', 'DEVELOPER']);
+    expect(TABLE.change_experiment_route.superuser).toEqual(TABLE.roles);
   });
 });
 

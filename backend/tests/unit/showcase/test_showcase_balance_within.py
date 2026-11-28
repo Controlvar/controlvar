@@ -963,8 +963,8 @@ V9_FULL_PASS = (
             "detail_group": "Checkout tests",
             "detail_holdout": "Q4 holdout: keeps 5% of new users out of every experiment",
             "detail_note": (
-                "Set through the API, not on this page: a paused experiment's resume,"
-                " turning sequential testing on or off after creation."
+                "Set through the API, not on this page: turning sequential testing on"
+                " or off after creation."
             ),
         },
     },

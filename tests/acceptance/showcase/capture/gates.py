@@ -1641,8 +1641,8 @@ START_TERM = "Starts"
 #: equal). Read whole at the payoff: a note that still lists something the video has
 #: just set on camera would be false under it (PE 1).
 API_SETTINGS_NOTE = (
-    "Set through the API, not on this page: a paused experiment's resume, turning"
-    " sequential testing on or off after creation."
+    "Set through the API, not on this page: turning sequential testing on or off"
+    " after creation."
 )
 
 

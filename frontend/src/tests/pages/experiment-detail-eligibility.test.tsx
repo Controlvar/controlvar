@@ -577,12 +577,10 @@ describe('the note under the header', () => {
     // API-only. The sentence is fixed word for word (EM-3), and video 9 pins
     // the same string.
     expect(note.textContent?.replace(/\s+/g, ' ').trim()).toBe(
-      "Set through the API, not on this page: a paused experiment's resume, turning sequential testing on or off after creation.",
+      "Set through the API, not on this page: turning sequential testing on or off after creation.",
     );
     const links = Array.from(note.querySelectorAll('a'));
     expect(links.map((a) => [a.textContent, a.getAttribute('href')])).toEqual([
-      // A draft's dates are set on this page (#1454); a paused one's resume is not.
-      ["a paused experiment's resume", docsUrl('guides/user-guide', 'pausing-and-stopping')],
       ['turning sequential testing on or off after creation', docsUrl('api/sequential-testing', 'turning-it-on')],
     ]);
     for (const a of links) {
