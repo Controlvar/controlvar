@@ -633,7 +633,7 @@ text = "Run a dedicated follow-up experiment to confirm."
 by = ["exempt:advice"]
 
 [[unit]]
-text = "Segments with small sample sizes (< ~200 per variant) will rarely show significance even with large effects."
+text = "Segments with small sample sizes have low power: only large effects reach significance, and the Bonferroni threshold makes that harder."
 by = ["exempt:theory"]
 
 [[unit]]

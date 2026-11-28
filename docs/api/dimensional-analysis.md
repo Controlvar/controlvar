@@ -392,7 +392,7 @@ The answer is computed on each request: it is not cached, and no analysis snapsh
 
 2. **`is_exploratory: true`** on all segments means treat findings as signals, not conclusions. Run a dedicated follow-up experiment to confirm.
 
-3. **Segments with small sample sizes** (< ~200 per variant) will rarely show significance even with large effects. The p-values are still valid but the confidence intervals will be wide.
+3. **Segments with small sample sizes** have low power: only large effects reach significance, and the Bonferroni threshold makes that harder. The p-values are still valid but the confidence intervals will be wide.
 
 ---
 
