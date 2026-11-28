@@ -68,11 +68,7 @@ exempt:baseline	docs/api/stability.md	cfee1b7c45a4
 exempt:baseline	docs/api/stability.md	dbe034fa2a88
 exempt:baseline	docs/api/stability.md	dedcf3a03140
 exempt:baseline	docs/api/stability.md	dfb153857d19
-exempt:baseline	docs/api/warehouse-analytics.md	02b2f6fc42e8
 exempt:baseline	docs/development/database/migrations.md	0de1cb7b952d
-exempt:baseline	docs/development/database/migrations.md	3c17e0d997e8
-exempt:baseline	docs/development/database/migrations.md	8281284aeef9
-exempt:baseline	docs/development/database/migrations.md	87ba84a62258
 exempt:baseline	docs/development/database/migrations.md	bd6f4b582de3
 exempt:baseline	docs/development/database/migrations.md	d846b40e248d
 exempt:baseline	docs/guides/dashboard-and-api.md	4337ad04a639
@@ -81,7 +77,6 @@ exempt:baseline	docs/guides/dashboard-and-api.md	65b49d976be4
 exempt:baseline	docs/guides/dashboard-and-api.md	6dc9baed69ca
 exempt:baseline	docs/guides/dashboard-and-api.md	c726fe665f07
 exempt:baseline	docs/guides/dashboard-and-api.md	d88c730e1c48
-exempt:baseline	docs/logging_standards.md	1212bc71833a
 exempt:baseline	docs/logging_standards.md	4d92e3aee98f
 exempt:baseline	docs/logging_standards.md	ba836ae2dddc
 exempt:baseline	docs/performance/load-testing.md	fbb250c8bd04

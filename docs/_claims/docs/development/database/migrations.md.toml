@@ -113,15 +113,22 @@ by = [
 
 [[unit]]
 text = "It ends with Database bootstrap complete (created) on a new database and Database bootstrap complete (upgraded) on one that had tables."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/unit/db/test_bootstrap_schema_env.py::test_the_fresh_database_branch_stamps_the_schema_it_chose",
+    "test:backend/tests/unit/db/test_bootstrap_schema_env.py::test_the_existing_database_branch_upgrades_the_schema_it_chose",
+    "test:backend/tests/integration/database/test_bootstrap_concurrency.py::test_concurrent_bootstraps_on_a_fresh_schema_do_not_race",
+]
 
 [[unit]]
 text = "ENVIRONMENT=development lets it create the first administrator with the development default password (FIRST_SUPERUSER, FIRST_SUPERUSER_PASSWORD) when the database has no users."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/core/test_environment_explicit.py::test_a_weak_password_is_accepted_when_development_or_test_was_chosen"]
 
 [[unit]]
 text = "The Quick Start stack runs the core images, so the database it makes has the core chain only."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_the_profile_picks_the_api_build_target",
+    "test:backend/tests/integration/database/test_profile_transitions.py::test_a_core_database_switched_to_full_by_the_documented_command",
+]
 
 [[unit]]
 text = "A full checkout's bootstrap against it also applies the modules branch and creates the module tables, and logs a WARNING saying so (see Switching Profile)."
