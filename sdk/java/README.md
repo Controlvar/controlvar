@@ -243,7 +243,7 @@ bash sdk/java/examples/contract_smoke.sh
 It prints:
 
 ```text
-{"sdk":"java","assign":{"variant_name":"control","is_control":true,"sticky":true},"flag":{"enabled":true},"track":{"ok":true},"fanout":{"ok":true},"exposure":{"calls":1,"payload":{"experiment_key":"sdk_contract_ab","variant_name":"control","variant_id":"<variant id>","user_id":"smoke-<uuid>"}}}
+{"sdk":"java","assign":{"variant_name":"control","is_control":true,"sticky":true},"flag":{"enabled":true},"track":{"ok":true},"fanout":{"ok":true},"event_id":{"user_id":"smoke-<uuid>","event_name":"contract_dedup_<uuid>","id":"contract-<uuid>","sends":2},"targeted":{"pro":true,"free":false,"reason":"targeting_rule"},"values":{"string":"on-copy","number":10,"json":{"color":"blue"}},"multiway":{"users":{"<user-1>":"<value>","<user-2>":"<value>","<user-3>":"<value>"},"rule":"pro-copy"},"exposure":{"calls":1,"payload":{"experiment_key":"sdk_contract_ab","variant_name":"control","variant_id":"<variant id>","user_id":"smoke-<uuid>"}}}
 ```
 
 The script runs `./mvnw -q -B -pl core -am package -DskipTests` when `core/target` is stale (Maven output

@@ -272,7 +272,7 @@ CONTROLVAR_API_KEY=<key> python sdk/python/examples/contract_smoke.py
 It prints:
 
 ```text
-{"sdk":"python","assign":{"variant_name":"treatment","is_control":false,"sticky":true},"flag":{"enabled":true},"track":{"ok":true},"fanout":{"ok":true},"event_id":{"user_id":"smoke-<uuid>","event_name":"contract_dedup_<uuid>","id":"contract-<uuid>","sends":2},"exposure":{"calls":1,"payload":{"experiment_key":"sdk_contract_ab","variant_name":"treatment","variant_id":"<id>","user_id":"smoke-<uuid>"}}}
+{"sdk":"python","assign":{"variant_name":"treatment","is_control":false,"sticky":true},"flag":{"enabled":true},"track":{"ok":true},"fanout":{"ok":true},"event_id":{"user_id":"smoke-<uuid>","event_name":"contract_dedup_<uuid>","id":"contract-<uuid>","sends":2},"targeted":{"pro":true,"free":false,"reason":"targeting_rule"},"exposure":{"calls":1,"payload":{"experiment_key":"sdk_contract_ab","variant_name":"treatment","variant_id":"<id>","user_id":"smoke-<uuid>"}}}
 ```
 
 Env: `CONTROLVAR_API_URL` (default `http://localhost:8000`), `CONTROLVAR_API_KEY` (required),

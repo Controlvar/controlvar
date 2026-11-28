@@ -201,7 +201,7 @@ bash sdk/android/examples/contract_smoke.sh
 It prints:
 
 ```text
-{"sdk":"android","assign":{"variant_name":"treatment","is_control":false,"sticky":true},"flag":{"enabled":true},"track":{"ok":true},"fanout":{"ok":true},"event_id":{"user_id":"smoke-<uuid>","event_name":"contract_dedup_<uuid>","id":"contract-<uuid>","sends":2}}
+{"sdk":"android","assign":{"variant_name":"treatment","is_control":false,"sticky":true},"flag":{"enabled":true},"track":{"ok":true},"fanout":{"ok":true},"event_id":{"user_id":"smoke-<uuid>","event_name":"contract_dedup_<uuid>","id":"contract-<uuid>","sends":2},"targeted":{"pro":true,"free":false,"reason":"targeting_rule"}}
 ```
 
 Runs `com.controlvar.android.examples.ContractSmoke` from the JVM build above
