@@ -128,6 +128,14 @@ describe('ACTIONS_BY_STATUS', () => {
 });
 
 describe('ExperimentDetailPage — rendering', () => {
+  it('names its scrollable Variants area and reaches it by keyboard', async () => {
+    install(experiment());
+    render(<ExperimentDetailPage />);
+    const region = await screen.findByRole('region', { name: 'Variants' });
+    expect(region).toHaveAttribute('tabindex', '0');
+    expect(within(region).getByTestId('variants-table')).toBeInTheDocument();
+  });
+
   it('shows the header, variants, metrics and owner', async () => {
     install(experiment());
     render(<ExperimentDetailPage />);

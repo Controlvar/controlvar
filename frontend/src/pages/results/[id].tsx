@@ -15,6 +15,7 @@ export default function ResultDetailPage() {
     return (
       <div className="flex-1 flex items-center justify-center bg-slate-50">
         <PageTitle title="Results" />
+        <h1 className="sr-only">Experiment results</h1>
         <div className="animate-pulse text-slate-500">Loading...</div>
       </div>
     );
@@ -23,6 +24,7 @@ export default function ResultDetailPage() {
   return (
     <div className="flex-1 bg-slate-50">
       <PageTitle title="Results" />
+      <h1 className="sr-only">Experiment results</h1>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex justify-end mb-4">
           <ResultsCsvDownload experimentId={id} />

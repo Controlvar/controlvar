@@ -17,6 +17,16 @@ export function readsAllNotificationSettings(user: Pick<UserMe, 'role'> | null |
 }
 
 /**
+ * Who sends a test notification from this page: `POST /api/v1/notifications/test`
+ * answers 403 unless `current_user.role` is ADMIN or DEVELOPER. It reads the
+ * role alone, so the superuser flag does not admit anyone and a custom role or
+ * grant changes nothing.
+ */
+export function sendsTestNotification(user: Pick<UserMe, 'role'> | null | undefined): boolean {
+  return user?.role === 'ADMIN' || user?.role === 'DEVELOPER';
+}
+
+/**
  * Who sends the scheduler's test notification (#2277):
  * `POST /api/v1/scheduler/notify/test` depends on `get_current_superuser`, so
  * it is the superuser flag and no role.

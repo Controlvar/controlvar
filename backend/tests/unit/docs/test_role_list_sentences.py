@@ -259,6 +259,20 @@ CLASS_B: Dict[Tuple[str, str], str] = {
         "It needs the ANALYST, DEVELOPER or ADMIN role.",
     ): "interaction analysis stays with the built-in role",
     (
+        "frontend/src/components/admin/notifications/access.ts",
+        "* * Who sends a test notification from this page: "
+        "`POST /api/v1/notifications/test` * answers 403 unless `current_user.role` "
+        "is ADMIN or DEVELOPER.",
+    ): "POST /notifications/test reads current_user.role alone, so no grant changes it",
+    (
+        "frontend/src/pages/admin/notifications.tsx",
+        "Sending a test notification needs the ADMIN or DEVELOPER role.'",
+    ): "POST /notifications/test reads current_user.role alone, so no grant changes it",
+    (
+        "frontend/src/pages/admin/notifications.tsx",
+        "`POST /notifications/test` answers ADMIN and DEVELOPER only, superuser or not.",
+    ): "POST /notifications/test reads current_user.role alone, so no grant changes it",
+    (
         "docs/api/split-url.md",
         "It is for ADMIN and DEVELOPER users (and superusers), and in a core "
         "deployment it answers `501`.",

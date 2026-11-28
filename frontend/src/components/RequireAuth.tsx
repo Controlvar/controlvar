@@ -38,7 +38,7 @@ export function ForbiddenView({ user, requirement, fallbackPath = '/experiments'
       className="flex flex-col items-center justify-center min-h-[40vh] gap-4 px-4 text-center"
     >
       <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">403</p>
-      <p className="text-slate-700 text-lg">You do not have permission to access this page.</p>
+      <h1 className="text-slate-700 text-lg">You do not have permission to access this page.</h1>
       <p className="text-sm text-slate-500">
         Signed in as{' '}
         <span className="font-medium">
