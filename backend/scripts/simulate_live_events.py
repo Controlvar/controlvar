@@ -64,7 +64,7 @@ EXPERIMENT_CONFIG = {
         },
         "event_name": "checkout_completed",
         "weight": 0.6,
-        "split": "even",  # 50/50, as the experiment allocates it
+        "draw": "even",  # 50/50, as the experiment allocates it
     },
     "Recommendation Algorithm MAB": {
         "variant_rates": {
@@ -74,7 +74,7 @@ EXPERIMENT_CONFIG = {
         },
         "event_name": "item_clicked",
         "weight": 0.4,
-        "split": "by_rate",  # the bandit's arms: better arms draw more users
+        "draw": "by_rate",  # the bandit's arms: better arms draw more users
     },
 }
 
@@ -218,7 +218,7 @@ class Simulator:
         if not variant_names:
             return
 
-        if exp_config.get("split") == "even":
+        if exp_config.get("draw") == "even":
             # A fixed-allocation experiment sends each variant the same share
             # of users, whatever its conversion rate: weighting by rate would
             # skew the split and trip the sample-ratio warning.
