@@ -14,6 +14,15 @@ jest.mock('@/components/admin/AdminLayout', () => ({
   AdminLayout: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
 
+// The page reads who is signed in: a superuser who is an ADMIN (the one person
+// the page's reads and the test button all accept; #2277).
+jest.mock('@/contexts/AuthContext', () => ({
+  useAuth: () => ({
+    status: 'authenticated',
+    user: { id: 'user-1', role: 'ADMIN', is_superuser: true },
+  }),
+}));
+
 const mockFetch = jest.fn();
 
 function ok(body: unknown): Response {

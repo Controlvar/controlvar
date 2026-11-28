@@ -6,6 +6,15 @@ import { NotificationPreference, NotificationDeliveryLogListResponse } from '../
 
 jest.mock('../../../services/admin');
 
+// The page reads who is signed in: a superuser who is an ADMIN (the one person
+// the page's reads and the test button all accept; #2277).
+jest.mock('@/contexts/AuthContext', () => ({
+  useAuth: () => ({
+    status: 'authenticated',
+    user: { id: 'user-1', role: 'ADMIN', is_superuser: true },
+  }),
+}));
+
 jest.mock('../../../components/admin/notifications/NotificationPrefsForm', () => ({
   NotificationPrefsForm: ({
     prefs,
@@ -68,10 +77,12 @@ const mockLogResponse: NotificationDeliveryLogListResponse = {
 const mockGetMyNotificationPrefs = AdminService.getMyNotificationPrefs as jest.Mock;
 const mockGetNotificationDeliveryLog = AdminService.getNotificationDeliveryLog as jest.Mock;
 const mockSendTestNotification = AdminService.sendTestNotification as jest.Mock;
+const mockGetAllNotificationPrefs = AdminService.getAllNotificationPrefs as jest.Mock;
 
 beforeEach(() => {
   jest.clearAllMocks();
   mockGetMyNotificationPrefs.mockResolvedValue(mockPrefs);
+  mockGetAllNotificationPrefs.mockResolvedValue([]);
   mockGetNotificationDeliveryLog.mockResolvedValue(mockLogResponse);
   mockSendTestNotification.mockResolvedValue({ success: true, channel: 'slack', message: 'Test notification sent' });
 });

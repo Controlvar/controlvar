@@ -2453,6 +2453,8 @@ GET  /api/v1/scheduler/{name}/history   — Recent run history for one scheduler
 POST /api/v1/scheduler/notify/test      — Send a test notification
 ```
 
+In the dashboard, Admin → Scheduler has a **Send a test notification through the scheduler's webhook** button, for superusers. It says whether the test was sent, was refused by the webhook, or was skipped because no webhook is set.
+
 ---
 
 ### ETL / Glue Jobs

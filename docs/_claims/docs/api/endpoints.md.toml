@@ -4264,6 +4264,20 @@ text = "Scheduler Health"
 by = ["exempt:label"]
 
 [[unit]]
+text = "In the dashboard, Admin → Scheduler has a Send a test notification through the scheduler's webhook button, for superusers."
+by = [
+    "test:frontend/src/tests/pages/admin-scheduler-webhook.test.tsx::%s sees the button with its witness",
+    "test:frontend/src/tests/pages/admin-scheduler-webhook.test.tsx::%s loads the page, sees no button, and sends nothing to the route",
+]
+
+[[unit]]
+text = "It says whether the test was sent, was refused by the webhook, or was skipped because no webhook is set."
+by = [
+    "test:frontend/src/tests/pages/admin-scheduler-webhook.test.tsx::posts once, with no body, and says what the route answered, never its own message",
+    "test:frontend/src/tests/pages/admin-scheduler-webhook.test.tsx::an answer of %s shows its own sentence",
+]
+
+[[unit]]
 text = "ETL / Glue Jobs"
 by = ["exempt:label"]
 

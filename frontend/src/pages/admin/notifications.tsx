@@ -5,8 +5,17 @@ import { DeliveryLogTable } from '@/components/admin/notifications/DeliveryLogTa
 import { NotificationPreference, NotificationDeliveryLog } from '@/types/admin';
 import { withAdminGuard } from '@/components/admin/withAdminGuard';
 import { PageTitle } from '@/components/PageTitle';
+import { useAuth } from '@/contexts/AuthContext';
+import { readsAllNotificationSettings } from '@/components/admin/notifications/access';
+import { AllNotificationSettings } from '@/components/admin/notifications/AllNotificationSettings';
+
+/** Shown in place of the delivery log to anyone the route refuses (#2277). */
+export const DELIVERY_LOG_REFUSED = 'The delivery log needs the ADMIN role.';
 
 export function NotificationsAdminPage() {
+  const { user } = useAuth();
+  // The page is a superuser's, but both reads below answer role ADMIN only.
+  const readsAll = readsAllNotificationSettings(user);
   const [prefs, setPrefs] = useState<NotificationPreference | null>(null);
   const [logs, setLogs] = useState<NotificationDeliveryLog[]>([]);
   const [logsLoading, setLogsLoading] = useState(true);
@@ -18,11 +27,15 @@ export function NotificationsAdminPage() {
     AdminService.getMyNotificationPrefs()
       .then(setPrefs)
       .catch(err => setPrefsError((err as Error).message || 'Failed to load preferences'));
+    if (!readsAll) {
+      setLogsLoading(false);
+      return;
+    }
     AdminService.getNotificationDeliveryLog({ limit: 20 })
       .then(r => setLogs(r.items))
       .catch(err => setLogsError((err as Error).message || 'Failed to load the delivery log'))
       .finally(() => setLogsLoading(false));
-  }, []);
+  }, [readsAll]);
 
   const handleSave = async (data: Partial<NotificationPreference>) => {
     const updated = await AdminService.updateMyNotificationPrefs(data);
@@ -55,6 +68,8 @@ export function NotificationsAdminPage() {
         )}
       </section>
 
+      <AllNotificationSettings allowed={readsAll} />
+
       <section>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-slate-800">Delivery Log</h2>
@@ -69,7 +84,9 @@ export function NotificationsAdminPage() {
         {testResult && (
           <p data-testid="test-result" className="text-sm text-slate-600 mb-2">{testResult}</p>
         )}
-        {!logsLoading && logsError ? (
+        {!readsAll ? (
+          <p className="text-sm text-slate-700" data-testid="log-refused">{DELIVERY_LOG_REFUSED}</p>
+        ) : !logsLoading && logsError ? (
           <p className="text-red-600" data-testid="log-error">{logsError}</p>
         ) : (
           <DeliveryLogTable logs={logs} loading={logsLoading} />

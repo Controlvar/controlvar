@@ -26,6 +26,12 @@ run by both profiles' Jest) holds every permission helper to:
   (what ``deps.get_experiment_change_access`` does for each role, once without
   and once with the superuser flag; the notes and learnings on an experiment's
   page use it; #2274);
+* ``notification_settings_route``: who ``GET /notifications/admin/preferences``
+  and ``GET /notifications/delivery-log`` admit (both check ``role == ADMIN``;
+  the superuser flag adds nothing, so a VIEWER superuser is refused and an
+  ADMIN who is not a superuser is accepted; #2277);
+* ``scheduler_webhook_test_route``: who ``POST /scheduler/notify/test`` admits
+  (``deps.get_current_superuser``: the flag and nothing else; #2277);
 * ``grantable``: the eleven pairs a custom role or direct grant can hold
   (``GRANTABLE``).
 
@@ -38,6 +44,7 @@ write it again (from the repository root) with::
 
 from __future__ import annotations
 
+import asyncio
 import json
 import pathlib
 import sys
@@ -54,6 +61,7 @@ from backend.app.api.v1.endpoints import (
     global_holdout,
     interactions,
     mutual_exclusion_groups,
+    notifications,
 )
 from backend.app.core.permissions import (
     AUDIT_LOG_READ_ALL_ROLES,
@@ -156,6 +164,57 @@ class _NoDatabase:
         raise _ReachedTheDatabase(name)
 
 
+def _admitted_by_notification_route(call, is_superuser: bool) -> List[str]:
+    """The roles a notification route admits: the ones that reach the stand-in session."""
+    admitted = []
+    for name in ROLE_ORDER:
+        user = SimpleNamespace(role=UserRole[name], is_superuser=is_superuser)
+        try:
+            call(user)
+        except HTTPException as refused:
+            assert refused.status_code == 403
+        except _ReachedTheDatabase:
+            admitted.append(name)
+    return admitted
+
+
+def _notification_settings_route(is_superuser: bool) -> List[str]:
+    preferences = _admitted_by_notification_route(
+        lambda user: notifications.list_all_preferences(
+            current_user=user, db=_NoDatabase()
+        ),
+        is_superuser,
+    )
+    delivery_log = _admitted_by_notification_route(
+        lambda user: notifications.get_delivery_log(
+            page=1,
+            limit=20,
+            event_type=None,
+            status=None,
+            current_user=user,
+            db=_NoDatabase(),
+        ),
+        is_superuser,
+    )
+    # The dashboard shows both from one helper; they must admit the same people.
+    assert preferences == delivery_log, (preferences, delivery_log)
+    return preferences
+
+
+def _scheduler_webhook_test_route(is_superuser: bool) -> List[str]:
+    """The roles ``Depends(get_current_superuser)`` admits."""
+    admitted = []
+    for name in ROLE_ORDER:
+        user = SimpleNamespace(role=UserRole[name], is_superuser=is_superuser)
+        try:
+            asyncio.run(deps.get_current_superuser(current_user=user))
+        except HTTPException as refused:
+            assert refused.status_code == 403
+        else:
+            admitted.append(name)
+    return admitted
+
+
 def _admitted_by_override() -> List[str]:
     # The route refuses with 403 before it touches the database, so the roles
     # that reach the stand-in session are the ones it admits.
@@ -213,6 +272,14 @@ def build_table() -> Dict[str, Any]:
             "role": _admitted_by_metadata_route(False),
             "superuser": _admitted_by_metadata_route(True),
         },
+        "notification_settings_route": {
+            "role": _notification_settings_route(False),
+            "superuser": _notification_settings_route(True),
+        },
+        "scheduler_webhook_test_route": {
+            "role": _scheduler_webhook_test_route(False),
+            "superuser": _scheduler_webhook_test_route(True),
+        },
         "grantable": [list(pair) for pair in sorted(GRANTABLE)],
     }
 
@@ -250,6 +317,15 @@ def test_the_table_is_not_empty():
     }
     assert table["experiment_metadata_route"] == {
         "role": ["ADMIN", "DEVELOPER"],
+        "superuser": ["ADMIN", "DEVELOPER", "ANALYST", "VIEWER"],
+    }
+    # Measured: the VIEWER superuser is refused, the ADMIN who is not a superuser is not.
+    assert table["notification_settings_route"] == {
+        "role": ["ADMIN"],
+        "superuser": ["ADMIN"],
+    }
+    assert table["scheduler_webhook_test_route"] == {
+        "role": [],
         "superuser": ["ADMIN", "DEVELOPER", "ANALYST", "VIEWER"],
     }
 
