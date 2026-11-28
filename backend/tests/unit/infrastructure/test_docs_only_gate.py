@@ -255,6 +255,9 @@ NOT_DOCS_TESTS = {
     "backend/tests/smoke/test_alias_route_in_snapshot.py": "docs/api only",
     # Reads only the two docs/api/ OpenAPI snapshots (same reason as above).
     "backend/tests/smoke/test_flag_environment_routes_in_snapshot.py": "docs/api only",
+    # Reads only docs/api/openapi-v1.full.json and demo/*/src, to hold the
+    # routes the demo apps print to the live document (same reason as above).
+    "backend/tests/unit/scripts/test_demo_routes_in_snapshot.py": "docs/api only",
     # Reads only docs/api/openapi-v1.full.json, to hold tests/fuzz/'s lists to
     # the full profile's operations (same reason as above).
     "backend/tests/unit/scripts/test_fuzz_check.py": "docs/api only",
