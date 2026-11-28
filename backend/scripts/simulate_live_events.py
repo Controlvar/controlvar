@@ -20,7 +20,7 @@ Usage:
 Arguments:
     --api-url   Base URL of the API (kept for script interface compatibility, unused)
     --api-key   API key (kept for script interface compatibility, unused)
-    --rate      Events per second (default: 5)
+    --rate      Simulated users per second (default: 5)
     --duration  Run for this many seconds; 0 = infinite (default: 0)
 """
 
@@ -60,10 +60,11 @@ EXPERIMENT_CONFIG = {
     "Checkout Button Color": {
         "variant_rates": {
             "blue_button": 0.08,  # 8% conversion
-            "green_button": 0.11,  # 11% — green winning slowly
+            "green_button": 0.09,  # 9% — the rate the seed gave it
         },
         "event_name": "checkout_completed",
         "weight": 0.6,
+        "split": "even",  # 50/50, as the experiment allocates it
     },
     "Recommendation Algorithm MAB": {
         "variant_rates": {
@@ -73,6 +74,7 @@ EXPERIMENT_CONFIG = {
         },
         "event_name": "item_clicked",
         "weight": 0.4,
+        "split": "by_rate",  # the bandit's arms: better arms draw more users
     },
 }
 
@@ -212,15 +214,21 @@ class Simulator:
         exp_id = cached["id"]
         variant_map = cached["variants"]
 
-        # Pick a variant based on configured rates (weighted by rates for MAB realism)
         variant_names = list(variant_map.keys())
         if not variant_names:
             return
 
-        # For MAB: assign variant weighted by the conversion rates to simulate exploration
-        # (real Thompson Sampling would update weights; we use fixed weights for demo)
-        weights = [exp_config["variant_rates"].get(v, 0.05) for v in variant_names]
-        variant_name = self.rng.choices(variant_names, weights=weights, k=1)[0]
+        if exp_config.get("split") == "even":
+            # A fixed-allocation experiment sends each variant the same share
+            # of users, whatever its conversion rate: weighting by rate would
+            # skew the split and trip the sample-ratio warning.
+            variant_name = self.rng.choice(variant_names)
+        else:
+            # The bandit experiment: weight by conversion rate to simulate
+            # exploration (real Thompson Sampling would update the weights;
+            # the demo keeps them fixed).
+            weights = [exp_config["variant_rates"].get(v, 0.05) for v in variant_names]
+            variant_name = self.rng.choices(variant_names, weights=weights, k=1)[0]
         variant_id = variant_map[variant_name]
         user_id = f"sim_{uuid.uuid4().hex[:12]}"
 
@@ -358,7 +366,7 @@ def main():
         "--rate",
         type=float,
         default=5.0,
-        help="Events per second (default: 5)",
+        help="Simulated users per second; each writes an exposure and may convert (default: 5)",
     )
     parser.add_argument(
         "--duration",
