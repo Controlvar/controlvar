@@ -9,7 +9,7 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "Overview"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "EP-058 adds a WebSocket endpoint that streams experiment result snapshots to connected clients."
@@ -17,11 +17,11 @@ by = ["docex:docs/websocket-streaming.md#\"event\": \"results_update\""]
 
 [[unit]]
 text = "Backend"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "WebSocket Endpoint"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "On connect the server sends an initial snapshot."
@@ -41,19 +41,19 @@ by = ["test:backend/tests/integration/api/test_local_auth_path.py::TestWebSocket
 
 [[unit]]
 text = "Run the commands on this page in one terminal, in order, against the stack from the Quick Start."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Each uses the shell variables set by the ones before it."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Log in first:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "It prints \"ADMIN\"."
-by = ["exempt:baseline"]
+by = ["docex:docs/websocket-streaming.md#\"ADMIN\""]
 
 [[unit]]
 text = "This saves the id of the demo data's checkout_button_color experiment in $EXP_ID:"
@@ -61,7 +61,7 @@ by = ["docex:docs/websocket-streaming.md#37"]
 
 [[unit]]
 text = "It prints 37, the length of an id and its newline."
-by = ["exempt:baseline"]
+by = ["docex:docs/websocket-streaming.md#37"]
 
 [[unit]]
 text = "curl alone can show the first snapshot: it sends the upgrade request with the token as the subprotocol, then prints what arrives until --max-time stops it three seconds later."
@@ -69,7 +69,7 @@ by = ["docex:docs/websocket-streaming.md#\"event\": \"results_update\""]
 
 [[unit]]
 text = "That stop is exit code 28, which the block accepts."
-by = ["exempt:baseline"]
+by = ["exempt:example"]
 
 [[unit]]
 text = "The frame header that curl prints with the snapshot is binary, so grep reads the output as bytes (LC_ALL=C grep -a) and picks out the event, status and variant keys:"
@@ -81,15 +81,15 @@ by = ["docex:docs/websocket-streaming.md#\"event\": \"results_update\""]
 
 [[unit]]
 text = "The whole snapshot has the shape below."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Client Message Protocol"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Client sends | Server responds"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "{\"action\": \"ping\"} | {\"event\": \"pong\"}"
@@ -108,7 +108,7 @@ by = [
 
 [[unit]]
 text = "Snapshot Schema"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "p_value is an unadjusted, two-sided pooled two-proportion z-test of the variant against the control, computed from each arm's own participants and conversions (the arms need not be the same size)."
@@ -123,11 +123,11 @@ by = [
 
 [[unit]]
 text = "HTTP Companion Endpoints"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Method | Path | Description"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "GET | /api/v1/ws/experiments/{id}/results/subscribers | Active subscriber count"
@@ -143,7 +143,7 @@ by = ["docex:docs/websocket-streaming.md#0"]
 
 [[unit]]
 text = "With the curl connection above closed, nobody is subscribed:"
-by = ["exempt:baseline"]
+by = ["docex:docs/websocket-streaming.md#{\"active_experiments\":[]}"]
 
 [[unit]]
 text = "It prints 0, then {\"active_experiments\":[]}."
@@ -151,7 +151,7 @@ by = ["docex:docs/websocket-streaming.md#0"]
 
 [[unit]]
 text = "Results Dashboard Integration"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "In the dashboard, the ⚡ Live tab of an experiment's results page shows this stream."
@@ -159,7 +159,7 @@ by = ["test:frontend/src/tests/pages/results-reading.test.tsx::opens the results
 
 [[unit]]
 text = "Authentication"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The stream requires the same credentials as the HTTP API."
@@ -191,7 +191,7 @@ by = [
 
 [[unit]]
 text = "Ways to present the token, in order of preference:"
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Subprotocol (what the dashboard uses): new WebSocket(url, ['experimently.bearer', token])."
@@ -202,7 +202,7 @@ by = [
 
 [[unit]]
 text = "The server echoes experimently.bearer as the accepted subprotocol."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_local_auth_path.py::TestWebSocketAuth::test_subprotocol_token_accepted_and_echoed"]
 
 [[unit]]
 text = "This keeps the token out of URLs and therefore out of access logs."
@@ -218,7 +218,7 @@ by = ["test:backend/tests/integration/api/test_local_auth_path.py::TestWebSocket
 
 [[unit]]
 text = "URLs are written to proxy access logs, so prefer 1 or 2."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "frontend/src/hooks/useExperimentStream.ts stops reconnecting and reports status: 'unauthorized' on close code 4401."
