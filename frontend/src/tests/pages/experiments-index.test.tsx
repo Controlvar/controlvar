@@ -119,6 +119,37 @@ describe('ExperimentsPage', () => {
     expect(screen.getByTestId('filter-paused')).toHaveAttribute('aria-pressed', 'true');
   });
 
+  it('offers an Archived filter that sends status_filter=archived', async () => {
+    mockedApiFetch.mockImplementation(
+      routedApi([
+        {
+          path: '/api/v1/experiments',
+          handler: (_path, options) =>
+            options.query?.status_filter === 'archived'
+              ? listResponse([exp({ status: 'archived' })])
+              : listResponse([exp({})]),
+        },
+      ]) as unknown as typeof apiFetch,
+    );
+    render(<ExperimentsPage />);
+    await screen.findByTestId('experiments-table');
+
+    expect(within(screen.getByTestId('status-filter')).getAllByRole('button').map((b) => b.textContent)).toEqual([
+      'All',
+      'Draft',
+      'Active',
+      'Paused',
+      'Completed',
+      'Archived',
+    ]);
+    fireEvent.click(screen.getByTestId('filter-archived'));
+    await waitFor(() => expect(mockedApiFetch).toHaveBeenCalledTimes(2));
+    const [, options] = mockedApiFetch.mock.calls[1];
+    expect(options?.query).toMatchObject({ status_filter: 'archived' });
+    expect(screen.getByTestId('filter-archived')).toHaveAttribute('aria-pressed', 'true');
+    expect(await screen.findByTestId('experiment-status-pill')).toHaveTextContent('Archived');
+  });
+
   it('shows the first-run checklist with a copyable curl when there are no experiments', async () => {
     mockedApiFetch.mockImplementation(
       routedApi([{ path: '/api/v1/experiments', handler: () => listResponse([]) }]) as unknown as typeof apiFetch,

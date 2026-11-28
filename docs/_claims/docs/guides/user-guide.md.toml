@@ -1669,7 +1669,7 @@ text = "Experiments list shows all experiments with their name, status, type, nu
 by = ["test:frontend/src/tests/pages/experiments-index.test.tsx"]
 
 [[unit]]
-text = "Filter by status: All / Draft / Active / Paused / Completed."
+text = "Filter by status: All / Draft / Active / Paused / Completed / Archived."
 by = ["test:frontend/src/tests/pages/experiments-index.test.tsx"]
 
 [[unit]]

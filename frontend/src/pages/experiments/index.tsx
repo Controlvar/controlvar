@@ -25,6 +25,7 @@ const STATUS_FILTERS: Array<{ label: string; value: ExperimentStatus | 'all' }> 
   { label: 'Active', value: 'active' },
   { label: 'Paused', value: 'paused' },
   { label: 'Completed', value: 'completed' },
+  { label: 'Archived', value: 'archived' },
 ];
 
 export default function ExperimentsPage() {

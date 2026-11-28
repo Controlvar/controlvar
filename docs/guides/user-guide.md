@@ -558,7 +558,7 @@ has an **Archived** filter. See [Archived flags](../feature-flags/create.md#arch
 **Experiments list** shows all experiments with their name, status, type, number of
 variants and creation date.
 
-Filter by status: All / Draft / Active / Paused / Completed.
+Filter by status: All / Draft / Active / Paused / Completed / Archived.
 
 ### Exporting Results
 
