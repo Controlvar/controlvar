@@ -5,15 +5,15 @@ document = "docs/llm-evaluation/overview.md"
 
 [[unit]]
 text = "LLM/AI Model Evaluation — Overview"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Supported Providers and Models"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Provider | Models | Notes"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Anthropic | claude-opus-5, claude-sonnet-5, claude-haiku-4-5, claude-fable-5-1, and the 4.5/4.6 and Claude 3 generations | Recommended judge model. The priced set is COST_PER_1K_TOKENS in backend/app/core/llm_pricing.py; a model missing from it records $0.00 and logs a warning."
@@ -63,7 +63,10 @@ by = [
 
 [[unit]]
 text = "With no GEMINI_API_KEY, that variant's /complete answers 502 {\"detail\":\"LLM provider error: GEMINI_API_KEY is not set\"}."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/integration/api/test_llm_experiments_api.py::TestGeminiComplete::test_missing_key_is_the_documented_502",
+    "test:backend/tests/unit/services/test_llm_gemini_provider.py::test_missing_key_raises_before_any_request",
+]
 
 [[unit]]
 text = "Both compose files pass ANTHROPIC_API_KEY, OPENAI_API_KEY and GEMINI_API_KEY to the API."
@@ -133,7 +136,7 @@ by = [
 
 [[unit]]
 text = "Variant Assignment"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Variants are assigned on the server using consistent MD5 hashing."
@@ -152,11 +155,11 @@ by = [
 
 [[unit]]
 text = "LLM-as-Judge Scoring"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The platform supports automated quality evaluation using a judge LLM."
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The default is settings.LLM_DEFAULT_JUDGE_MODEL (claude-sonnet-5), overridable per request and by the LLM_DEFAULT_JUDGE_MODEL environment variable."
@@ -164,7 +167,7 @@ by = ["test:backend/tests/unit/services/test_anthropic_compat.py::test_every_con
 
 [[unit]]
 text = "The judge is prompted:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Judge scores are stored as auto_eval_score on each evaluation record and included in the results analytics."
@@ -198,7 +201,7 @@ by = [
 
 [[unit]]
 text = "Cost Estimation"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The platform automatically estimates the cost of each LLM call using a built-in cost table:"
@@ -218,11 +221,11 @@ by = [
 
 [[unit]]
 text = "Statistical Analysis"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Results include:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Mean and 95% confidence interval for latency, cost, auto-eval score, and business metric; the interval uses the exact t critical value at n - 1 degrees of freedom"

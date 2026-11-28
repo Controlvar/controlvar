@@ -5,7 +5,7 @@ document = "docs/llm-evaluation/quickstart.md"
 
 [[unit]]
 text = "LLM/AI Model Evaluation — Quick Start"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "This guide creates an experiment that compares two models on a customer support task: claude-3-5-sonnet-20241022 is the control and gpt-4o the treatment."
@@ -13,11 +13,11 @@ by = ["docex:docs/llm-evaluation/quickstart.md#\"name\": \"Customer Support: Cla
 
 [[unit]]
 text = "Run the commands in one terminal, in order, against the stack from the Quick Start."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Each uses the shell variables set by the ones before it."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Steps 3 to 5 need a provider key."
@@ -41,11 +41,11 @@ by = ["exempt:navigation"]
 
 [[unit]]
 text = "1. Create an Experiment"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Log in first."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Creating and starting an experiment takes permission to create and change experiments, such as the DEVELOPER or ADMIN role:"
@@ -58,11 +58,11 @@ by = [
 
 [[unit]]
 text = "It prints \"ADMIN\"."
-by = ["exempt:baseline"]
+by = ["docex:docs/llm-evaluation/quickstart.md#\"ADMIN\""]
 
 [[unit]]
 text = "Create the experiment, with one variant per model."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "The collection URL ends with a slash, /api/v1/llm-experiments/; without it the API answers 307, which curl doesn't follow."
@@ -70,7 +70,7 @@ by = ["test:backend/tests/unit/middleware/test_relative_slash_redirect.py"]
 
 [[unit]]
 text = "This saves the experiment's id in $EXPERIMENT_ID:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "The API answers 201 Created:"
@@ -82,7 +82,7 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 
 [[unit]]
 text = "2. Start the Experiment"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "It prints \"ACTIVE\"."
@@ -91,11 +91,11 @@ count = 2
 
 [[unit]]
 text = "3. Route User Requests Through the Experiment"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "For each incoming customer message, call the /complete endpoint."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "The platform assigns the user to a variant deterministically (the same user always gets the same model), renders the variant's prompt template with input_variables, and calls the model."
@@ -122,11 +122,14 @@ by = ["test:backend/tests/integration/api/test_llm_experiments_api.py::TestGemin
 
 [[unit]]
 text = "With no GEMINI_API_KEY, a Gemini variant's completion answers 502 {\"detail\":\"LLM provider error: GEMINI_API_KEY is not set\"}."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/integration/api/test_llm_experiments_api.py::TestGeminiComplete::test_missing_key_is_the_documented_502",
+    "test:backend/tests/unit/services/test_llm_gemini_provider.py::test_missing_key_raises_before_any_request",
+]
 
 [[unit]]
 text = "4. Record Business Outcomes"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "When the customer resolves their issue (converts), submit the business metric for that evaluation with POST /api/v1/llm-experiments/{id}/evaluate: the evaluation_id and a business_metric_value, such as 1.0."
@@ -141,7 +144,7 @@ by = [
 
 [[unit]]
 text = "5. Run Automated Quality Scoring (Optional)"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "POST /api/v1/llm-experiments/{id}/judge scores the responses on a quality dimension with LLM-as-judge."
@@ -172,7 +175,7 @@ by = [
 
 [[unit]]
 text = "6. Read Results and Declare a Winner"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "With no completions yet, every count is 0:"
@@ -180,11 +183,11 @@ by = ["docex:docs/llm-evaluation/quickstart.md#\"status\": \"ACTIVE\""]
 
 [[unit]]
 text = "With traffic, the full response looks like this:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Prompt Template Variables"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Use {{double_braces}} in your prompt templates:"
@@ -199,15 +202,15 @@ by = ["test:backend/tests/unit/services/test_llm_experiment_service.py::TestProm
 
 [[unit]]
 text = "Pausing and Resuming"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Pause the experiment:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "It prints \"PAUSED\"."
-by = ["exempt:baseline"]
+by = ["docex:docs/llm-evaluation/quickstart.md#\"PAUSED\""]
 
 [[unit]]
 text = "While paused, /complete answers 400."
@@ -219,7 +222,7 @@ by = ["test:backend/tests/unit/services/test_llm_experiment_service.py::TestLLME
 
 [[unit]]
 text = "Permissions"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Action | Needs"
