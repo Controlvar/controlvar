@@ -9,7 +9,7 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "Part of the hipaa module"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "HIPAA is one of the optional modules -- present in the full profile, absent from the core one."
@@ -27,11 +27,11 @@ by = [
 
 [[unit]]
 text = "See Modules and profiles for what each profile includes and how to run the full one."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Summary"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The hipaa module keeps Business Associate Agreement (BAA) records and a PHI access log, encrypts and decrypts single values with a key you configure, and reports a readiness status."
@@ -43,11 +43,11 @@ by = [
 
 [[unit]]
 text = "Components"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "1. PHI Encryption (modules/backend/app/core/phi_encryption.py)"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Symmetric encryption for Protected Health Information (PHI) using Fernet (AES-128-CBC + HMAC-SHA256)."
@@ -55,15 +55,15 @@ by = ["test:modules/backend/tests/unit/core/test_phi_encryption.py"]
 
 [[unit]]
 text = "Key generation:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Usage:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Properties:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Each encrypt() call uses a random IV — same plaintext produces different ciphertexts"
@@ -93,7 +93,7 @@ by = [
 
 [[unit]]
 text = "2. PHI Audit Log (modules/backend/app/models/phi_audit_log.py)"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Entries in experimentation.phi_audit_logs are written by two routes: POST /audit-logs, which records the access you send, and POST /decrypt, which records a READ by the calling user."
@@ -139,7 +139,7 @@ by = ["test:modules/backend/tests/unit/services/test_hipaa_service.py::TestLogPh
 
 [[unit]]
 text = "3. BAA Configuration (modules/backend/app/models/baa_config.py)"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Business Associate Agreements are tracked in experimentation.baa_configs."
@@ -147,7 +147,7 @@ by = ["test:modules/backend/tests/integration/api/test_hipaa_api.py"]
 
 [[unit]]
 text = "Each record stores:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Covered entity contact (organization_name, signatory_name, signatory_email)"
@@ -189,7 +189,7 @@ by = [
 
 [[unit]]
 text = "Method | Path | Description"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "POST | /baa | Create BAA configuration"
@@ -270,7 +270,7 @@ by = [
 
 [[unit]]
 text = "Configuration"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Setting | What it does"
@@ -315,7 +315,7 @@ by = ["test:modules/backend/tests/unit/api/test_hipaa_routes_and_status.py::test
 
 [[unit]]
 text = "Security Notes"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Audit logs are append-only — no DELETE endpoint is exposed"
