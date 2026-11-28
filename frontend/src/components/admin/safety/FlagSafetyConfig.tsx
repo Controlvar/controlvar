@@ -19,7 +19,7 @@ export function FlagSafetyConfig({ flagId, flagName, onClose }: FlagSafetyConfig
         <button
           data-testid="flag-safety-config-close"
           onClick={onClose}
-          className="text-slate-400 hover:text-slate-600 transition-colors text-sm"
+          className="text-slate-600 hover:text-slate-800 transition-colors text-sm"
           aria-label="Close"
         >
           Close
