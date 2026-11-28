@@ -212,6 +212,13 @@ describe("the table", () => {
     expect(result.violations.map((v) => v.id)).toEqual([]);
   });
 
+  it('has a scroll wrapper a keyboard reaches, with a name', async () => {
+    await renderPage();
+    const wrapper = await screen.findByTestId('notification-settings-all');
+    expect(wrapper).toHaveAttribute('tabindex', '0');
+    expect(screen.getByRole('region', { name: "Everyone's notification settings" })).toBe(wrapper);
+  });
+
   it('shows the loading line until the answer arrives, then the table', async () => {
     let release: (rows: unknown) => void = () => {};
     const pending = new Promise((resolve) => {

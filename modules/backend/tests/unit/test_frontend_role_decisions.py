@@ -382,6 +382,15 @@ SITES: Dict[Key, Tuple[int, str, str]] = {
         "canAnalyseInteractions mirrors interactions._require_developer (ANALYST, "
         "DEVELOPER, ADMIN or a superuser), which no grantable pair names",
     ),
+    (
+        "frontend/src/components/admin/notifications/access.ts",
+        "return user?.role === 'ADMIN';",
+    ): (
+        1,
+        BASE,
+        "readsAllNotificationSettings mirrors the notifications admin routes "
+        "(role == ADMIN and nothing else), which no grantable pair names",
+    ),
     # --- decides nothing ----------------------------------------------------
     (
         "frontend/src/pages/experiments/interactions.tsx",
@@ -498,8 +507,8 @@ SITES: Dict[Key, Tuple[int, str, str]] = {
 }
 
 #: Reads per class, and in all: a classification that loses or gains one fails.
-EXPECTED_READS = {CONVERTED: 7, BASE: 17, NOTHING: 31}
-EXPECTED_TOTAL = 55
+EXPECTED_READS = {CONVERTED: 7, BASE: 18, NOTHING: 31}
+EXPECTED_TOTAL = 56
 
 
 # ---------------------------------------------------------------------------

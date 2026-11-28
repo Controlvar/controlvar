@@ -79,7 +79,13 @@ export function AllNotificationSettings({ allowed }: AllNotificationSettingsProp
         </p>
       )}
       {allowed && state.kind === 'loaded' && state.rows.length > 0 && (
-        <div className="overflow-x-auto" data-testid="notification-settings-all">
+        <div
+          className="overflow-x-auto focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+          data-testid="notification-settings-all"
+          role="region"
+          aria-label="Everyone's notification settings"
+          tabIndex={0}
+        >
           <table className="w-full text-sm">
             <caption className="sr-only">Every user&apos;s notification settings</caption>
             <thead>
