@@ -9,9 +9,8 @@
 
 import type { ExperimentationClient } from '@controlvar/js-sdk';
 
-export interface ExperimentationProviderOptions {
-  /** API key used in the X-API-Key header. */
-  apiKey: string;
+/** Options both forms of {@link ExperimentationProviderOptions} take. */
+interface ExperimentationProviderBaseOptions {
   /** Backend origin (the SDK appends `/api/v1/...`). Defaults to http://localhost:8000. */
   baseUrl?: string;
   /**
@@ -27,12 +26,33 @@ export interface ExperimentationProviderOptions {
    * Defaults to the global `fetch` available in Node 18+ / browsers.
    */
   fetch?: typeof fetch;
-  /**
-   * Reuse an existing JS SDK client (for example the one your app already uses for
-   * experiment assignment and tracking). When given, the other options are ignored.
-   */
-  client?: ExperimentationClient;
 }
+
+/**
+ * Either an `apiKey`, or a `client` to reuse: `{ client }` alone is valid and `apiKey` is
+ * then ignored.
+ */
+export type ExperimentationProviderOptions = ExperimentationProviderBaseOptions &
+  (
+    | {
+        /** API key used in the X-API-Key header. */
+        apiKey: string;
+        /**
+         * Reuse an existing JS SDK client (for example the one your app already uses for
+         * experiment assignment and tracking). When given, the other options are ignored.
+         */
+        client?: ExperimentationClient;
+      }
+    | {
+        /** Not needed with a `client`: the client carries its own key. */
+        apiKey?: string;
+        /**
+         * Reuse an existing JS SDK client (for example the one your app already uses for
+         * experiment assignment and tracking). When given, the other options are ignored.
+         */
+        client: ExperimentationClient;
+      }
+  );
 
 /** `flagMetadata` attached to every successful resolution. */
 export interface ExperimentationFlagMetadata {
