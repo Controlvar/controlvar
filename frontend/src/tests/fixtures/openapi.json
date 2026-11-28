@@ -501,6 +501,12 @@
         "summary": "Start experiment"
       }
     },
+    "/api/v1/experiments/{experiment_id}/unarchive": {
+      "post": {
+        "operationId": "unarchive_experiment_api_v1_experiments__experiment_id__unarchive_post",
+        "summary": "Unarchive experiment (beta)"
+      }
+    },
     "/api/v1/experiments/{experiment_id}/visual/editor-tickets": {
       "post": {
         "operationId": "open_visual_editor_api_v1_experiments__experiment_id__visual_editor_tickets_post",

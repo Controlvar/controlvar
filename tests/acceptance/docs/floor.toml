@@ -94,6 +94,7 @@ routes = [
   "/api/v1/experiments/{experiment_id}/segmented-results/{segment_by}",
   "/api/v1/experiments/{experiment_id}/split-url/preview",
   "/api/v1/experiments/{experiment_id}/start",
+  "/api/v1/experiments/{experiment_id}/unarchive",
   "/api/v1/export/experiments",
   "/api/v1/export/feature-flags",
   "/api/v1/export/reports/experiments/{experiment_id}",

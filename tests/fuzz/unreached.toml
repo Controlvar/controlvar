@@ -390,6 +390,17 @@
 # pass still reaches it, and it is not an SDK route. The lists are 132 for
 # superuser, 205 for viewer and 9 for sdk.
 
+# Then the experiment unarchive (#2278) added POST
+# /api/v1/experiments/{experiment_id}/unarchive, listed from the following
+# reasoning before the pull request's own fuzz run. It answers 200 only for an
+# archived experiment with a start date and an end date at or before now:
+# every other stored experiment answers 400, an id that names no stored row
+# 404, and the VIEWER role 403. Neither pass is known to send the id of such
+# an experiment, so it is listed for the superuser and viewer passes. It is
+# not an SDK route, so the sdk pass does not select it. As #1607 found, a new
+# operation changes the ids reused by the operations after it, which only a
+# run can say. The lists are 133 for superuser, 206 for viewer and 9 for sdk.
+
 # --- superuser: the seeded demo administrator's bearer token ----------------
 
 [[unreached]]
@@ -471,6 +482,11 @@ reason = "No request names an active experiment: every id sent that passes valid
 pass = "superuser"
 operation = "POST /api/v1/experiments/{experiment_id}/complete"
 reason = "No request names an active or paused experiment: every stored id sent answers 400, an id that names no stored row 404, and the other requests fail validation (422)."
+
+[[unreached]]
+pass = "superuser"
+operation = "POST /api/v1/experiments/{experiment_id}/unarchive"
+reason = "No request names an archived experiment with a start date and a past end date: every stored id sent answers 400, an id that names no stored row 404, and the other requests fail validation (422)."
 
 [[unreached]]
 pass = "superuser"
@@ -1152,6 +1168,11 @@ reason = "The VIEWER role may not use it, so the role check answers 403; request
 [[unreached]]
 pass = "viewer"
 operation = "POST /api/v1/experiments/{experiment_id}/archive"
+reason = "The VIEWER role may not use it, so the role check answers 403; requests that name no stored row answer 404, and those that fail validation 422."
+
+[[unreached]]
+pass = "viewer"
+operation = "POST /api/v1/experiments/{experiment_id}/unarchive"
 reason = "The VIEWER role may not use it, so the role check answers 403; requests that name no stored row answer 404, and those that fail validation 422."
 
 [[unreached]]

@@ -171,6 +171,11 @@ SITES: Dict[Tuple[str, str, str], Tuple[int, object]] = {
         "status=ARCHIVED",
     ): (1, RouteReached()),
     (
+        "backend/app/services/experiment_service.py",
+        "ExperimentService.unarchive_experiment",
+        "status=COMPLETED",
+    ): (1, RouteReached()),
+    (
         "backend/app/services/global_holdout_service.py",
         "GlobalHoldoutService._activate",
         "is_active",
@@ -671,7 +676,7 @@ def test_the_sites_are_exact():
         f"{sorted((k, n) for k, n in found.items() if expected.get(k) != n)}; "
         f"gone: {sorted(k for k in expected if k not in found)}"
     )
-    assert sum(expected.values()) == 38
+    assert sum(expected.values()) == 39
 
 
 def test_every_dynamic_setattr_is_listed():

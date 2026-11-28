@@ -98,6 +98,8 @@ ROUTES = {
     "pause": ("POST", "/pause", None, ExperimentStatus.ACTIVE),
     "complete": ("POST", "/complete", None, ExperimentStatus.ACTIVE),
     "archive": ("POST", "/archive", None, ExperimentStatus.COMPLETED),
+    # An ended experiment (ROW_DATES), so that the role check decides (#2278).
+    "unarchive": ("POST", "/unarchive", None, ExperimentStatus.ARCHIVED),
     "metadata": ("POST", "/metadata", {"k": "v"}, ExperimentStatus.DRAFT),
     "clone": ("POST", "/clone", None, ExperimentStatus.ACTIVE),
     "schedule": ("PUT", "/schedule", _schedule_body, ExperimentStatus.DRAFT),
@@ -141,6 +143,7 @@ EXPECTED = {
     "pause": CHANGE_ROW,
     "complete": CHANGE_ROW,
     "archive": CHANGE_ROW,
+    "unarchive": CHANGE_ROW,
     "metadata": CHANGE_ROW,
     "clone": _row(201),
     "schedule": CHANGE_ROW,
@@ -195,6 +198,16 @@ ROW_DETAIL = {
 }
 
 READ_ROUTES = ["results", "daily_results", "segmented_results"]
+
+
+def _ended():
+    now = datetime.now(timezone.utc)
+    return now - timedelta(days=10), now - timedelta(days=1)
+
+
+#: row -> the (start_date, end_date) its experiment is given, where the
+#: status alone would make the route refuse everyone.
+ROW_DATES = {"unarchive": _ended}
 
 CELLS = [(row, column) for row in EXPECTED for column in COLUMNS]
 CACHED_CELLS = [(row, column) for row in READ_ROUTES for column in COLUMNS]
@@ -351,8 +364,9 @@ def _payload():
     }
 
 
-def _experiment(client, db_session, people, owner, status):
-    """Created through the API by the creator, then given owner and status."""
+def _experiment(client, db_session, people, owner, status, dates=None):
+    """Created through the API by the creator, then given owner and status
+    (and ``dates()``'s start and end dates, when given)."""
     response = client.post(
         f"{BASE}/", json=_payload(), headers=_auth(people["creator"])
     )
@@ -361,6 +375,8 @@ def _experiment(client, db_session, people, owner, status):
     row = db_session.get(Experiment, uuid.UUID(experiment_id))
     row.owner_id = owner.id
     row.status = status
+    if dates is not None:
+        row.start_date, row.end_date = dates()
     db_session.commit()
     return experiment_id
 
@@ -393,11 +409,11 @@ def _without_read(monkeypatch, column):
 
 
 def test_the_matrix_is_the_size_it_says():
-    """16 routes by 11 callers, and 3 by 11 with the cache on."""
-    assert len(ROUTES) == len(EXPECTED) == 16
+    """17 routes by 11 callers, and 3 by 11 with the cache on."""
+    assert len(ROUTES) == len(EXPECTED) == 17
     assert all(list(cells) == COLUMNS for cells in EXPECTED.values())
     assert len(COLUMNS) == 11
-    assert len(CELLS) == 176
+    assert len(CELLS) == 187
     assert len(CACHED_CELLS) == 33
     assert set(DELETE_ACTIVE_DETAIL) == set(CALLERS)
     assert set(UPDATE_ACTIVE_DETAIL) == set(CALLERS) - {"superuser"}
@@ -408,7 +424,9 @@ def test_status_by_route_and_caller(
     client, db_session, people, monkeypatch, row, column
 ):
     caller, owner = _caller(people, column)
-    experiment_id = _experiment(client, db_session, people, owner, ROUTES[row][3])
+    experiment_id = _experiment(
+        client, db_session, people, owner, ROUTES[row][3], ROW_DATES.get(row)
+    )
     headers = _auth(caller) if caller is not None else {}
     _without_read(monkeypatch, column)
 
@@ -438,6 +456,13 @@ def _assert_effect(db_session, row, experiment_id, response, caller, owner):
             response.status_code,
             stored.name,
         )
+    elif row == "unarchive":
+        expected = (
+            ExperimentStatus.COMPLETED
+            if response.status_code == 200
+            else ExperimentStatus.ARCHIVED
+        )
+        assert stored.status == expected, (response.status_code, stored.status)
     elif row in ("schedule", "schedule_active", "delete", "delete_active"):
         # A refusal changes nothing.
         assert stored is not None

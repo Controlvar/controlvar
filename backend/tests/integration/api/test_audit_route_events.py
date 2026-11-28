@@ -874,6 +874,13 @@ def test_experiment_lifecycle(client, fresh, developer):
     row = _one(w, "experiment_update", "experiment", exp["id"], developer)
     assert row.reason == "archive"
 
+    w = Written(fresh)
+    response = client.post(f"{V1}/experiments/{exp['id']}/unarchive", headers=h)
+    assert response.status_code == 200, response.text
+    row = _one(w, "experiment_update", "experiment", exp["id"], developer)
+    assert row.reason == "unarchive"
+    assert _values(row) == ({"status": "archived"}, {"status": "completed"})
+
 
 def test_experiment_schedule_metadata_and_clone(client, fresh, developer):
     exp = _create_experiment(client, developer)

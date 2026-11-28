@@ -43,6 +43,7 @@ The table lists each capability and where you do it today:
 | Set a rollout schedule's own start and end dates, maximum percentage and minimum stage duration | Dashboard | [Gradual rollouts](../feature-flags/rollouts.md#in-the-dashboard) |
 | Delete a feature flag | Dashboard | [Deleting a flag](../feature-flags/create.md#deleting-a-flag) |
 | Archive and unarchive a feature flag | Dashboard | [Archived flags](user-guide.md#archived-flags) |
+| Unarchive an experiment | API only | [Running experiments](user-guide.md#pausing-and-stopping) |
 | Create a bandit experiment | Dashboard | [Multi-armed bandits](../api/multi-armed-bandit.md) |
 | Set a bandit's weights by hand | Dashboard | [Multi-armed bandits](../api/multi-armed-bandit.md) |
 | A bandit's weight history (beta) | Dashboard | [Multi-armed bandits](../api/multi-armed-bandit.md) |

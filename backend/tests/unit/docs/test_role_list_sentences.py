@@ -220,8 +220,8 @@ CLASS_B: Dict[Tuple[str, str], str] = {
     (
         "docs/api/endpoints.md",
         "ADMIN and DEVELOPER may create experiments, clone any experiment, and "
-        "update, start, pause, complete, archive or annotate (`metadata`) any "
-        "experiment, schedule any experiment, and delete any experiment in DRAFT.",
+        "update, start, pause, complete, archive, unarchive or annotate (`metadata`) "
+        "any experiment, schedule any experiment, and delete any experiment in DRAFT.",
     ): "class A in context (R14): the sentences after it give the grant clause",
     (
         "docs/api/endpoints.md",

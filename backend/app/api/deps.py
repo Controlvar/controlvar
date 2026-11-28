@@ -527,8 +527,8 @@ def get_experiment_change_access(
     ``action`` on experiments. Who created the experiment is not considered,
     so a role without ``action`` is refused on an experiment it created too.
 
-    Used by update, schedule, start, pause, complete, archive and metadata,
-    and by delete with ``Action.DELETE``.
+    Used by update, schedule, start, pause, complete, archive, unarchive and
+    metadata, and by delete with ``Action.DELETE``.
 
     Args:
         experiment: The experiment being changed

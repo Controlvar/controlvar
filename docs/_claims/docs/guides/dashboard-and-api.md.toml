@@ -168,6 +168,10 @@ text = "Archive and unarchive a feature flag | Dashboard | Archived flags"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
+text = "Unarchive an experiment | API only | Running experiments"
+by = ["mechanism:dashboard-and-api"]
+
+[[unit]]
 text = "Create a bandit experiment | Dashboard | Multi-armed bandits"
 by = ["mechanism:dashboard-and-api"]
 

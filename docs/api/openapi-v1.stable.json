@@ -22424,6 +22424,108 @@
         ]
       }
     },
+    "/api/v1/experiments/{experiment_id}/unarchive": {
+      "post": {
+        "description": "Unarchive an experiment (beta).\n\nAn archived experiment with a start date and an end date at or before now\nbecomes COMPLETED: its results read as they did while it was archived,\nnobody is assigned to it, and it can be archived again. Only its status\nchanges. Any other archived experiment is refused: it never comes back\nrunning, because that would restart its traffic, and nothing stores the\nstatus it had before it was archived. Clone it to run it again.\n\nThe same permission as archiving: READ and UPDATE on experiments, whoever\ncreated it. Written to the audit log as an experiment update with the\nreason `unarchive`.\n\nReturns:\n    ExperimentResponse: The experiment with COMPLETED status\n\nRaises:\n    HTTPException 400: If the experiment is not archived, or has no start\n        date, or its end date is missing or still ahead\n    HTTPException 403: If the caller's role does not hold UPDATE on experiments\n    HTTPException 404: If the experiment does not exist",
+        "operationId": "unarchive_experiment_api_v1_experiments__experiment_id__unarchive_post",
+        "parameters": [
+          {
+            "description": "The ID of the experiment to unarchive",
+            "in": "path",
+            "name": "experiment_id",
+            "required": true,
+            "schema": {
+              "description": "The ID of the experiment to unarchive",
+              "format": "uuid",
+              "title": "Experiment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "skip_cache",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Skip Cache",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExperimentResponse"
+                }
+              }
+            },
+            "description": "Returns the experiment, now COMPLETED"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "message": "Could not validate credentials",
+                    "status_code": 401
+                  }
+                }
+              }
+            },
+            "description": "Authentication failed"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "message": "Not enough permissions",
+                    "status_code": 403
+                  }
+                }
+              }
+            },
+            "description": "Permission denied"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "message": "Internal server error",
+                    "status_code": 500
+                  }
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Unarchive experiment (beta)",
+        "tags": [
+          "Experiments",
+          "Experiments"
+        ],
+        "x-stability": "beta"
+      }
+    },
     "/api/v1/experiments/{experiment_id}/visual/editor-tickets": {
       "post": {
         "description": "Make the link that opens a visual draft in the visual editor, on the\nexperiment's own page.\n\nThe link is the experiment's editor page with\n`#controlvar-editor=<ticket>`; it works once, within 120 seconds, and is\nanswered once (only a hash of the ticket is stored). Making it ends every\neditor session of the experiment that is still open, whoever opened it.\n\nAccepted only from the dashboard: the request's `Origin` must be one of\nthe server's dashboard origins (DASHBOARD_ORIGINS, or PUBLIC_BASE_URL's).\nRefused, in this order: 422 when the server knows no dashboard origin;\n403 for any other `Origin`, or none; 404; 403 for a caller who may not\nchange experiments (READ and UPDATE); 400 when the experiment has no\nvisual settings, is not a draft, or has a start date; 422 when one of its\npages, or its editor page, is on a site this server does not accept\nrequests from (CORS_ORIGINS), or on the dashboard's own address, or when\nCORS_ORIGINS is `*`. Sent with `Cache-Control: no-store`.",

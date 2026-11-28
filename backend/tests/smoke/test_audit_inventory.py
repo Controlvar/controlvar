@@ -173,6 +173,7 @@ INVENTORY = {
     ("DELETE", f"{V1}/experiments/{{experiment_id}}"): Audited(A.EXPERIMENT_DELETE),
     ("PUT", f"{V1}/experiments/{{experiment_id}}"): EXP_UPDATE,
     ("POST", f"{V1}/experiments/{{experiment_id}}/archive"): EXP_UPDATE,
+    ("POST", f"{V1}/experiments/{{experiment_id}}/unarchive"): EXP_UPDATE,
     ("POST", f"{V1}/experiments/{{experiment_id}}/clone"): Audited(A.EXPERIMENT_CREATE),
     ("POST", f"{V1}/experiments/{{experiment_id}}/complete"): Audited(
         A.EXPERIMENT_COMPLETE
@@ -367,7 +368,7 @@ def test_the_inventory_is_exact():
         f"unclassified: {sorted(found - set(INVENTORY))}; "
         f"gone: {sorted(set(INVENTORY) - found)}"
     )
-    assert len(INVENTORY) == 125
+    assert len(INVENTORY) == 126
 
 
 #: Where a flag's settings per environment are changed (#2011).

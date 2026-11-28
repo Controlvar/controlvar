@@ -92,6 +92,9 @@ answers for one ID-list segment's members, and its response may still change.
 `POST /api/v1/admin/app-users/erase` is beta too (#2042): it erases one app user's
 data for a superuser, and its response may still change
 ([Erase one app user's data](erase-user-data.md)).
+`POST /api/v1/experiments/{experiment_id}/unarchive` is beta too (#2278): it brings an
+archived experiment that has ended back to completed, and its response may still change
+([Unarchive Experiment](endpoints.md#unarchive-experiment-beta)).
 
 ## Changing a stable route
 

@@ -84,13 +84,13 @@ on for that user: `"new_dashboard_ui": true` and `"beta_features": true`.
    - Experiments: reading an experiment and its results under
      `/api/v1/experiments/{experiment_id}` needs the role's READ on experiments (all four
      roles hold it); who owns the experiment is not considered. ADMIN and DEVELOPER may create
-     experiments, clone any experiment, and update, start, pause, complete, archive or
-     annotate (`metadata`) any experiment, schedule any experiment, and delete any
-     experiment in DRAFT. ANALYST and VIEWER change no experiment by their role, including
+     experiments, clone any experiment, and update, start, pause, complete, archive,
+     unarchive or annotate (`metadata`) any experiment, schedule any experiment, and
+     delete any experiment in DRAFT. ANALYST and VIEWER change no experiment by their role, including
      one they own. In the full profile a custom role or direct grant can add these:
      `experiment (create)` creates and clones, `experiment (update)` updates, starts,
-     pauses, completes, archives, annotates and schedules, and `experiment (delete)` deletes
-     a draft
+     pauses, completes, archives, unarchives, annotates and schedules, and
+     `experiment (delete)` deletes a draft
 
 2. **Superusers**:
    - Can access all user data
@@ -990,6 +990,28 @@ experiment, or a split whose shares are not all multiples of 5, and at
 archived or inactive, or whose rules are not valid; a clone answers 409 when a
 segment it would balance within cannot be used. See
 [Balance the split within groups](../guides/balance-within-groups.md).
+
+### Unarchive Experiment (beta)
+- **Endpoint**: `POST /api/v1/experiments/{experiment_id}/unarchive`
+- **Description**: Move an archived experiment that has a `start_date`, and an
+  `end_date` at or before now, to `completed`. Only its status changes, and it can
+  be archived again. Written to the audit log as `experiment_update` with the
+  reason `unarchive`.
+- **Refused**: any other archived experiment answers 400 with the detail `Only an
+  experiment with a start date and a past end date can be unarchived. Clone it to
+  run it again.` An experiment never comes back running: it always comes back
+  `completed`. One that is not archived answers 400 with `Experiment is not
+  archived`. A refusal changes nothing.
+- **Never completed**: two archived experiments also come back. One archived while
+  active comes back once its `end_date` has passed. A draft given both dates and
+  archived before it started comes back `completed` with no assignments.
+- **Headers**: Authorization: Bearer {token}
+- **Permissions**: the same as archive: ADMIN and DEVELOPER, superusers, and in the
+  full profile anyone whose custom role or direct grant gives `experiment (update)`;
+  anyone else gets 403
+- **Response**: 200 OK, the experiment, as archive answers it
+- **Errors**: 400 as above, 403 without permission to change experiments, 404 for an
+  unknown experiment
 
 ## Feature Flag Endpoints
 
@@ -1916,6 +1938,9 @@ the caller's role, superusers included:
   after now; complete sets it to one microsecond before the new `end_date`.
 - `POST /api/v1/experiments/{experiment_id}/archive`: any status but
   `archived` to `archived`.
+- `POST /api/v1/experiments/{experiment_id}/unarchive` (beta): `archived` to
+  `completed`, only for an experiment with a `start_date` and an `end_date` at or
+  before now.
 
 `PUT /api/v1/experiments/{experiment_id}` does not change it. A `status` equal
 to the current one is accepted and changes nothing, so an experiment fetched
