@@ -115,7 +115,8 @@ client.track("user-123", "page_view", properties={"page": "/"})   # no key: fann
 ```
 
 Constructor: `ExperimentationClient(api_url, api_key, timeout_seconds=5.0, cache_ttl_seconds=300,
-default_variant="control", transport=None)`. Instances are thread-safe.
+default_variant="control", transport=None, evaluation="server", refresh_interval_seconds=30.0,
+max_stale_seconds=None, on_error=None, on_exposure=None)`. Instances are thread-safe.
 
 ## API
 
@@ -277,7 +278,9 @@ It prints:
 
 Env: `CONTROLVAR_API_URL` (default `http://localhost:8000`), `CONTROLVAR_API_KEY` (required),
 `CONTRACT_EXPERIMENT_KEY` (default `sdk_contract_ab`), `CONTRACT_FLAG_KEY` (default `sdk_contract_flag`),
-`CONTRACT_USER_ID` (default random `smoke-<uuid>`).
+`CONTRACT_TARGETED_FLAG_KEY` (default `sdk_contract_targeted`), `CONTRACT_USER_ID` (default random
+`smoke-<uuid>`), `CONTROLVAR_LOCAL_API_KEY` (optional: a key with the `sdk:ruleset` scope; with it the
+smoke also links two ids with alias).
 
 CI runs this SDK's contract smoke against a real API: `python` is in the `sdks:` list of the
 SDK Live Contract job in [pr-qa-gate.yml](https://github.com/Controlvar/controlvar/blob/main/.github/workflows/pr-qa-gate.yml). Its fixtures,

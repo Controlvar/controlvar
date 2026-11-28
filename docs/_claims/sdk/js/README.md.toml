@@ -604,8 +604,11 @@ text = "Contract smoke"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Env: CONTROLVAR_API_URL (default http://localhost:8000), CONTROLVAR_API_KEY (required), CONTRACT_EXPERIMENT_KEY (sdk_contract_ab), CONTRACT_FLAG_KEY (sdk_contract_flag), CONTRACT_TARGETED_FLAG_KEY (sdk_contract_targeted), CONTRACT_USER_ID."
+text = "Env: CONTROLVAR_API_URL (default http://localhost:8000), CONTROLVAR_API_KEY (required), CONTRACT_EXPERIMENT_KEY (sdk_contract_ab), CONTRACT_FLAG_KEY (sdk_contract_flag), CONTRACT_TARGETED_FLAG_KEY (sdk_contract_targeted), CONTRACT_USER_ID, CONTROLVAR_LOCAL_API_KEY (optional: a key with the sdk:ruleset scope; with it the smoke also links two ids with alias), CONTRACT_MULTIWAY_USERS (comma-separated users of the multi-way flag; the live runner sets it)."
 by = [
+    "mechanism:sdk-readme-smoke-env",
+    "test:sdk/js/__tests__/contract-smoke.test.ts::it reads the multi-way flag for each user it is given, and the rule value flag with plan=pro",
+    "test:sdk/js/__tests__/contract-smoke.test.ts::with the sdk:ruleset key it links a new anonymous id to a new known id on one new client, and reports it",
     "test:sdk/js/__tests__/contract-smoke.test.ts::it reads its settings from the environment, with these defaults",
     "test:sdk/js/__tests__/contract-smoke.test.ts::it assigns twice, evaluates the flag, tracks with and without a key and sends a 2-event batch",
     "test:sdk/js/__tests__/contract-smoke.test.ts::it stops without a key and sends nothing",

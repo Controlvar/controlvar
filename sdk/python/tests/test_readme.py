@@ -93,3 +93,30 @@ def test_the_block_stops_without_its_key(monkeypatch):
     with pytest.raises(KeyError, match="CONTROLVAR_API_KEY"):
         exec(compile(quick_start_block(), str(README), "exec"), {"__name__": "readme_quick_start"})
     assert transport.requests == []
+
+
+def constructor_line() -> str:
+    """The call the README's "Constructor:" line shows, without the surrounding prose."""
+    text = README.read_text(encoding="utf-8")
+    # The call is wrapped across two lines in the README; join them first.
+    match = re.search(r"^Constructor: `(ExperimentationClient\(.*?\))`", text, re.S | re.M)
+    assert match, "the README has no Constructor line"
+    return " ".join(match.group(1).split())
+
+
+@pytest.mark.regression
+def test_the_constructor_line_names_every_parameter_and_default():
+    import ast
+    import inspect
+
+    from controlvar.client import ExperimentationClient
+
+    call = ast.parse(constructor_line(), mode="eval").body
+    assert isinstance(call, ast.Call)
+    shown = [a.id for a in call.args] + [k.arg for k in call.keywords]
+    shown_defaults = {k.arg: ast.literal_eval(k.value) for k in call.keywords}
+
+    signature = inspect.signature(ExperimentationClient.__init__)
+    parameters = [p for p in signature.parameters.values() if p.name != "self"]
+    assert shown == [p.name for p in parameters]
+    assert shown_defaults == {p.name: p.default for p in parameters if p.default is not p.empty}

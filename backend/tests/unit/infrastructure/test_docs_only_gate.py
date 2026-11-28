@@ -270,6 +270,9 @@ NOT_DOCS_TESTS = {
     # a change to it is never docs-only (scripts/classify_changes.py), and the
     # SDK suite it is in runs on every pull request (sdk-unit-tests.yml).
     "sdk/python/tests/test_readme.py": "reads sdk/python/README.md only",
+    # Reads the Contract smoke section of six sdk/*/README.md files and the smoke each
+    # one names, none of them under docs/ (a change to either is never docs-only).
+    "tests/sdk-contract/test_readme_smoke_env.py": "reads sdk/*/README.md only",
     # Reads only docs/api/warehouse-analytics.md (same reason as above).
     "modules/backend/tests/unit/test_warehouse_docs_availability.py": "docs/api only",
     # Reads only docs/api/auth.md's table of password sign-ins, for the rows

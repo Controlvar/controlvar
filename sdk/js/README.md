@@ -202,7 +202,9 @@ cd sdk/js && npm run build --silent && node examples/contract_smoke.mjs
 
 Env: `CONTROLVAR_API_URL` (default `http://localhost:8000`), `CONTROLVAR_API_KEY` (required),
 `CONTRACT_EXPERIMENT_KEY` (`sdk_contract_ab`), `CONTRACT_FLAG_KEY` (`sdk_contract_flag`), `CONTRACT_TARGETED_FLAG_KEY` (`sdk_contract_targeted`),
-`CONTRACT_USER_ID`. Its `targeted` report entry holds the answers for `plan: pro` and `plan: free`.
+`CONTRACT_USER_ID`, `CONTROLVAR_LOCAL_API_KEY` (optional: a key with the `sdk:ruleset` scope; with it the smoke also
+links two ids with alias), `CONTRACT_MULTIWAY_USERS` (comma-separated users of the multi-way flag; the live runner sets it).
+Its `targeted` report entry holds the answers for `plan: pro` and `plan: free`.
 
 CI runs this SDK's contract smoke against a real API: `js` is in the `sdks:` list of the
 SDK Live Contract job in [pr-qa-gate.yml](https://github.com/Controlvar/controlvar/blob/main/.github/workflows/pr-qa-gate.yml).
