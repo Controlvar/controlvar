@@ -31,6 +31,11 @@ jest.mock('@/contexts/AuthContext', () => ({
   }),
 }));
 
+// The page reads its filters from the address; these tests open it bare.
+jest.mock('next/router', () => ({
+  useRouter: () => ({ replace: jest.fn(), pathname: '/admin/audit', asPath: '/admin/audit', query: {}, isReady: true }),
+}));
+
 jest.mock('@/components/admin/AdminLayout', () => ({
   AdminLayout: ({ children, title }: { children: React.ReactNode; title: string }) => (
     <main data-testid="admin-layout">

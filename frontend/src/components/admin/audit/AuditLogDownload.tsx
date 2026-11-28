@@ -70,8 +70,10 @@ export function AuditLogDownload({ filters }: AuditLogDownloadProps) {
     try {
       const { from_date, to_date } = localDayRange(filters?.start_date, filters?.end_date);
       const { text, headers } = await AdminService.exportAuditLogs(format, {
+        ...(filters?.user_id ? { user_id: filters.user_id } : {}),
         action_type: filters?.action_type,
         entity_type: filters?.entity_type,
+        ...(filters?.entity_id ? { entity_id: filters.entity_id } : {}),
         from_date,
         to_date,
       });

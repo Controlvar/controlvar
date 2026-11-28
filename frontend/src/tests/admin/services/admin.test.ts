@@ -132,6 +132,20 @@ describe('AdminService', () => {
       expect(params.get('to_date')).toBe('2024-01-02T05:00:00.000Z');
     });
 
+    // #2273: one item's and one person's entries.
+    it('sends entity_id and user_id, and leaves them out when empty', async () => {
+      mockOk({ items: [], total: 0, page: 1, limit: 20 });
+      await AdminService.listAuditLogs({ entity_type: 'feature_flag', entity_id: 'e-1', user_id: 'u-1' });
+      const set = new URL(mockFetch.mock.calls[0][0] as string).searchParams;
+      expect(set.get('entity_id')).toBe('e-1');
+      expect(set.get('user_id')).toBe('u-1');
+      mockOk({ items: [], total: 0, page: 1, limit: 20 });
+      await AdminService.listAuditLogs({ entity_id: '', user_id: '' });
+      const empty = new URL(mockFetch.mock.calls[1][0] as string).searchParams;
+      expect(empty.has('entity_id')).toBe(false);
+      expect(empty.has('user_id')).toBe(false);
+    });
+
     // #665: the API reads from_date/to_date and has no entity_name; the old
     // start_date/end_date/entity_name were dropped unread.
     it('sends none of the keys the API does not read', async () => {
@@ -166,6 +180,14 @@ describe('AdminService', () => {
       expect((init.headers as Record<string, string>).Authorization).toBe('Bearer tok');
       expect(result.text).toBe('[]');
       expect(result.headers.get('x-total-count')).toBe('0');
+    });
+
+    it('sends entity_id and user_id to the export too (#2273)', async () => {
+      mockFetch.mockResolvedValueOnce({ ok: true, status: 200, text: () => Promise.resolve('[]'), headers: new Headers() });
+      await AdminService.exportAuditLogs('json', { entity_type: 'experiment', entity_id: 'e-1', user_id: 'u-1' });
+      const parsed = new URL((mockFetch.mock.calls[0] as [string])[0]);
+      expect(parsed.searchParams.get('entity_id')).toBe('e-1');
+      expect(parsed.searchParams.get('user_id')).toBe('u-1');
     });
 
     it('throws an ApiError carrying the 422 detail', async () => {

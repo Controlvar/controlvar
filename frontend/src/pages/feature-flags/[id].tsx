@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useId, useLayoutEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
+import { ItemHistoryLink } from '@/components/audit/ItemHistoryLink';
 import { TargetingRuleBuilder } from '@/components/targeting';
 import { InlineConfirm } from '@/components/ui/InlineConfirm';
 import { OUTSIDE_BUILDER_NOTE, SaveAlert } from '@/components/experiments/TargetingSection';
@@ -885,6 +886,9 @@ function FlagInEnvironment({
               </div>
               <p className="text-sm text-slate-500 mt-1 font-mono [overflow-wrap:anywhere]" data-testid="flag-key">
                 {flag.key}
+              </p>
+              <p className="mt-2">
+                <ItemHistoryLink entityType="feature_flag" entityId={flag.id} name={flag.name} />
               </p>
               {flag.description && (
                 <p className="text-sm text-slate-600 mt-2 [overflow-wrap:anywhere]" data-testid="flag-description">

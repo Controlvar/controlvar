@@ -232,7 +232,7 @@ text = "Turn CUPED on, and choose its covariate and lookback | API only | CUPED"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
-text = "Read the change history of one flag, experiment or person | API only | Audit logging"
+text = "Read the change history of one flag, experiment or person | Dashboard | Audit logging"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]

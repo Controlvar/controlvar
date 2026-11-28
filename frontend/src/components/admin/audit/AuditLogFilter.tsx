@@ -1,30 +1,38 @@
 import React, { useEffect, useState } from 'react';
 import { isDayRangeReversed } from '@/utils/auditDates';
 import { ENTITY_LABELS, actionFilterGroups } from './actionLabels';
+import { isAuditId } from './scope';
 
 /**
  * What the filter bar holds. `start_date`/`end_date` are calendar days
  * (`YYYY-MM-DD`); `AuditLogTable` turns them into the API's `from_date` and
- * `to_date`. The API also filters by `user_id`; this bar has no control for it.
+ * `to_date`. `user_id` has a control (the Person box) only where `showPerson`
+ * is set; `entity_id` has none: it comes from a History link and the page
+ * shows it as a removable "Showing changes to" line.
  */
 export interface AuditLogFilters {
+  user_id?: string;
   action_type?: string;
   entity_type?: string;
+  entity_id?: string;
   start_date?: string;
   end_date?: string;
 }
 
 export const REVERSED_RANGE_MESSAGE = 'The To date must be on or after the From date.';
+export const PERSON_INVALID_MESSAGE = "A person's id looks like 123e4567-e89b-12d3-a456-426614174000.";
 
 interface AuditLogFilterProps {
   filters: AuditLogFilters;
   onFilterChange: (filters: AuditLogFilters) => void;
+  /** Show the Person box: only for people the audit API gives everyone's entries to. */
+  showPerson?: boolean;
 }
 
 /** The entity types something writes an entry for. */
 const ENTITY_TYPES = Object.entries(ENTITY_LABELS).map(([value, label]) => ({ value, label }));
 
-export function AuditLogFilter({ filters, onFilterChange }: AuditLogFilterProps) {
+export function AuditLogFilter({ filters, onFilterChange, showPerson = false }: AuditLogFilterProps) {
   // The date inputs show what was typed even while the range is refused, so
   // they keep their own copy; a valid range is passed up, a reversed one is not.
   const [startDraft, setStartDraft] = useState(filters.start_date ?? '');
@@ -36,6 +44,22 @@ export function AuditLogFilter({ filters, onFilterChange }: AuditLogFilterProps)
   }, [filters.start_date, filters.end_date]);
 
   const reversed = isDayRangeReversed(startDraft, endDraft);
+
+  // Like the dates: the box shows what was typed, and only an id the API
+  // accepts (or an empty box) is passed up.
+  const [personDraft, setPersonDraft] = useState(filters.user_id ?? '');
+  useEffect(() => {
+    setPersonDraft(filters.user_id ?? '');
+  }, [filters.user_id]);
+  const personTyped = personDraft.trim();
+  const personInvalid = personTyped !== '' && !isAuditId(personTyped);
+
+  const handlePersonChange = (value: string) => {
+    setPersonDraft(value);
+    const id = value.trim();
+    if (id === '') onFilterChange({ ...filters, user_id: undefined });
+    else if (isAuditId(id)) onFilterChange({ ...filters, user_id: id });
+  };
 
   const handleChange = (key: keyof AuditLogFilters, value: string) => {
     onFilterChange({ ...filters, [key]: value || undefined });
@@ -53,6 +77,7 @@ export function AuditLogFilter({ filters, onFilterChange }: AuditLogFilterProps)
   const handleClear = () => {
     setStartDraft('');
     setEndDraft('');
+    setPersonDraft('');
     onFilterChange({});
   };
 
@@ -107,6 +132,24 @@ export function AuditLogFilter({ filters, onFilterChange }: AuditLogFilterProps)
         </select>
       </div>
 
+      {showPerson && (
+        <div className="flex flex-col gap-1 min-w-[260px]">
+          <label className="text-xs font-medium text-slate-600" htmlFor="filter-person">
+            Person (user id)
+          </label>
+          <input
+            id="filter-person"
+            data-testid="filter-person"
+            type="text"
+            value={personDraft}
+            onChange={(e) => handlePersonChange(e.target.value)}
+            aria-invalid={personInvalid || undefined}
+            aria-describedby={personInvalid ? 'filter-person-error' : undefined}
+            className="border border-slate-300 rounded px-2 py-1.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+      )}
+
       {/* Start Date */}
       <div className="flex flex-col gap-1">
         <label className="text-xs font-medium text-slate-600" htmlFor="filter-start-date">
@@ -150,6 +193,17 @@ export function AuditLogFilter({ filters, onFilterChange }: AuditLogFilterProps)
       >
         Clear filters
       </button>
+
+      {showPerson && personInvalid && (
+        <p
+          id="filter-person-error"
+          data-testid="filter-person-error"
+          role="alert"
+          className="basis-full text-sm text-red-600"
+        >
+          {PERSON_INVALID_MESSAGE}
+        </p>
+      )}
 
       {reversed && (
         <p

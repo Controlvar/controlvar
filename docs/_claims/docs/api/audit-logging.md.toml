@@ -448,6 +448,44 @@ by = [
 ]
 
 [[unit]]
+text = "A feature flag's page, an experiment's page and each row of the Users page have a History link to this page, filtered to that item or person (entity_type and entity_id, or user_id, in the address)."
+by = [
+    "test:frontend/src/tests/pages/item-history-links.test.tsx::%s sees History, which opens the Audit Log filtered to this flag",
+    "test:frontend/src/tests/pages/item-history-links.test.tsx::%s sees History, which opens the Audit Log filtered to this experiment",
+    "test:frontend/src/tests/pages/item-history-links.test.tsx::puts one History link on every row, naming the person",
+    "test:frontend/src/tests/pages/audit-history.test.tsx::%s: the first list request names the item, and no unfiltered one is made",
+]
+
+[[unit]]
+text = "The page then shows a \"Showing changes to\" line with a button that removes the filter."
+by = [
+    "test:frontend/src/tests/pages/audit-history.test.tsx::removing the line lists everything again and clears the address",
+    "test:frontend/src/tests/pages/audit-history.test.tsx::Clear filters removes the item too",
+]
+
+[[unit]]
+text = "Everyone who may open the page sees the links, and what they list is narrowed as above."
+by = [
+    "test:frontend/src/tests/pages/item-history-links.test.tsx::%s sees History, which opens the Audit Log filtered to this flag",
+    "test:frontend/src/tests/pages/audit-history.test.tsx::%s: the box is present only for people who read everyone's entries",
+]
+
+[[unit]]
+text = "A Person box, for a person's id, is shown to those who read everyone's entries."
+by = [
+    "test:frontend/src/tests/pages/audit-history.test.tsx::%s: the box is present only for people who read everyone's entries",
+    "test:frontend/src/tests/pages/audit-history.test.tsx::%s: a user_id in the address is sent only where the box is shown",
+    "test:frontend/src/tests/pages/audit-history.test.tsx::typing a valid id asks for that person, and emptying the box asks for everyone",
+]
+
+[[unit]]
+text = "Both filters go to the downloads too."
+by = [
+    "test:frontend/src/tests/pages/audit-history.test.tsx::the downloads carry the item, and the person where one is set",
+    "test:frontend/src/tests/admin/services/admin.test.ts::sends entity_id and user_id to the export too (#2273)",
+]
+
+[[unit]]
 text = "It shows what GET /api/v1/audit-logs/ returns for that user: other users' entries too for ADMIN, ANALYST, superusers and, in the full profile, anyone whose custom role or direct grant gives audit_log (read); only their own entries for anyone else, who sees a note saying so."
 by = [
     "test:frontend/src/tests/admin/AuditLogAccess.test.tsx",

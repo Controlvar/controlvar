@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import Link from 'next/link';
+import { ItemHistoryLink } from '@/components/audit/ItemHistoryLink';
 import { useRouter } from 'next/router';
 import { PageTitle } from '@/components/PageTitle';
 import { InlineConfirm } from '@/components/ui/InlineConfirm';
@@ -497,6 +498,7 @@ export default function ExperimentDetailPage() {
                 >
                   {experimentStatusLabel(status)}
                 </span>
+                <ItemHistoryLink entityType="experiment" entityId={experiment.id} name={experiment.name} />
               </div>
               {/* Every dt is slate-500 (4.76:1 on white), never slate-400 (2.56:1): a11y/grey-text-contrast.test.ts. */}
               <dl className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm text-slate-600">

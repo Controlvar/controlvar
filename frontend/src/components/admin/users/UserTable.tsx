@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { PersonHistoryLink } from '@/components/audit/ItemHistoryLink';
 import { AdminService } from '@/services/admin';
 import { DEFAULT_REQUEST_TIMEOUT_MS, isApiError } from '@/services/api';
 import { AdminUser, ROLE_COLORS, USER_ROLE_LABELS, UserListResponse } from '@/types/admin';
@@ -302,6 +303,7 @@ export function UserTable({
                           Permissions
                         </button>
                       )}
+                      <PersonHistoryLink userId={user.id} username={user.username} />
                       <button
                         type="button"
                         data-testid={`delete-user-${user.id}`}
