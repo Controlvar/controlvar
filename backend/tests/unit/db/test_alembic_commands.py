@@ -29,8 +29,8 @@ ENV_PY = REPO_ROOT / "backend" / "app" / "db" / "migrations" / "env.py"
 
 #: The core chain's head (#1934).
 CORE_HEAD = "t1934_metric_window"
-#: The modules branch's head (#826).
-MODULES_HEAD = "modules_0005_redshift"
+#: The modules branch's head (#123).
+MODULES_HEAD = "modules_0006_saml_requests"
 #: The revision 1ab99332f0ba's re-run recipe downgrades to, and what lies past it.
 EVENTS_UTC = "1ab99332f0ba"
 BEFORE_EVENTS_UTC = "a89544fb1075"
@@ -135,9 +135,9 @@ def test_history_marks_the_newest_revision_of_each_branch_and_labels_the_modules
     labelled = [line for line in lines if "(modules)" in line]
     if FULL:
         # modules_0001_rbac, modules_0002_warehouse_analysis,
-        # modules_0003_lower_is_better, modules_0004_rbac_activation and
-        # modules_0005_redshift.
-        assert len(labelled) == 5, labelled
+        # modules_0003_lower_is_better, modules_0004_rbac_activation,
+        # modules_0005_redshift and modules_0006_saml_requests.
+        assert len(labelled) == 6, labelled
         assert all(" -> modules_" in line for line in labelled), labelled
     else:
         assert labelled == []

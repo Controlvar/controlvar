@@ -109,20 +109,24 @@ MODULES_WAREHOUSE = "modules_0002_warehouse_analysis"
 MODULES_LOWER_IS_BETTER = "modules_0003_lower_is_better"
 #: The activation-time column of custom role assignments and direct grants
 #: (#891): the branch's fourth revision, and its head until
-#: :data:`MODULES_HEAD` was added.
+#: :data:`MODULES_REDSHIFT` was added.
 MODULES_RBAC_ACTIVATION = "modules_0004_rbac_activation"
+#: The Amazon Redshift connection type's widened constraints (#826): the
+#: branch's fifth revision, and its head until :data:`MODULES_HEAD` was added.
+MODULES_REDSHIFT = "modules_0005_redshift"
 #: The modules branch's HEAD: what ``heads`` names and ``modules@-1`` unapplies.
 #: Not the same revision as :data:`MODULES_FIRST` since the branch grew a second
 #: one (#312); an assertion that means "first" and says "head" silently changes
 #: meaning the day the branch grows, which is why the two are separate names.
-#: The Amazon Redshift connection type's widened constraints (#826).
-MODULES_HEAD = "modules_0005_redshift"
+#: The table of SAML sign-ins in progress (#123).
+MODULES_HEAD = "modules_0006_saml_requests"
 #: The modules branch, in apply order.
 MODULES_BRANCH_PLAN = [
     MODULES_FIRST,
     MODULES_WAREHOUSE,
     MODULES_LOWER_IS_BETTER,
     MODULES_RBAC_ACTIVATION,
+    MODULES_REDSHIFT,
     MODULES_HEAD,
 ]
 #: The core revision the branch must run *after*: it drops the two
@@ -293,7 +297,7 @@ def test_the_core_plan_is_the_full_plan_without_the_branch():
 #: What the documentation tells an operator to type to unapply the branch's
 #: newest revision, and the whole branch (its length back).
 UNAPPLY_MODULES_BRANCH = "modules@-1"
-UNAPPLY_WHOLE_MODULES_BRANCH = "modules@-5"
+UNAPPLY_WHOLE_MODULES_BRANCH = "modules@-6"
 
 #: Every file that spells a rollback command for this branch.
 ROLLBACK_DOCS = (
@@ -325,9 +329,9 @@ def test_unapplying_the_branch_is_one_revision_and_modules_at_base_is_all_of_the
     assert _downgrade_plan(script, UNAPPLY_WHOLE_MODULES_BRANCH) == list(
         reversed(MODULES_BRANCH_PLAN)
     )
-    # 49: the 44 core revisions (through t1934_metric_window, #1934) and the
-    # branch's 5.
-    assert len(_downgrade_plan(script, "modules@base")) == len(FULL_PLAN) == 49
+    # 50: the 44 core revisions (through t1934_metric_window, #1934) and the
+    # branch's 6.
+    assert len(_downgrade_plan(script, "modules@base")) == len(FULL_PLAN) == 50
 
 
 #: A command line, not a mention of one: the three documents all warn about
@@ -373,8 +377,9 @@ def test_a_documented_relative_modules_downgrade_is_one_revision_or_the_whole_br
     the image that runs it: ``modules@-2`` was the whole branch until
     ``modules_0003_lower_is_better`` (#1386), and from then on keeps the RBAC
     tables; ``modules@-3`` was the whole branch until
-    ``modules_0004_rbac_activation`` (#891), and ``modules@-4`` until
-    ``modules_0005_redshift`` (#826).  So the documents name a partial
+    ``modules_0004_rbac_activation`` (#891), ``modules@-4`` until
+    ``modules_0005_redshift`` (#826), and ``modules@-5`` until
+    ``modules_0006_saml_requests`` (#123).  So the documents name a partial
     rollback's target by its id, and
     every relative command line they still give is one of those two counts --
     the branch's length read from the revision files, not typed here.

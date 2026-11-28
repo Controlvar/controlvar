@@ -124,7 +124,7 @@ PREVIOUS_CORE_HEAD = "t449_identity_aliases"
 #: (#2012), the revision after this one, whose downgrade drops
 #: ``feature_flags.split`` and ``flag_environment_settings.split``.
 CORE_HEAD = "t1934_metric_window"
-MODULES_HEAD = "modules_0005_redshift"
+MODULES_HEAD = "modules_0006_saml_requests"
 #: The core revisions after this one, which the previous release does not have
 #: either, and the side table's columns they add: this file compares what this
 #: revision makes, and ``test_flag_split_migration.py`` compares ``split``.

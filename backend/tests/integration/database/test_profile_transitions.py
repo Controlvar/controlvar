@@ -66,14 +66,16 @@ CORE_HEAD = "t1934_metric_window"
 #: when ``modules_0003_lower_is_better`` was added (#1386), nor that third
 #: one, which stopped being the head when ``modules_0004_rbac_activation`` was
 #: added (#891), nor that fourth one, which stopped being the head when
-#: ``modules_0005_redshift`` was added (#826).
-MODULES_HEAD = "modules_0005_redshift"
+#: ``modules_0005_redshift`` was added (#826), nor that fifth one, which
+#: stopped being the head when ``modules_0006_saml_requests`` was added
+#: (#123).
+MODULES_HEAD = "modules_0006_saml_requests"
 CORE_HEADS = {CORE_HEAD}
 FULL_HEADS = {CORE_HEAD, MODULES_HEAD}
 
 #: How many module tables a full-profile schema holds
 #: (``autogenerate_filters.MODULE_TABLES``, pinned to the manifest).
-MODULE_TABLE_COUNT = 14
+MODULE_TABLE_COUNT = 15
 
 WORKSPACE_FKS = {"experiments_workspace_id_fkey", "feature_flags_workspace_id_fkey"}
 

@@ -58,8 +58,9 @@ CORE_HEAD = tree_profiles.CORE_HEAD
 #: The modules branch's HEAD -- what a modules revision of release N+1 would
 #: extend.  Not an earlier revision (``modules_0001_rbac``,
 #: ``modules_0002_warehouse_analysis``, ``modules_0003_lower_is_better``,
-#: ``modules_0004_rbac_activation``): the branch has five.
-MODULES_HEAD = "modules_0005_redshift"
+#: ``modules_0004_rbac_activation``, ``modules_0005_redshift``): the branch
+#: has six.
+MODULES_HEAD = "modules_0006_saml_requests"
 
 #: The revision release N+1 adds, and the table it creates.  On the core chain
 #: its id has no ``modules_`` prefix; on the modules branch it has, which is
@@ -192,7 +193,7 @@ def _tables(engine, schema: str) -> set[str]:
         # A newer *modules* revision met by a full build: the prefix says
         # "modules", the build is full, so it is a newer release -- which is
         # what the previous full image says to a database a newer modules
-        # revision migrated (modules_0005_redshift, from this tree).
+        # revision migrated (modules_0006_saml_requests, from this tree).
         pytest.param(
             FULL, MODULES_BRANCH, marks=pytest.mark.modules, id=MODULES_BRANCH
         ),

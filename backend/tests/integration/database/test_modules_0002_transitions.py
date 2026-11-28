@@ -59,10 +59,10 @@ MODULES_FIRST = "modules_0001_rbac"
 #: This revision: the branch's second.
 MODULES_0002 = "modules_0002_warehouse_analysis"
 #: The modules branch's head, which ``upgrade heads`` runs on to past this
-#: revision: ``modules_0005_redshift`` (#826), after
-#: ``modules_0004_rbac_activation`` (#891) and
-#: ``modules_0003_lower_is_better`` (#1386).
-MODULES_HEAD = "modules_0005_redshift"
+#: revision: ``modules_0006_saml_requests`` (#123), after
+#: ``modules_0005_redshift`` (#826), ``modules_0004_rbac_activation`` (#891)
+#: and ``modules_0003_lower_is_better`` (#1386).
+MODULES_HEAD = "modules_0006_saml_requests"
 PREVIOUS_FULL_HEADS = {CORE_HEAD, MODULES_FIRST}
 FULL_HEADS = {CORE_HEAD, MODULES_HEAD}
 
@@ -447,6 +447,7 @@ def test_reupgrade_keeps_new_shape_rows(test_db, scratch_schema, full_tree):
 
     A fresh full bootstrap builds the new tables from the models, so this
     revision's downgrade (``downgrade modules_0001_rbac``, which first runs
+    ``modules_0006_saml_requests``'s, dropping ``sso_saml_requests``, then
     ``modules_0005_redshift``'s, narrowing three constraints of
     ``warehouse_connections``, then ``modules_0004_rbac_activation``'s and
     ``modules_0003_lower_is_better``'s, each dropping its own columns) has
@@ -494,7 +495,8 @@ def test_modules_0002_downgrade_restores_the_earlier_shape(
     """``downgrade modules_0001_rbac`` drops what the revision made and puts the
     earlier table back.
 
-    It first unapplies ``modules_0005_redshift``, which narrows three
+    It first unapplies ``modules_0006_saml_requests``, which drops
+    ``sso_saml_requests``, ``modules_0005_redshift``, which narrows three
     constraints of ``warehouse_connections`` back,
     ``modules_0004_rbac_activation``, which drops its two columns from the
     RBAC tables, and ``modules_0003_lower_is_better``, whose column goes with

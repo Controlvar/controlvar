@@ -259,11 +259,12 @@ alembic -c backend/app/db/alembic.ini history
 <!-- expect: (modules) (head) -->
 <!-- expect: <base> -->
 
-The modules branch has five revisions, `modules_0001_rbac`,
+The modules branch has six revisions, `modules_0001_rbac`,
 `modules_0002_warehouse_analysis`, `modules_0003_lower_is_better`,
-`modules_0004_rbac_activation` and then `modules_0005_redshift`:
-`downgrade modules@-1` unapplies `modules_0005_redshift` only, and
-`downgrade modules@-5` the whole branch. To stop anywhere in between, name the
+`modules_0004_rbac_activation`, `modules_0005_redshift` and then
+`modules_0006_saml_requests`: `downgrade modules@-1` unapplies
+`modules_0006_saml_requests` only, and `downgrade modules@-6` the whole
+branch. To stop anywhere in between, name the
 revision to end at, such as `downgrade modules_0002_warehouse_analysis`: a
 count in between names a different revision once the branch grows.
 

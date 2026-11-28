@@ -88,8 +88,9 @@ A core deployment does not carry the modules' code at all, so:
   notice saying the module is not installed in this deployment, with a link
   back here, instead of a 404. The admin sidebar and the "More" navigation
   group list only the pages the instance can serve.
-- The fourteen module tables (`workspaces`, `workspace_members`,
-  `workspace_invites`, `workspace_api_keys`, `sso_configs`, `custom_roles`,
+- The fifteen module tables (`workspaces`, `workspace_members`,
+  `workspace_invites`, `workspace_api_keys`, `sso_configs`,
+  `sso_saml_requests`, `custom_roles`,
   `user_custom_roles`, `direct_permission_grants`, `baa_configs`,
   `phi_audit_logs`, `warehouse_connections`, `warehouse_sources`,
   `warehouse_analysis_runs`, `integration_configs`) are not created.

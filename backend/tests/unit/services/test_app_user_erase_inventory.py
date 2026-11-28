@@ -90,6 +90,7 @@ KEPT_MODULES: Dict[str, str] = {
     "integration_configs": "integration settings",
     "phi_audit_logs": "the PHI access trail of dashboard accounts",
     "sso_configs": "single sign-on settings",
+    "sso_saml_requests": "SAML sign-ins in progress, of dashboard accounts",
     "user_custom_roles": "dashboard access control",
     "warehouse_analysis_runs": "analyses of your warehouse: aggregates",
     "warehouse_connections": "warehouse settings",

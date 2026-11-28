@@ -75,7 +75,7 @@ EARLIER_CORE_HEAD = "8fd44fb483a2"
 CORE_HEAD = "t1934_metric_window"
 #: The modules branch's head in this tree, recorded on both sides of every
 #: step here: this file is about the core chain.
-MODULES_HEAD = "modules_0005_redshift"
+MODULES_HEAD = "modules_0006_saml_requests"
 
 PREVIOUS_ROWS = {
     CORE: {PREVIOUS_CORE_HEAD},

@@ -56,7 +56,7 @@ CORE_HEAD = "t1934_metric_window"
 #: ``t2011_flag_environments``, ``t2012_flag_split`` and
 #: ``t1934_metric_window`` too.
 LATER_DOWNGRADE_TABLES = {"user_totp", "identity_aliases", "flag_environment_settings"}
-MODULES_HEAD = "modules_0005_redshift"
+MODULES_HEAD = "modules_0006_saml_requests"
 
 PREVIOUS_ROWS = {
     CORE: {PREVIOUS_CORE_HEAD},
