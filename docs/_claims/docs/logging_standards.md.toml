@@ -5,7 +5,7 @@ document = "docs/logging_standards.md"
 
 [[unit]]
 text = "Logging Standards"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Logging is structlog, configured once in backend/app/core/logger.py."
@@ -20,15 +20,18 @@ by = ["test:backend/tests/unit/core/test_logging_standards.py::test_production_w
 
 [[unit]]
 text = "The switch is json_logs."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/unit/core/test_logging_standards.py::test_production_writes_one_json_line_and_development_colourised_text",
+    "test:backend/tests/unit/core/test_logging_standards.py::test_production_logs_at_info_so_debug_lines_are_not_written",
+]
 
 [[unit]]
 text = "Getting a logger"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Pass structured data as keyword arguments, not string interpolation and not extra={...}:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Every keyword becomes its own JSON field, so variant=\"control\" is queryable in Logs Insights."
@@ -36,19 +39,19 @@ by = ["test:backend/tests/unit/core/test_logging_standards.py::test_every_keywor
 
 [[unit]]
 text = "Interpolating it into the message (f\"variant {variant}\") buries it in a string and is not."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Fields on every line"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Added by the shared processor chain, without the caller doing anything:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "field | source"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "timestamp | TimeStamper(fmt=\"iso\")"
@@ -76,7 +79,7 @@ by = ["test:backend/tests/unit/core/test_logging_standards.py::test_the_exceptio
 
 [[unit]]
 text = "Per-request fields"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "RequestIDMiddleware binds these to the async context, so every log line emitted while handling a request carries them, with no bound logger passed around:"
@@ -84,7 +87,7 @@ by = ["test:backend/tests/unit/middleware/test_request_id_middleware.py::test_bi
 
 [[unit]]
 text = "field | value"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "request_id | also returned to the client as the X-Request-ID header"
@@ -100,7 +103,7 @@ by = ["test:backend/tests/unit/middleware/test_request_id_middleware.py::test_bi
 
 [[unit]]
 text = "To add your own for the rest of a request:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "The API does not start without the request-ID middleware: if it cannot be imported, startup stops with the import error, in every environment."
@@ -122,11 +125,11 @@ by = [
 
 [[unit]]
 text = "Levels"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "level | use"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "DEBUG | detail for local debugging; not enabled in production"
@@ -134,43 +137,46 @@ by = ["test:backend/tests/unit/core/test_logging_standards.py::test_production_l
 
 [[unit]]
 text = "INFO | normal operational events — an assignment made, a rollout stage advanced"
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "WARNING | something recoverable that may need attention — a cache miss on a hot path, a retry"
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "ERROR | an operation failed and a user saw it; include exc_info=True"
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "CRITICAL | the service cannot continue"
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "What must never be logged"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "No credentials, API keys, tokens, password hashes, or PHI."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "A User or a tracking payload carries an email address or an attribute you did not mean to persist."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "What flag evaluation and assignment log"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The user_id an SDK sends is your end user's identifier, and it is often an email address."
-by = ["exempt:baseline"]
+by = ["exempt:theory"]
 
 [[unit]]
 text = "Evaluation and assignment run on every SDK request, so they log none of it:"
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/unit/services/test_assignment_evaluation_logs_no_user_id.py",
+    "test:backend/tests/unit/core/test_evaluation_logs_no_attribute_values.py",
+]
 
 [[unit]]
 text = "No line carries the end user's id or attribute values, at any level."
@@ -181,7 +187,7 @@ by = [
 
 [[unit]]
 text = "Routine per-request lines are DEBUG: an assignment made, a sticky assignment reused, a user left out by holdout, mutual exclusion or targeting, a flag evaluated."
-by = ["test:backend/tests/unit/services/test_assignment_evaluation_logs_no_user_id.py"]
+by = ["exempt:baseline"]
 
 [[unit]]
 text = "They name the experiment or flag and the variant, not the user."
@@ -189,7 +195,10 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "At the production level (INFO) a busy installation writes none of them."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/unit/core/test_logging_standards.py::test_production_logs_at_info_so_debug_lines_are_not_written",
+    "test:backend/tests/unit/services/test_assignment_evaluation_logs_no_user_id.py::test_new_assignment",
+]
 
 [[unit]]
 text = "An error on those paths logs the exception's type (for an AWS error, with its error code), not its text."
@@ -200,7 +209,7 @@ by = [
 
 [[unit]]
 text = "An exception's text can repeat a value, and a database error repeats the row's parameters, the user id among them."
-by = ["exempt:baseline"]
+by = ["exempt:theory"]
 
 [[unit]]
 text = "A flag evaluation error's full text still goes to the error_logs table, where the safety monitor reads it."
