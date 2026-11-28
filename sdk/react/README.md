@@ -275,7 +275,7 @@ cd sdk/react && npm run build --silent && node examples/contract_smoke.mjs
 It prints:
 
 ```text
-{"sdk":"react","assign":{"variant_name":"control","is_control":true,"sticky":true},"flag":{"enabled":true},"track":{"ok":true},"fanout":{"ok":true},"exposure":{"calls":1,"payload":{"experiment_key":"sdk_contract_ab","variant_name":"control","variant_id":"…","user_id":"smoke-…"}}}
+{"sdk":"react","assign":{"variant_name":"control","is_control":true,"sticky":true},"flag":{"enabled":true},"track":{"ok":true},"fanout":{"ok":true},"event_id":{"user_id":"smoke-<uuid>","event_name":"contract_dedup_<uuid>","id":"contract-<uuid>","sends":2},"values":{"string":"on-copy","number":10,"json":{"color":"blue"}},"multiway":{"users":{"<user-1>":"<value>","<user-2>":"<value>","<user-3>":"<value>"},"rule":"pro-copy"},"exposure":{"calls":1,"payload":{"experiment_key":"sdk_contract_ab","variant_name":"control","variant_id":"…","user_id":"smoke-…"}}}
 ```
 
 Drives the SSR entry point (`ServerClient`) plus `ExperimentationClient` for tracking under plain
