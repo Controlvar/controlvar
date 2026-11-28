@@ -5,15 +5,15 @@ document = "docs/api/README.md"
 
 [[unit]]
 text = "API Documentation"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "This directory contains the API documentation for Controlvar."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Files"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "API Reference: the experiments, feature flags and tracking endpoints, with curl examples"
@@ -25,7 +25,7 @@ by = ["exempt:navigation"]
 
 [[unit]]
 text = "API stability and the OpenAPI snapshots"
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "openapi-v1.stable.json (core profile) and openapi-v1.full.json (full profile), the checked-in contract the smoke suite compares against"
@@ -37,11 +37,11 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_compare_flags_cha
 
 [[unit]]
 text = "What to do when a stable route has to change"
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Quick Start"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The management API (experiments, flags, results) takes a user's access token; the SDK endpoints (/tracking/, flag evaluation) take an API key instead, in the X-API-Key header."
@@ -52,7 +52,7 @@ by = [
 
 [[unit]]
 text = "See Authentication for both."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "These commands run as written against the stack from the Quick Start."
@@ -63,11 +63,11 @@ by = [
 
 [[unit]]
 text = "On your own deployment, use its URL wherever they say localhost:8000."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Log in first; this saves the access token in $TOKEN for the command after it:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "It prints \"ADMIN\"."
@@ -75,7 +75,7 @@ by = ["docex:docs/api/README.md#\"ADMIN\""]
 
 [[unit]]
 text = "Then send the token as a bearer token."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "This lists the experiments' names; the collection URL ends with a slash, /api/v1/experiments/, because without it the API answers 307, which curl doesn't follow:"

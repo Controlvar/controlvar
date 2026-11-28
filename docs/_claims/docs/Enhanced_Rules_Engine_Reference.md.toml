@@ -342,7 +342,7 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "MATCH_REGEX (match_regex)"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Tests if the value contains a match for the pattern (a search, not an anchored match: use ^ and $ to anchor)."
@@ -350,7 +350,10 @@ by = ["test:backend/tests/unit/core/test_pattern_match.py::test_semantics"]
 
 [[unit]]
 text = "Patterns use RE2 syntax, which differs from Python's re:"
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/unit/core/test_regex_call_sites.py::test_runtime_regex_patterns_are_fixed_text",
+    "test:backend/tests/unit/core/test_pattern_match.py::test_the_refusal_is_re2s_own_text",
+]
 
 [[unit]]
 text = "\\w, \\d, \\s and \\b are ASCII-only; use \\p{L}, \\p{N} or [[:alpha:]] for other scripts."
@@ -396,7 +399,7 @@ by = [
 
 [[unit]]
 text = "SEMANTIC_VERSION (semantic_version)"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The attribute and the value are versions such as 1.2.3 or 1.2.3-beta.1; a leading v on the attribute is ignored."
@@ -449,7 +452,7 @@ by = [
 
 [[unit]]
 text = "GEO_DISTANCE (geo_distance)"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The attribute is a point: [latitude, longitude], or an object with lat and lon (or latitude and longitude)."
@@ -543,7 +546,7 @@ by = ["test:backend/tests/unit/core/test_targeting_adapter.py::TestEngineExtensi
 
 [[unit]]
 text = "TIME_WINDOW (time_window)"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Tests if a moment falls within a time window."
@@ -741,15 +744,15 @@ by = [
 
 [[unit]]
 text = "IN_SEGMENT (in_segment), NOT_IN_SEGMENT (not_in_segment)"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "in_segment, not_in_segment."
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "{\"attribute\": \"segment\", \"operator\": \"in_segment\", \"value\": \"<segment id>\"}."
-by = ["exempt:baseline"]
+by = ["exempt:example"]
 
 [[unit]]
 text = "One segment per condition; to match any of several, put one condition per segment in an OR group."
@@ -815,7 +818,7 @@ by = ["test:backend/tests/integration/api/test_tracking_api.py::TestBanditAssign
 
 [[unit]]
 text = "See Segments."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "When a rule cannot be evaluated"
