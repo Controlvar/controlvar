@@ -958,7 +958,12 @@ by = [
 
 [[unit]]
 text = ": @ / + -; anything else is refused with 422, never escaped."
-by = ["exempt:baseline"]
+by = [
+    "test:modules/backend/tests/unit/warehouse/test_request_schemas.py::test_schema_tampers_refused",
+    "test:modules/backend/tests/unit/warehouse/test_request_schemas.py::test_bodies_outside_the_contract_are_refused",
+    "test:modules/backend/tests/unit/warehouse/test_identifier_gate.py::test_literal_outside_allowlist_refused",
+    "test:modules/backend/tests/unit/warehouse/test_identifier_gate.py::test_literals_render_without_escaping",
+]
 
 [[unit]]
 text = "A source must be validated before a preview or an analysis uses it, and editing it clears its validation."
