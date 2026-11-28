@@ -12,11 +12,11 @@ by = [
 
 [[unit]]
 text = "SSO Guide"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Part of the sso module"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "SSO / SAML / OIDC is one of the optional modules -- present in the full profile, absent from the core one."
@@ -34,7 +34,7 @@ by = [
 
 [[unit]]
 text = "See Modules and profiles for what each profile includes and how to run the full one."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "The sso module adds Single Sign-On (SSO) through OpenID Connect (OIDC) and OAuth 2 providers; it is part of the full profile and, like every module, Apache-2.0."
@@ -68,11 +68,11 @@ by = [
 
 [[unit]]
 text = "Use an OIDC configuration (okta, google or github) for sign-in."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Supported Providers"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "A configuration's provider_type is one of saml, google, github, okta, microsoft, azure_ad and onelogin."
@@ -80,7 +80,7 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 
 [[unit]]
 text = "provider_type | Protocol | Signs in from | Groups for role_mapping"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "okta | OpenID Connect | the dashboard's Sign in with SSO | the groups claim of Okta's user info"
@@ -137,7 +137,7 @@ by = ["test:modules/backend/tests/unit/services/test_sso_settings_checks_and_mes
 
 [[unit]]
 text = "Overview"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "A user signs in from the dashboard, through an OIDC or OAuth 2 provider."
@@ -173,7 +173,7 @@ by = [
 
 [[unit]]
 text = "What to Register with the Identity Provider"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "PUBLIC_BASE_URL is the origin users reach the service at, for example https://app.example.com."
@@ -185,7 +185,7 @@ by = ["test:modules/backend/tests/unit/api/test_sso_redirect_uri.py::test_public
 
 [[unit]]
 text = "Provider | Register | Value"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "okta, google, github | the redirect URI (Okta: Sign-in redirect URI; Google: Authorized redirect URI; GitHub: Authorization callback URL) | {PUBLIC_BASE_URL}/api/v1/auth/sso/oidc/{provider_type}/callback, e.g. https://app.example.com/api/v1/auth/sso/oidc/google/callback"
@@ -223,7 +223,7 @@ by = [
 
 [[unit]]
 text = "Trying it on the Docker Compose stack"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "docker-compose.yml starts the core profile, and its api service passes on only the variables it names, so a PUBLIC_BASE_URL set in the shell or in a .env file never reaches the API."
@@ -231,15 +231,15 @@ by = ["test:modules/backend/tests/unit/services/test_sso_settings_checks_and_mes
 
 [[unit]]
 text = "Start the full profile with an override file that sets it."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Save this next to docker-compose.yml as compose.sso.yml:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Then start the stack with both files:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "PUBLIC_BASE_URL is the dashboard's address, http://localhost:3000 with the default ports: the dashboard's container passes /api/ on to the API, so the sign-in starts and ends there."
@@ -250,7 +250,7 @@ by = [
 
 [[unit]]
 text = "Register http://localhost:3000/api/v1/auth/sso/oidc/okta/callback with the identity provider (for okta)."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "DASHBOARD_ORIGINS is not needed: the dashboard is served from PUBLIC_BASE_URL."
@@ -270,11 +270,11 @@ by = ["journey:sso-sign-in#sign-in-page"]
 
 [[unit]]
 text = "Create the configuration as an administrator (below, with http://localhost:8000 for https://app.example.com), and sign in with an address in its domain."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Signing In from the Dashboard"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "When the API lists the sso module (GET /api/v1/modules), the dashboard's sign-in page shows Sign in with SSO."
@@ -343,7 +343,7 @@ by = [
 
 [[unit]]
 text = "A browser's history keeps /sso/complete#code=...."
-by = ["exempt:baseline"]
+by = ["exempt:third-party"]
 
 [[unit]]
 text = "That code expires after 60 seconds, and without the secret held by the tab that started the sign-in it cannot be exchanged."
@@ -362,7 +362,7 @@ by = ["test:modules/backend/tests/integration/api/test_sso_dashboard_sign_in.py:
 
 [[unit]]
 text = "What the user sees when a sign-in fails"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The browser returns to <dashboard>/login?sso_error=<code> and the sign-in page explains what happened."
@@ -380,7 +380,7 @@ by = [
 
 [[unit]]
 text = "sso_error | When"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "sso_expired | the sign-in took more than 10 minutes"
@@ -509,7 +509,7 @@ by = ["test:backend/tests/unit/core/test_query_redaction.py"]
 
 [[unit]]
 text = "Where the dashboard is: DASHBOARD_ORIGINS"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "return_to must be one of the dashboard origins the API accepts."
@@ -520,7 +520,7 @@ by = [
 
 [[unit]]
 text = "These are:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "DASHBOARD_ORIGINS: optional, comma-separated or a JSON array, for example https://app.example.com."
@@ -550,7 +550,7 @@ by = ["test:modules/backend/tests/integration/api/test_sso_dashboard_sign_in.py:
 
 [[unit]]
 text = "Set DASHBOARD_ORIGINS when the dashboard is not served from PUBLIC_BASE_URL, for example when PUBLIC_BASE_URL is https://api.example.com and the dashboard is https://app.example.com."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Otherwise every dashboard sign-in is refused with 400."
@@ -584,7 +584,7 @@ by = ["test:modules/backend/tests/integration/api/test_sso_dashboard_sign_in.py:
 
 [[unit]]
 text = "Signing in without the dashboard"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The older GET /api/v1/auth/sso/oidc/{provider}/login still works without return_to, for API and CLI callers."
@@ -632,7 +632,7 @@ by = ["test:modules/backend/tests/integration/api/test_saml_acs_answers.py::test
 
 [[unit]]
 text = "API Endpoints"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "All paths are under /api/v1."
@@ -644,7 +644,7 @@ by = ["test:modules/backend/tests/integration/api/test_sso_api.py"]
 
 [[unit]]
 text = "Method | Path | Description"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "GET | /api/v1/auth/sso/saml/{config_id}/metadata | SP metadata XML to give to the IdP"
@@ -729,23 +729,23 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 
 [[unit]]
 text = "Creating an SSO Configuration"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The examples use https://app.example.com for PUBLIC_BASE_URL and an administrator's access token in $ADMIN_TOKEN."
-by = ["exempt:baseline"]
+by = ["exempt:example"]
 
 [[unit]]
 text = "Sign in as an administrator to get one:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Configuration Fields"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Field | Type | Required | Description"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "org_name | string | Yes | Human-readable organization name"
@@ -836,7 +836,7 @@ by = [
 
 [[unit]]
 text = "SAML Configuration"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The response carries the configuration's id: the ACS URL to register is https://app.example.com/api/v1/auth/sso/saml/<id>/acs."
@@ -861,15 +861,15 @@ by = [
 
 [[unit]]
 text = "OIDC Configuration"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Provider-Specific Setup"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Okta (OIDC)"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "In Okta, create an OIDC - OpenID Connect app integration of type Web Application, with the Authorization Code grant."
@@ -877,11 +877,11 @@ by = ["journey:sso-sign-in#create-okta-configuration"]
 
 [[unit]]
 text = "Set the Sign-in redirect URI to {PUBLIC_BASE_URL}/api/v1/auth/sso/oidc/okta/callback."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Create the configuration with provider_type: \"okta\", the Client ID as entity_id, the Client secret as client_secret, and the authorization server's URL as sso_url: https://acme.okta.com/oauth2/default for the default custom authorization server, or https://acme.okta.com/oauth2 for the org authorization server."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "The ID token's iss must be that URL (the org URL, https://acme.okta.com, for the org authorization server)."
@@ -896,7 +896,7 @@ by = ["test:modules/backend/tests/unit/services/test_sso_settings_checks_and_mes
 
 [[unit]]
 text = "Google Workspace (OIDC)"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "In Google Cloud, create an OAuth client ID of type Web application (APIs & Services → Credentials)."
@@ -904,11 +904,11 @@ by = ["exempt:third-party"]
 
 [[unit]]
 text = "Add the authorized redirect URI {PUBLIC_BASE_URL}/api/v1/auth/sso/oidc/google/callback."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Create the configuration with provider_type: \"google\", the Client ID as entity_id and the Client secret as client_secret (see OIDC Configuration)."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Only accounts of the Google Workspace domain that equals org_domain can sign in: a personal Google account is refused."
@@ -923,7 +923,7 @@ by = ["test:modules/backend/tests/unit/services/test_sso_service.py::TestProvisi
 
 [[unit]]
 text = "GitHub (OIDC)"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "GitHub is OAuth 2, not OpenID Connect; it has no ID token."
@@ -938,11 +938,11 @@ by = ["exempt:third-party"]
 
 [[unit]]
 text = "Set the Authorization callback URL to {PUBLIC_BASE_URL}/api/v1/auth/sso/oidc/github/callback."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Create the configuration with provider_type: \"github\", the Client ID as entity_id and a client secret as client_secret."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "The email address is taken from GitHub's list of the user's verified addresses (see below), not from the public profile."
@@ -957,7 +957,7 @@ by = ["test:modules/backend/tests/unit/services/test_sso_settings_checks_and_mes
 
 [[unit]]
 text = "JIT User Provisioning"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Users who authenticate via SSO for the first time are provisioned with a platform account automatically."
@@ -976,7 +976,7 @@ by = [
 
 [[unit]]
 text = "Use one configuration per domain."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "The comparison ignores case and surrounding spaces."
@@ -1013,7 +1013,7 @@ by = [
 
 [[unit]]
 text = "Provider | Where the email comes from | Required"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Okta | the ID token's email | email_verified is true (the JSON boolean, or the string \"true\")"
@@ -1060,7 +1060,7 @@ by = [
 
 [[unit]]
 text = "Platform Field | SAML Source | OIDC / OAuth 2 Source"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "email | as above, lower-cased | as above, lower-cased"
@@ -1103,15 +1103,15 @@ by = [
 
 [[unit]]
 text = "Upgrading"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "After upgrading from an earlier release, review the accounts created by SSO sign-in (accounts with no password set) and their roles, and remove any you do not recognise."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Group-to-Role Mapping"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The role_mapping field maps the group names the IdP sends to platform roles."
@@ -1119,7 +1119,7 @@ by = ["test:modules/backend/tests/unit/services/test_sso_settings_checks_and_mes
 
 [[unit]]
 text = "Rules:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The values are admin, developer, analyst and viewer, in any case."
@@ -1188,11 +1188,11 @@ by = [
 
 [[unit]]
 text = "Security"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "State Tokens and CSRF Protection"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Starting an OIDC sign-in sets a signed, HttpOnly, SameSite=Lax cookie, __Host-experimently_oidc, in the browser that started it, and sends the provider a random state and a PKCE S256 challenge."
@@ -1280,7 +1280,7 @@ by = ["test:modules/backend/tests/integration/api/test_sso_api.py::TestOIDCCallb
 
 [[unit]]
 text = "Browsers that treat http://localhost as a secure context (Chrome and Firefox do) also accept it there, for development."
-by = ["exempt:baseline"]
+by = ["exempt:third-party"]
 
 [[unit]]
 text = "The cookie and the dashboard's hand-off code are signed with keys derived from SECRET_KEY."
@@ -1288,7 +1288,7 @@ by = ["test:modules/backend/tests/unit/services/test_sso_service.py::TestOIDCLog
 
 [[unit]]
 text = "SAML Assertion Validation"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "SAML needs the python3-saml library, which the full profile's image installs from modules/requirements.lock."
@@ -1296,7 +1296,7 @@ by = ["test:modules/backend/tests/unit/services/test_sso_settings_checks_and_mes
 
 [[unit]]
 text = "It checks, before an assertion is accepted:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "a signature on the response or on the assertion, made with the configured x509_certificate;"
@@ -1352,11 +1352,11 @@ by = [
 
 [[unit]]
 text = "Never expose a development or test deployment's ACS to anyone."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Certificate Rotation"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The configuration holds one certificate."
@@ -1368,11 +1368,11 @@ by = ["test:modules/backend/tests/unit/services/test_saml_library_validation.py:
 
 [[unit]]
 text = "Environment Variables"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Variable | What it does"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "PUBLIC_BASE_URL | The origin users reach the service at, e.g. https://app.example.com. The OIDC redirect URI is built from it; see What to Register. Staging and production refuse to start without it or ALLOWED_HOSTS"
@@ -1422,11 +1422,11 @@ by = ["test:modules/backend/tests/unit/services/test_sso_settings_checks_and_mes
 
 [[unit]]
 text = "Troubleshooting"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The identity provider refuses the redirect URI (redirect_uri_mismatch)"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The redirect URI registered with the provider must be exactly {PUBLIC_BASE_URL}/api/v1/auth/sso/oidc/{provider_type}/callback."
@@ -1446,7 +1446,7 @@ by = ["test:modules/backend/tests/integration/api/test_sso_dashboard_sign_in.py:
 
 [[unit]]
 text = "Set DASHBOARD_ORIGINS to the origin shown in the browser's address bar, with no path and no trailing slash, for example https://app.example.com."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "\"OIDC sign-in was not started in this browser, or its cookie was not sent\" (sso_state)"
@@ -1492,7 +1492,7 @@ by = ["test:modules/backend/tests/unit/services/test_sso_service.py::TestSsoUrlI
 
 [[unit]]
 text = "Use the https URL of the authorization server."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Creating or updating an Okta configuration with an sso_url that is not https is answered 400 with this message."
@@ -1549,7 +1549,7 @@ by = ["test:modules/backend/tests/integration/api/test_sso_provisioning_scope.py
 
 [[unit]]
 text = "Use a supported provider type: okta, google or github (SAML 2.0 sign-in is not available yet; use OIDC)."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "\"The identity provider has not verified this account's email address\" (sso_unverified)"
@@ -1586,7 +1586,7 @@ by = [
 
 [[unit]]
 text = "List the configurations and update or delete that one."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "\"SAML validation failed: …\""
@@ -1601,7 +1601,7 @@ by = ["test:modules/backend/tests/unit/services/test_saml_library_validation.py:
 
 [[unit]]
 text = "Check, in this order:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "x509_certificate is the IdP's current signing certificate, and the IdP signs the response or the assertion."
@@ -1669,7 +1669,7 @@ by = [
 
 [[unit]]
 text = "A user has the wrong role"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Check that the role_mapping keys exactly match the group names the IdP sends, including case."
@@ -1677,7 +1677,7 @@ by = ["test:modules/backend/tests/unit/services/test_sso_settings_checks_and_mes
 
 [[unit]]
 text = "Use a SAML tracer browser extension to see a SAML assertion's groups."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "The first of the user's groups that has a mapping decides, in the order the IdP sends them."
@@ -1696,7 +1696,7 @@ by = ["test:modules/backend/tests/unit/services/test_sso_settings_checks_and_mes
 
 [[unit]]
 text = "A domain's users are not offered SSO"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "org_domain must be exactly the domain part of their email address; there are no wildcards."
