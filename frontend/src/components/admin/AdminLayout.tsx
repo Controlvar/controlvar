@@ -9,12 +9,12 @@ interface AdminLayoutProps {
 }
 
 /**
- * Admin area layout: sidebar + content column. The top navigation comes from
+ * Admin area layout: sidebar + content column (the sidebar stacks above the content below `md`). The top navigation comes from
  * the application shell (`AppShell`), so this only adds the section heading.
  */
 export function AdminLayout({ children, title, currentPath }: AdminLayoutProps) {
   return (
-    <div data-testid="admin-layout" className="flex-1 bg-slate-50 flex">
+    <div data-testid="admin-layout" className="flex-1 bg-slate-50 flex flex-col md:flex-row">
       <PageTitle title={`${title} · Admin`} />
       <AdminSidebar currentPath={currentPath} />
 

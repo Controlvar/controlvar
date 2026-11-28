@@ -1,3 +1,4 @@
+import AxeBuilder from "@axe-core/playwright";
 import { test, expect } from "./fixtures/auth.fixture";
 import { FeatureFlagsPage } from "./pages/feature-flags.page";
 import { API_URL, TOKEN_STORAGE_KEY } from "./env";
@@ -238,5 +239,23 @@ test.describe("Journey: admin panel", () => {
     const afterRender = started;
     await adminPage.waitForTimeout(3_000);
     expect(started, "the page must not keep re-checking on a timer").toBe(afterRender);
+  });
+
+  test("at phone width the sidebar stacks above the content", async ({ adminPage }) => {
+    await adminPage.setViewportSize({ width: 390, height: 800 });
+    await adminPage.goto("/admin");
+    await expect(adminPage.getByTestId("admin-dashboard")).toBeVisible({ timeout: 20_000 });
+    const sidebar = await adminPage.getByTestId("admin-sidebar").boundingBox();
+    const main = await adminPage.locator("[data-testid=admin-layout] > main").boundingBox();
+    expect(sidebar, "the sidebar is drawn").not.toBeNull();
+    expect(main, "the content is drawn").not.toBeNull();
+    expect(main!.width, "the content takes the width of the screen").toBeGreaterThanOrEqual(390 * 0.9);
+    expect(main!.y, "the content starts below the sidebar").toBeGreaterThanOrEqual(
+      sidebar!.y + sidebar!.height - 1,
+    );
+    const results = await new AxeBuilder({ page: adminPage })
+      .withRules(["scrollable-region-focusable"])
+      .analyze();
+    expect(results.violations.map((v) => v.id)).toEqual([]);
   });
 });
