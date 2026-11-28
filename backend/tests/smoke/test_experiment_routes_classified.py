@@ -85,6 +85,7 @@ CORE_ROUTES = {
     ("POST", f"{E}/{{experiment_id}}/pause"): CHANGE_UPDATE,
     ("POST", f"{E}/{{experiment_id}}/complete"): CHANGE_UPDATE,
     ("POST", f"{E}/{{experiment_id}}/archive"): CHANGE_UPDATE,
+    ("POST", f"{E}/{{experiment_id}}/unarchive"): CHANGE_UPDATE,
     ("POST", f"{E}/{{experiment_id}}/metadata"): CHANGE_UPDATE,
     ("POST", f"{E}/{{experiment_id}}/clone"): CLONE,
     ("PUT", f"{E}/{{experiment_id}}/schedule"): CHANGE_UPDATE,
@@ -168,8 +169,8 @@ EXPORT_AND_INTERACTION_ROUTES = {
 }
 EXPORT_AND_INTERACTION_PREFIXES = ("/api/v1/export/", "/api/v1/interactions/")
 
-CORE_COUNT = 54  # 52 HTTP + 1 WebSocket selected, and the explicit entry
-FULL_COUNT = 59
+CORE_COUNT = 55  # 53 HTTP + 1 WebSocket selected, and the explicit entry
+FULL_COUNT = 60
 
 
 def _full_profile() -> bool:

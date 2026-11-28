@@ -30,6 +30,9 @@ CORE_BETA_OPERATIONS = (
     ("get", "/api/v1/audit-logs/export"),
     ("get", "/api/v1/sdk/ruleset"),
     ("post", "/api/v1/admin/app-users/erase"),
+    # #2278: also pinned in both snapshots by
+    # backend/tests/smoke/test_experiment_unarchive_route_in_snapshot.py.
+    ("post", "/api/v1/experiments/{experiment_id}/unarchive"),
 )
 
 MODULE_BETA_OPERATIONS = (

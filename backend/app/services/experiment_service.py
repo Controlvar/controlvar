@@ -53,6 +53,44 @@ _UNIQUE_VIOLATION = "23505"
 #: vanishingly rare; the bound keeps a broken generator from looping (#388).
 KEY_GENERATION_ATTEMPTS = 3
 
+#: The 400 details of ``POST /experiments/{id}/unarchive`` (#2278).
+NOT_ARCHIVED = "Experiment is not archived"
+UNARCHIVE_REFUSED = (
+    "Only an experiment with a start date and a past end date can be "
+    "unarchived. Clone it to run it again."
+)
+
+
+def _naive_utc(moment: Optional[datetime]) -> Optional[datetime]:
+    """``moment`` as naive UTC, the form the experiment date columns store."""
+    if moment is not None and moment.tzinfo is not None:
+        moment = moment.astimezone(timezone.utc).replace(tzinfo=None)
+    return moment
+
+
+def unarchive_refusal(experiment: Experiment, now: datetime) -> Optional[str]:
+    """Why ``experiment`` cannot be unarchived at ``now``, or None (#2278).
+
+    Only an ARCHIVED experiment with a ``start_date``, and an ``end_date`` at
+    or before ``now``, comes back, and it comes back COMPLETED. For such an
+    experiment ``analysis_service.open_window_time`` answers its ``end_date``
+    whether it is archived or completed, so its results read the same after
+    as before. Nothing else comes back: restoring ACTIVE would restart its
+    traffic, and nothing stores the status it had before it was archived.
+
+    Two archived experiments pass that were never completed: one archived
+    while ACTIVE, once its ``end_date`` has passed, and a draft with both
+    dates set, archived before it started, which comes back COMPLETED with no
+    assignments.
+    """
+    if experiment.status != ExperimentStatus.ARCHIVED:
+        return NOT_ARCHIVED
+    end = _naive_utc(experiment.end_date)
+    if experiment.start_date is None or end is None or end > _naive_utc(now):
+        return UNARCHIVE_REFUSED
+    return None
+
+
 #: The longest name an experiment can store, read from the column so the two
 #: cannot drift. A clone's "Copy of <name>" is cut to it: the caller never sent
 #: that name, so refusing it would refuse a value they cannot change (#627).
@@ -1095,6 +1133,35 @@ class ExperimentService:
         self.db.refresh(experiment)
 
         logger.info(f"Archived experiment {experiment.id}: {experiment.name}")
+        return self._experiment_to_dict(experiment)
+
+    def unarchive_experiment(self, experiment: Experiment) -> Dict[str, Any]:
+        """
+        Return an archived experiment to COMPLETED (#2278).
+
+        Only the status changes (and ``updated_at``); ``unarchive_refusal``
+        decides which experiments may come back.
+
+        Args:
+            experiment: Experiment model object to unarchive
+
+        Returns:
+            Dictionary containing the updated experiment data
+
+        Raises:
+            ValueError: With ``unarchive_refusal``'s answer, if it has one
+        """
+        refusal = unarchive_refusal(experiment, datetime.now(timezone.utc))
+        if refusal is not None:
+            raise ValueError(refusal)
+
+        experiment.status = ExperimentStatus.COMPLETED
+        experiment.updated_at = datetime.now(timezone.utc)
+
+        self.db.commit()
+        self.db.refresh(experiment)
+
+        logger.info(f"Unarchived experiment {experiment.id}: {experiment.name}")
         return self._experiment_to_dict(experiment)
 
     def update_experiment_schedule(

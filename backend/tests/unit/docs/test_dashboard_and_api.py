@@ -129,6 +129,9 @@ WITNESSES: Dict[str, str] = {
     "minimum stage duration": "rollout-schedule-settings",
     "Delete a feature flag": "flag-delete",
     "Archive and unarchive a feature flag": "flag-archive",
+    # Reserved (#2278): the route is built, the screen is not; the id is not in
+    # any source file.
+    "Unarchive an experiment": "experiment-unarchive",
     "Create a bandit experiment": "bandit-create",
     "Set a bandit's weights by hand": "bandit-weights-override",
     # #1958: the experiment page's Weight history, on its loaded state (a

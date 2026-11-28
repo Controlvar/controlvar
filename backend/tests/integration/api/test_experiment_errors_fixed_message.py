@@ -253,6 +253,12 @@ def _plant_bayesian(monkeypatch):
     monkeypatch.setattr(AnalysisService, "compute_bayesian_results", _boom)
 
 
+def _plant_unarchive(monkeypatch):
+    """Past the refusal, which an archived row with no dates would get."""
+    monkeypatch.setattr(experiments_endpoints, "unarchive_refusal", lambda *a: None)
+    monkeypatch.setattr(ExperimentService, "unarchive_experiment", _boom)
+
+
 def _patch(target: Any, name: str) -> Callable:
     def plant(monkeypatch):
         monkeypatch.setattr(target, name, _boom)
@@ -364,6 +370,14 @@ EXPERIMENT_CASES = {
         ExperimentStatus.COMPLETED,
         _patch(ExperimentService, "archive_experiment"),
         "Could not archive the experiment",
+    ),
+    "unarchive": Case(
+        "POST",
+        "/experiments/{id}/unarchive",
+        "developer",
+        ExperimentStatus.ARCHIVED,
+        _plant_unarchive,
+        "Could not unarchive the experiment",
     ),
     "clone": Case(
         "POST",

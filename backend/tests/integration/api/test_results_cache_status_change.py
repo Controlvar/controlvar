@@ -8,8 +8,9 @@ hours otherwise. The key names the experiment but not its status, so an answer
 read while the experiment was a draft, or paused, went on being served after it
 started or resumed, with the old status and the old counts. Each change of
 status now clears the experiment's ``results:{experiment_id}:*`` keys once it
-is committed: ``POST /start`` (which also resumes), ``/pause``, ``/complete``
-and ``/archive``, and the experiment scheduler's start, resume and end.
+is committed: ``POST /start`` (which also resumes), ``/pause``, ``/complete``,
+``/archive`` and ``/unarchive``, and the experiment scheduler's start, resume
+and end.
 
 What would let these pass on the old code, and is avoided:
 
@@ -158,6 +159,12 @@ ROUTES = {
     "resume": ("start", ("start", "pause"), "paused", "active"),
     "complete": ("complete", ("start",), "active", "completed"),
     "archive": ("archive", ("start", "complete"), "completed", "archived"),
+    "unarchive": (
+        "unarchive",
+        ("start", "complete", "archive"),
+        "archived",
+        "completed",
+    ),
 }
 
 

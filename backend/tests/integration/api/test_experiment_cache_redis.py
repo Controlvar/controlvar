@@ -195,6 +195,16 @@ def _started(client: TestClient) -> dict:
     return resp.json()
 
 
+def _ended_and_archived(client: TestClient) -> dict:
+    """Started, completed and archived through the routes, so its dates are
+    the ones they write: an experiment unarchive accepts (#2278)."""
+    exp = _started(client)
+    for verb in ("complete", "archive"):
+        resp = client.post(f"{BASE}/{exp['id']}/{verb}")
+        assert resp.status_code == 200, (verb, resp.text)
+    return resp.json()
+
+
 def _plant_lists(redis_server, owner_id) -> tuple[str, str]:
     """A cached list for the owner and one for someone else, both stale after
     a change: every role sees every experiment (#83)."""
@@ -357,8 +367,11 @@ MUTATIONS = {
     ),
     "complete": ("POST", "/complete", None, None, True, 200),
     "archive": ("POST", "/archive", None, None, False, 200),
+    "unarchive": ("POST", "/unarchive", None, None, False, 200),
     "metadata": ("POST", "/metadata", {"note": "cache428"}, None, False, 200),
 }
+#: The changes made to an experiment that has ended and been archived.
+ARCHIVED_FIRST = {"unarchive"}
 
 
 @pytest.mark.parametrize("action", sorted(MUTATIONS))
@@ -366,7 +379,10 @@ def test_a_change_drops_the_experiment_and_every_cached_list(
     cached_client, redis_server, developer_user, action
 ):
     method, suffix, body, query, active, ok = MUTATIONS[action]
-    exp = _started(cached_client) if active else _create(cached_client)
+    if action in ARCHIVED_FIRST:
+        exp = _ended_and_archived(cached_client)
+    else:
+        exp = _started(cached_client) if active else _create(cached_client)
 
     # Planted, not read through the route: the detail read refuses this
     # developer (see ``cached_superuser_client``).

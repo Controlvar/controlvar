@@ -184,6 +184,13 @@ by = [
 ]
 
 [[unit]]
+text = "POST /api/v1/experiments/{experiment_id}/unarchive is beta too (#2278): it brings an archived experiment that has ended back to completed, and its response may still change (Unarchive Experiment)."
+by = [
+    "test:backend/tests/unit/api/test_capabilities_beta_operations.py::test_a_core_operation_the_page_calls_beta_is_beta",
+    "test:backend/tests/integration/api/test_experiment_unarchive.py::test_unarchive_returns_an_ended_experiment_to_completed",
+]
+
+[[unit]]
 text = "Changing a stable route"
 by = ["exempt:baseline"]
 

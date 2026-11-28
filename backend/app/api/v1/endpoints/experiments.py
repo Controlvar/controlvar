@@ -105,6 +105,7 @@ from backend.app.services.experiment_service import (
     ExperimentService,
     is_experiment_key_conflict,
     record_end_date,
+    unarchive_refusal,
 )
 from backend.app.services.power_calculator_service import (
     SAMPLE_SIZE_NOT_FINITE_MESSAGE,
@@ -2354,6 +2355,91 @@ async def archive_experiment(
             e,
             "Experiment archive",
             "Could not archive the experiment",
+            db=db,
+            logger=logger,
+        )
+
+
+@router.post(
+    "/{experiment_id}/unarchive",
+    response_model=ExperimentResponse,
+    summary="Unarchive experiment (beta)",
+    response_description="Returns the experiment, now COMPLETED",
+    openapi_extra={"x-stability": "beta"},
+)
+async def unarchive_experiment(
+    experiment_id: UUID = Path(
+        ..., description="The ID of the experiment to unarchive"
+    ),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_active_user),
+    cache_control: Dict[str, Any] = Depends(deps.get_cache_control),
+) -> ExperimentResponse:
+    """
+    Unarchive an experiment (beta).
+
+    An archived experiment with a start date and an end date at or before now
+    becomes COMPLETED: its results read as they did while it was archived,
+    nobody is assigned to it, and it can be archived again. Only its status
+    changes. Any other archived experiment is refused: it never comes back
+    running, because that would restart its traffic, and nothing stores the
+    status it had before it was archived. Clone it to run it again.
+
+    The same permission as archiving: READ and UPDATE on experiments, whoever
+    created it. Written to the audit log as an experiment update with the
+    reason `unarchive`.
+
+    Returns:
+        ExperimentResponse: The experiment with COMPLETED status
+
+    Raises:
+        HTTPException 400: If the experiment is not archived, or has no start
+            date, or its end date is missing or still ahead
+        HTTPException 403: If the caller's role does not hold UPDATE on experiments
+        HTTPException 404: If the experiment does not exist
+    """
+    try:
+        experiment = db.query(Experiment).filter(Experiment.id == experiment_id).first()
+        if not experiment:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Experiment not found"
+            )
+
+        # READ and UPDATE on experiments, as archive asks; who created it is
+        # not considered
+        experiment = deps.get_experiment_change_access(experiment, current_user)
+
+        refusal = unarchive_refusal(experiment, datetime.now(timezone.utc))
+        if refusal is not None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=refusal)
+
+        before_audit = audit_snapshot(EntityType.EXPERIMENT, experiment)
+
+        ExperimentService(db).unarchive_experiment(experiment)
+
+        record_experiment_change(
+            db,
+            current_user,
+            ActionType.EXPERIMENT_UPDATE,
+            experiment_id,
+            before_audit,
+            reason="unarchive",
+        )
+
+        await _invalidate_experiment_cache(cache_control, experiment_id)
+        # The results cache's key does not name the status (#2206).
+        await results_endpoints.clear_cached_results(experiment_id)
+
+        return ExperimentResponse.model_validate(
+            ExperimentService(db).to_response_dict(experiment)
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise unexpected_failure(
+            e,
+            "Experiment unarchive",
+            "Could not unarchive the experiment",
             db=db,
             logger=logger,
         )

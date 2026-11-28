@@ -179,7 +179,7 @@ text = "Experiments: reading an experiment and its results under /api/v1/experim
 by = ["test:backend/tests/integration/api/test_experiment_access_by_role.py::test_status_by_route_and_caller"]
 
 [[unit]]
-text = "ADMIN and DEVELOPER may create experiments, clone any experiment, and update, start, pause, complete, archive or annotate (metadata) any experiment, schedule any experiment, and delete any experiment in DRAFT."
+text = "ADMIN and DEVELOPER may create experiments, clone any experiment, and update, start, pause, complete, archive, unarchive or annotate (metadata) any experiment, schedule any experiment, and delete any experiment in DRAFT."
 by = ["test:backend/tests/integration/api/test_experiment_access_by_role.py::test_status_by_route_and_caller"]
 
 [[unit]]
@@ -187,7 +187,7 @@ text = "ANALYST and VIEWER change no experiment by their role, including one the
 by = ["test:backend/tests/integration/api/test_experiment_access_by_role.py::test_status_by_route_and_caller"]
 
 [[unit]]
-text = "In the full profile a custom role or direct grant can add these: experiment (create) creates and clones, experiment (update) updates, starts, pauses, completes, archives, annotates and schedules, and experiment (delete) deletes a draft"
+text = "In the full profile a custom role or direct grant can add these: experiment (create) creates and clones, experiment (update) updates, starts, pauses, completes, archives, unarchives, annotates and schedules, and experiment (delete) deletes a draft"
 by = [
     "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
     "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
@@ -809,7 +809,7 @@ by = [
     "test:backend/tests/integration/api/test_mcp_read_scope_api.py::test_a_valid_bearer_does_not_read_the_key",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
 ]
-count = 18
+count = 19
 
 [[unit]]
 text = "Fields: email, username and full_name may be null."
@@ -3397,6 +3397,96 @@ text = "See Balance the split within groups."
 by = ["exempt:navigation"]
 
 [[unit]]
+text = "Unarchive Experiment (beta)"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Endpoint: POST /api/v1/experiments/{experiment_id}/unarchive"
+by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+
+[[unit]]
+text = "Description: Move an archived experiment that has a start_date, and an end_date at or before now, to completed."
+by = [
+    "test:backend/tests/integration/api/test_experiment_unarchive.py::test_unarchive_returns_an_ended_experiment_to_completed",
+    "test:backend/tests/unit/services/test_experiment_unarchive_rule.py::test_an_archived_experiment",
+]
+
+[[unit]]
+text = "Only its status changes, and it can be archived again."
+by = [
+    "test:backend/tests/integration/api/test_experiment_unarchive.py::test_unarchive_returns_an_ended_experiment_to_completed",
+    "test:backend/tests/integration/api/test_experiment_unarchive.py::test_an_unarchived_experiment_can_be_archived_again",
+]
+
+[[unit]]
+text = "Written to the audit log as experiment_update with the reason unarchive."
+by = ["test:backend/tests/integration/api/test_audit_route_events.py::test_experiment_lifecycle"]
+
+[[unit]]
+text = "Refused: any other archived experiment answers 400 with the detail Only an experiment with a start date and a past end date can be unarchived."
+by = [
+    "test:backend/tests/integration/api/test_experiment_unarchive.py::test_an_archived_draft_with_only_a_past_end_date_is_refused",
+    "test:backend/tests/integration/api/test_experiment_unarchive.py::test_an_experiment_archived_while_active_before_its_end_date_is_refused",
+    "test:backend/tests/integration/api/test_experiment_unarchive.py::test_an_archived_experiment_with_no_end_date_is_refused",
+]
+
+[[unit]]
+text = "Clone it to run it again."
+by = ["test:backend/tests/unit/services/test_experiment_unarchive_rule.py::test_the_refusals_say_what_to_do_and_claim_nothing_about_how_it_was_archived"]
+
+[[unit]]
+text = "An experiment never comes back running: it always comes back completed."
+by = [
+    "test:backend/tests/unit/services/test_experiment_unarchive_rule.py::test_the_service_changes_only_the_status_of_an_accepted_experiment",
+    "test:backend/tests/integration/api/test_experiment_unarchive.py::test_unarchive_returns_an_ended_experiment_to_completed",
+]
+
+[[unit]]
+text = "One that is not archived answers 400 with Experiment is not archived."
+by = ["test:backend/tests/integration/api/test_experiment_unarchive.py::test_an_experiment_that_is_not_archived_is_refused"]
+
+[[unit]]
+text = "A refusal changes nothing."
+by = [
+    "test:backend/tests/integration/api/test_experiment_unarchive.py::test_an_experiment_that_is_not_archived_is_refused",
+    "test:backend/tests/integration/api/test_experiment_unarchive.py::test_an_archived_draft_with_only_a_past_end_date_is_refused",
+    "test:backend/tests/unit/services/test_experiment_unarchive_rule.py::test_the_service_refuses_what_the_rule_refuses_and_commits_nothing",
+]
+
+[[unit]]
+text = "Never completed: two archived experiments also come back."
+by = ["test:backend/tests/unit/services/test_experiment_unarchive_rule.py::test_an_archived_experiment"]
+
+[[unit]]
+text = "One archived while active comes back once its end_date has passed."
+by = ["test:backend/tests/unit/services/test_experiment_unarchive_rule.py::test_an_archived_experiment"]
+
+[[unit]]
+text = "A draft given both dates and archived before it started comes back completed with no assignments."
+by = ["test:backend/tests/unit/services/test_experiment_unarchive_rule.py::test_an_archived_experiment"]
+
+[[unit]]
+text = "Permissions: the same as archive: ADMIN and DEVELOPER, superusers, and in the full profile anyone whose custom role or direct grant gives experiment (update); anyone else gets 403"
+by = [
+    "test:backend/tests/integration/api/test_experiment_access_by_role.py::test_status_by_route_and_caller",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
+]
+
+[[unit]]
+text = "Response: 200 OK, the experiment, as archive answers it"
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:backend/tests/integration/api/test_experiment_unarchive.py::test_unarchive_returns_an_ended_experiment_to_completed",
+]
+
+[[unit]]
+text = "Errors: 400 as above, 403 without permission to change experiments, 404 for an unknown experiment"
+by = [
+    "test:backend/tests/integration/api/test_experiment_unarchive.py::test_an_unknown_experiment_is_404",
+    "test:backend/tests/integration/api/test_experiment_access_by_role.py::test_status_by_route_and_caller",
+]
+
+[[unit]]
 text = "Balanced experiments: for an experiment that balances within groups, a new user's variant also depends on the users of their group assigned before them; the group is read from the top level of context (Balancing the split within groups)."
 by = [
     "test:backend/tests/integration/services/test_balance_across_processes.py::test_four_processes_keep_every_group_balanced",
@@ -3476,6 +3566,13 @@ by = ["test:backend/tests/integration/api/test_complete_after_early_start.py::te
 [[unit]]
 text = "POST /api/v1/experiments/{experiment_id}/archive: any status but archived to archived."
 by = ["test:backend/tests/integration/api/test_experiments_lifecycle_api.py"]
+
+[[unit]]
+text = "POST /api/v1/experiments/{experiment_id}/unarchive (beta): archived to completed, only for an experiment with a start_date and an end_date at or before now."
+by = [
+    "test:backend/tests/integration/api/test_experiment_unarchive.py::test_unarchive_returns_an_ended_experiment_to_completed",
+    "test:backend/tests/unit/services/test_experiment_unarchive_rule.py::test_an_archived_experiment",
+]
 
 [[unit]]
 text = "PUT /api/v1/experiments/{experiment_id} does not change it."
