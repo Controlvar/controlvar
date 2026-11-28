@@ -71,7 +71,7 @@ by = [
 
 [[unit]]
 text = "Their defaults (localhost:5432, user and password postgres, database experimentation, schema experimentation) are the PostgreSQL that make db starts, which is also the Quick Start stack's."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/db/test_alembic_commands.py::test_the_connection_defaults_are_the_postgresql_make_db_starts"]
 
 [[unit]]
 text = "Set them only for another server."
@@ -127,6 +127,7 @@ by = ["exempt:baseline"]
 text = "A full checkout's bootstrap against it also applies the modules branch and creates the module tables, and logs a WARNING saying so (see Switching Profile)."
 by = [
     "test:backend/tests/integration/database/test_profile_migrations.py::test_switching_to_the_full_profile_creates_every_module_table",
+    "test:backend/tests/unit/db/test_bootstrap_schema_env.py::test_creating_missing_module_tables_logs_a_warning_that_names_them",
 ]
 
 [[unit]]
@@ -209,7 +210,7 @@ by = ["exempt:instruction"]
 
 [[unit]]
 text = "alembic revision runs backend/app/db/migrations/env.py here (revision_environment = true in alembic.ini), so it needs the same database connection --autogenerate does."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/db/test_alembic_commands.py::test_alembic_revision_runs_env_py_and_so_needs_the_database_connection"]
 
 [[unit]]
 text = "A core checkout has one head and needs no --head."
