@@ -81,11 +81,12 @@ variables (``POSTGRES_SERVER``/``POSTGRES_HOST``, ``POSTGRES_PORT``,
 
 from __future__ import annotations
 
+import argparse
 import logging
 import os
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator
+from typing import Iterator, Sequence
 
 from alembic import command
 from alembic.config import Config
@@ -749,7 +750,26 @@ def bootstrap(engine: Engine | None = None, schema: str | None = None) -> str:
             )
 
 
-if __name__ == "__main__":
+def main(argv: Sequence[str] | None = None) -> None:
+    """The ``python -m backend.app.db.bootstrap`` entry point.
+
+    It takes no arguments: ``-h``/``--help`` prints the usage and exits 0
+    without touching the database, and anything else exits 2.  The call every
+    deployment makes, with none, runs :func:`bootstrap`.
+    """
+    parser = argparse.ArgumentParser(
+        prog="python -m backend.app.db.bootstrap",
+        description=(
+            "Bring the database up to date: create the schema from the models "
+            "when the schema has no alembic_version table, or run `alembic "
+            "upgrade heads` when it has one, then create the first administrator "
+            "while the users table is empty. Connection settings come from the "
+            "POSTGRES_* environment variables."
+        ),
+        allow_abbrev=False,
+    )
+    parser.parse_args(argv)
+
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     # Alembic's env.py applies alembic.ini's logging, whose root level is WARN,
     # the first time a command runs -- after which every INFO line this module
@@ -768,3 +788,7 @@ if __name__ == "__main__":
     print(
         f"Database bootstrap complete ({result}) — schema '{schema_name()}' at {database_url().split('@')[-1]}"
     )
+
+
+if __name__ == "__main__":
+    main()
