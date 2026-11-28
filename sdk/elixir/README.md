@@ -166,7 +166,7 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 
 ## Architecture
 
-```
+```text
 Controlvar            <- Public facade
   └── Client (GenServer)           <- Config, in-flight track requests
         └── Cache (GenServer)      <- ETS-backed TTL cache, per client, keyed {type, user_id, key}

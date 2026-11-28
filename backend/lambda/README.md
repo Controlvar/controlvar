@@ -7,7 +7,7 @@ the global holdout, mutual exclusion groups and targeting.
 
 ## 📁 Structure
 
-```
+```text
 backend/lambda/
 ├── shared/                    # Shared utilities and models
 │   ├── __init__.py

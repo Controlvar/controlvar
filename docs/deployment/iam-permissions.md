@@ -58,7 +58,7 @@ is the template. Replace `<AWS_ACCOUNT_ID>` and `<ENVIRONMENT>` (`staging` or
 `prod`) and create one role from each copy. It pins the token's `sub` claim
 exactly -- `StringEquals`, no wildcard:
 
-```
+```text
 repo:Controlvar@341280474/controlvar@1367480368:environment:<ENVIRONMENT>
 ```
 

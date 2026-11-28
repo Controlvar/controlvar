@@ -206,7 +206,7 @@ original, or a `FlagValueException` whose `Code` is `"TYPE_MISMATCH"` or `"INVAL
 
 All SDKs share one hash formula; it is exported for debugging and parity tests only:
 
-```
+```text
 MD5("{userId}:{flagKey}") → first 4 bytes as little-endian uint32 → / 2^32
 FeatureFlagEvaluator.HashUser("user-123", "my-flag") == 0.6927449859213084
 ```
@@ -273,7 +273,7 @@ machine with the .NET 10 SDK and the .NET 8 runtime.
 
 ### Project Structure
 
-```
+```text
 sdk/dotnet/
   Controlvar.sln
   src/Controlvar/            # SDK source (netstandard2.1 + net8.0)
