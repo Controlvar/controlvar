@@ -1,25 +1,6 @@
 # The ledger of scripts/doc_claims.py (#1142): one line per registry entry whose
 # target is untested:<T|S|X|A> or exempt:baseline, as kind<TAB>document<TAB>the
 # first 12 hex digits of sha256(the unit's text). Sorted; it only shrinks.
-exempt:baseline	docs/Enhanced_Rules_Engine_Reference.md	0e2a8558fe91
-exempt:baseline	docs/Enhanced_Rules_Engine_Reference.md	2ceb5a66d539
-exempt:baseline	docs/Enhanced_Rules_Engine_Reference.md	49c6ccbf4aca
-exempt:baseline	docs/Enhanced_Rules_Engine_Reference.md	6003ef815dd6
-exempt:baseline	docs/Enhanced_Rules_Engine_Reference.md	838a7c13b392
-exempt:baseline	docs/Enhanced_Rules_Engine_Reference.md	a08fca15f7f8
-exempt:baseline	docs/Enhanced_Rules_Engine_Reference.md	c7499662487a
-exempt:baseline	docs/Enhanced_Rules_Engine_Reference.md	dbfea241fac7
-exempt:baseline	docs/Enhanced_Rules_Engine_Reference.md	e6f1d6fb5d33
-exempt:baseline	docs/api/README.md	1cc77e60fcee
-exempt:baseline	docs/api/README.md	1dd35d99b530
-exempt:baseline	docs/api/README.md	328908a83269
-exempt:baseline	docs/api/README.md	4b31971e7d79
-exempt:baseline	docs/api/README.md	56e4e3226ef1
-exempt:baseline	docs/api/README.md	8dc9e1a08b3d
-exempt:baseline	docs/api/README.md	abc7e9892806
-exempt:baseline	docs/api/README.md	acc4253df532
-exempt:baseline	docs/api/README.md	cd30e3520396
-exempt:baseline	docs/api/README.md	cfe00f6066f1
 exempt:baseline	docs/api/alerting.md	2867b24f4cdc
 exempt:baseline	docs/api/alerting.md	299b559a9510
 exempt:baseline	docs/api/alerting.md	2aec7553b87e
