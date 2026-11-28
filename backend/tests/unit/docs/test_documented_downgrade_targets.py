@@ -308,3 +308,33 @@ def test_no_documented_target_crosses_a_column_dropping_downgrade_unannounced():
         "names the target. Fix the recipe or name the revision and what its "
         f"downgrade drops: {problems}"
     )
+
+
+#: A revision id the runbook or the workflow's help names as a target: "to
+#: `<id>`", "to revision `<id>`", "downgrade `<id>`", "downgrade with target
+#: `<id>`" or "e.g. `<id>`". Only ids on disk that are not a head are kept, so
+#: "to undo" is not one, and neither is "the upgrade to `<head>`". Bounded.
+_NAMED_TARGET = re.compile(
+    r"(?:\bto(?:\s{1,4}revision)?|\bdowngrade(?:\s{1,4}with\s{1,4}target)?|\be\.g\.)"
+    r"\s{1,4}`?(?P<rev>[0-9a-z_]{4,64})\b"
+)
+
+
+def test_every_target_the_runbook_and_the_help_text_name_is_planned():
+    """Each target the rollback runbook or the workflow's help names has an
+    entry in NAMED_DOWNGRADES, where alembic's planner checks what it
+    unapplies, on one branch. The oldest core target is found, so the reader is
+    not reading nothing, and it is the one the graph test stops at."""
+    from backend.tests.unit.infrastructure.test_db_migrate_target_graph import (
+        NAMED_DOWNGRADES,
+        OLDEST_TARGET,
+    )
+
+    text = ROLLBACK_RUNBOOK.read_text(encoding="utf-8")
+    if DB_MIGRATE.is_file():
+        text += DB_MIGRATE.read_text(encoding="utf-8")
+    script = _script()
+    known = {r.revision for r in script.walk_revisions()} - set(script.get_heads())
+    named = {m.group("rev") for m in _NAMED_TARGET.finditer(text)} & known
+    assert OLDEST_TARGET["core"] in named, sorted(named)
+    assert sorted(named - set(NAMED_DOWNGRADES)) == []
