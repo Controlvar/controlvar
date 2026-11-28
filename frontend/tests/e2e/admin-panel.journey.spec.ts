@@ -26,7 +26,11 @@ const ADMIN_PAGES = [
 ] as const;
 
 /** Admin pages that must render their content, not just their chrome. */
-const ADMIN_LOADS = [...ADMIN_PAGES, { path: "/admin/audit", testId: "audit-log-table" }] as const;
+const ADMIN_LOADS = [
+  ...ADMIN_PAGES,
+  { path: "/admin/audit", testId: "audit-log-table" },
+  { path: "/admin/notifications", testId: "notifications-admin-page" },
+] as const;
 
 /** The seeded viewer, who must see only their own audit entries. */
 const VIEWER_EMAIL = "viewer@demo.com";

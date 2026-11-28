@@ -93,7 +93,7 @@ describe('NotificationsAdminPage', () => {
     await waitFor(() => {
       expect(screen.getByTestId('notifications-admin-page')).toBeInTheDocument();
     });
-    expect(screen.getByText('Notifications')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Notifications' })).toBeInTheDocument();
   });
 
   it('renders_my_preferences_section', async () => {
