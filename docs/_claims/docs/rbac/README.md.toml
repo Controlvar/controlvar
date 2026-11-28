@@ -5,11 +5,11 @@ document = "docs/rbac/README.md"
 
 [[unit]]
 text = "Role-Based Access Control (RBAC) System"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Overview"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Every deployment decides what a signed-in user may do from four roles and a separate superuser flag."
@@ -36,11 +36,11 @@ by = ["exempt:navigation"]
 
 [[unit]]
 text = "User Roles"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Users in the system can have one of the following roles:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Admin: Can create and manage experiments, and create and manage any feature flag"
@@ -121,11 +121,11 @@ by = [
 
 [[unit]]
 text = "Resources and Actions"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Permissions are defined as combinations of resources and actions:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Resource types"
@@ -133,27 +133,27 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "Experiment: A/B tests and experiments"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "FeatureFlag: Feature flags and toggles"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "User: User accounts"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Role: User roles"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Permission: Permission assignments"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Report: Analytics reports and dashboards"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "APIKey: API keys (who may list or delete other users' keys)"
@@ -164,7 +164,7 @@ by = [
 
 [[unit]]
 text = "Actions"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "CREATE: Create new resources"
@@ -172,31 +172,31 @@ by = ["test:backend/tests/unit/core/test_permissions.py"]
 
 [[unit]]
 text = "READ: View existing resources"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "UPDATE: Modify existing resources"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "DELETE: Remove resources"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "LIST: Retrieve lists of resources"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Permission Matrix"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The following table shows which roles can perform which actions on which resources:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Role | Experiment | Feature Flag | User | Report"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Admin | Create, Read, Update, Delete | Create, Read, Update, Delete | Create, Read, Update, Delete | Create, Read, Update, Delete"
@@ -233,7 +233,7 @@ by = [
 
 [[unit]]
 text = "Ownership-Based Access"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "A user who creates a resource is recorded as its owner."
@@ -241,7 +241,7 @@ by = ["test:backend/tests/integration/api/test_feature_flag_ownership.py::TestCr
 
 [[unit]]
 text = "What that record decides depends on the resource."
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Feature flags."
@@ -262,11 +262,11 @@ by = [
 
 [[unit]]
 text = "Experiments."
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Under /api/v1/experiments/{experiment_id}:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Reading an experiment (GET /{experiment_id}) and its results (/results, /daily-results, /segmented-results/{segment_by}) needs the role's READ on experiments."
