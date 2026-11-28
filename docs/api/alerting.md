@@ -178,6 +178,8 @@ It prints the two changed values. The fields are `notify_experiment_started`,
 
 Lists every user's preferences. Requires the ADMIN role.
 
+In the dashboard, Admin → Notifications shows them under **Everyone's settings**, and the delivery log, to an ADMIN who is also a superuser. Anyone else who opens that page reads that both need the ADMIN role.
+
 ---
 
 ### GET /api/v1/notifications/delivery-log

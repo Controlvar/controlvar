@@ -229,6 +229,19 @@ by = [
 ]
 
 [[unit]]
+text = "In the dashboard, Admin → Notifications shows them under Everyone's settings, and the delivery log, to an ADMIN who is also a superuser."
+by = [
+    "test:frontend/src/tests/pages/admin-notifications-everyone.test.tsx::%s sees the table, with the witness, and the log is read",
+    "test:frontend/src/tests/pages/admin-notifications-everyone.test.tsx::the page is a superuser's: an ADMIN who is not a superuser is stopped at the guard, with no request",
+]
+
+[[unit]]
+text = "Anyone else who opens that page reads that both need the ADMIN role."
+by = [
+    "test:frontend/src/tests/pages/admin-notifications-everyone.test.tsx::%s loads the page, is told, and sends nothing to either route",
+]
+
+[[unit]]
 text = "Requires the ADMIN role."
 by = [
     "test:backend/tests/unit/api/test_notifications_api.py::test_list_all_preferences_admin_only",

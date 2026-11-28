@@ -111,6 +111,23 @@
       "VIEWER"
     ]
   },
+  "notification_settings_route": {
+    "role": [
+      "ADMIN"
+    ],
+    "superuser": [
+      "ADMIN"
+    ]
+  },
+  "scheduler_webhook_test_route": {
+    "role": [],
+    "superuser": [
+      "ADMIN",
+      "DEVELOPER",
+      "ANALYST",
+      "VIEWER"
+    ]
+  },
   "grantable": [
     [
       "audit_log",

@@ -230,6 +230,21 @@ export const AdminService = {
     });
   },
 
+  /** `GET /api/v1/notifications/admin/preferences`: every user's settings (role ADMIN only). */
+  async getAllNotificationPrefs(): Promise<NotificationPreference[]> {
+    return apiFetch<NotificationPreference[]>('/api/v1/notifications/admin/preferences');
+  },
+
+  /**
+   * `POST /api/v1/scheduler/notify/test` (superusers): one test message to the
+   * server's configured webhook.
+   */
+  async sendSchedulerTestNotification(): Promise<{ status: string; message: string; sent: boolean }> {
+    return apiFetch<{ status: string; message: string; sent: boolean }>('/api/v1/scheduler/notify/test', {
+      method: 'POST',
+    });
+  },
+
   async getNotificationDeliveryLog(params?: {
     page?: number;
     limit?: number;

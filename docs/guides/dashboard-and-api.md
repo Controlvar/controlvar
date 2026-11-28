@@ -63,8 +63,8 @@ The table lists each capability and where you do it today:
 | Write notes and learnings on an experiment | Dashboard | [Running experiments](user-guide.md) |
 | See a feature flag's evaluations, latency and client error log | API only | [Safety monitoring](../feature-flags/safety.md) |
 | Check one user id against the global holdout | Dashboard | [Mutual exclusion groups and global holdout](../api/mutual-exclusion-groups.md#global-holdout) |
-| See every user's notification settings | API only | [Slack & Email Alerting](../api/alerting.md) |
-| Send a test notification through the scheduler's webhook | API only | [API endpoints](../api/endpoints.md) |
+| See every user's notification settings | Dashboard | [Slack & Email Alerting](../api/alerting.md) |
+| Send a test notification through the scheduler's webhook | Dashboard | [API endpoints](../api/endpoints.md) |
 | Add tags to feature flags and experiments | API only | [Creating feature flags](../feature-flags/create.md) |
 | Plan the sample size for a mean metric (revenue, count or duration) | API only | [Power analysis](../statistics/power-analysis.md) |
 | LLM experiments | API only | [LLM evaluation](../llm-evaluation/overview.md) |

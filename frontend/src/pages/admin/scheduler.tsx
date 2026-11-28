@@ -4,10 +4,14 @@ import { SchedulerStatusCard } from '@/components/admin/scheduler/SchedulerStatu
 import { AdminService } from '@/services/admin';
 import { SchedulerHealth } from '@/types/admin';
 import { withAdminGuard } from '@/components/admin/withAdminGuard';
+import { useAuth } from '@/contexts/AuthContext';
+import { canTestSchedulerWebhook } from '@/components/admin/notifications/access';
+import { SchedulerWebhookTest } from '@/components/admin/scheduler/SchedulerWebhookTest';
 
 const REFRESH_INTERVAL_MS = 60_000;
 
 export function SchedulerHealthPage() {
+  const { user } = useAuth();
   const [schedulers, setSchedulers] = useState<SchedulerHealth[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -37,6 +41,8 @@ export function SchedulerHealthPage() {
           <h2 className="text-xl font-semibold text-slate-900">Scheduler Health</h2>
           <span className="text-xs text-slate-400">Auto-refreshes every 60 seconds</span>
         </div>
+
+        {canTestSchedulerWebhook(user) && <SchedulerWebhookTest />}
 
         {loading && (
           <div data-testid="scheduler-loading" className="text-sm text-slate-500 py-4">

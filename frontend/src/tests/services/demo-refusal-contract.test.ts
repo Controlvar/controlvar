@@ -194,6 +194,7 @@ const NEED_NOT_ASK: Record<string, string> = {
     "a saved segment's results load (GET), which demo mode never refuses",
   'components/results/Cuped/useCupedResults.ts': 'a CUPED results load (GET), which demo mode never refuses',
   'hooks/useExperimentEligibility.ts': 'eligibility loads (GET)',
+  'components/admin/notifications/AllNotificationSettings.tsx': "everyone's settings load (GET), which demo mode never refuses",
   'pages/experiments/holdouts.tsx': 'the holdout load (GET); its saves use holdoutErrorCopy',
   'pages/experiments/interactions.tsx': 'the interaction scan and pair test (GET), which demo mode never refuses',
   'pages/auth/callback.tsx': 'GET /users/me after the Hosted UI sign-in',

@@ -23,6 +23,7 @@ import fs from 'fs';
 import path from 'path';
 import { canCreateRulesetKey } from '@/components/admin/api-keys/CreateApiKeyModal';
 import { readsAllAuditLogs } from '@/components/admin/audit/access';
+import { canTestSchedulerWebhook, readsAllNotificationSettings } from '@/components/admin/notifications/access';
 import type { Role, UserMe } from '@/services/api';
 import type { EffectivePermissions } from '@/utils/effectivePermissions';
 import * as experimentPermissions from '@/utils/experimentPermissions';
@@ -38,6 +39,8 @@ interface PermissionTable {
   change_experiment_route: { role: Role[]; superuser: Role[] };
   holdout_check_route: { role: Role[]; superuser: Role[] };
   experiment_metadata_route: { role: Role[]; superuser: Role[] };
+  notification_settings_route: { role: Role[]; superuser: Role[] };
+  scheduler_webhook_test_route: { role: Role[]; superuser: Role[] };
   grantable: Array<[string, string]>;
 }
 
@@ -301,6 +304,35 @@ describe("an experiment's notes and learnings (#2274)", () => {
   it('reads both lists from the table: a table that lost them would pass an empty loop', () => {
     expect(TABLE.experiment_metadata_route.role).toEqual(['ADMIN', 'DEVELOPER']);
     expect(TABLE.experiment_metadata_route.superuser).toEqual(TABLE.roles);
+  });
+});
+
+describe("everyone's notification settings and the scheduler's test webhook (#2277)", () => {
+  // The preferences and delivery-log routes check role == ADMIN and nothing
+  // else; the webhook test route checks the superuser flag and nothing else.
+  // The table holds what each answered for each role, with and without the
+  // flag, and the two helpers must give the same answers.
+  it.each(TABLE.roles)('readsAllNotificationSettings answers as the routes do for %s, with and without the flag', (role) => {
+    // The helper takes no superuser flag, which is the finding: it cannot be wrong about it.
+    const expectedPlain = TABLE.notification_settings_route.role.includes(role);
+    const expectedFlagged = TABLE.notification_settings_route.superuser.includes(role);
+    expect(readsAllNotificationSettings({ role, is_superuser: false } as UserMe)).toBe(expectedPlain);
+    expect(readsAllNotificationSettings({ role, is_superuser: true } as UserMe)).toBe(expectedFlagged);
+  });
+
+  it.each(TABLE.roles)('canTestSchedulerWebhook answers as the route does for %s, with and without the flag', (role) => {
+    expect(canTestSchedulerWebhook({ role, is_superuser: false } as UserMe)).toBe(
+      TABLE.scheduler_webhook_test_route.role.includes(role),
+    );
+    expect(canTestSchedulerWebhook({ role, is_superuser: true } as UserMe)).toBe(
+      TABLE.scheduler_webhook_test_route.superuser.includes(role),
+    );
+  });
+
+  it('reads the lists from the table: a table that lost them would pass an empty loop', () => {
+    // Measured: the VIEWER superuser is refused, and the ADMIN who is not a superuser is accepted.
+    expect(TABLE.notification_settings_route).toEqual({ role: ['ADMIN'], superuser: ['ADMIN'] });
+    expect(TABLE.scheduler_webhook_test_route).toEqual({ role: [], superuser: TABLE.roles });
   });
 });
 

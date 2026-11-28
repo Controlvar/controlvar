@@ -248,11 +248,11 @@ text = "Check one user id against the global holdout | Dashboard | Mutual exclus
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
-text = "See every user's notification settings | API only | Slack & Email Alerting"
+text = "See every user's notification settings | Dashboard | Slack & Email Alerting"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
-text = "Send a test notification through the scheduler's webhook | API only | API endpoints"
+text = "Send a test notification through the scheduler's webhook | Dashboard | API endpoints"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]

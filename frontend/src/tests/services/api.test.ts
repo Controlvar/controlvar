@@ -30,6 +30,8 @@ import {
 import { AdminService } from '@/services/admin';
 import { ResultsService } from '@/services/results';
 import { mismatchMessage } from '@/components/admin/api-keys/keyEnvironment';
+import { everyoneErrorMessage } from '@/components/admin/notifications/AllNotificationSettings';
+import { webhookErrorMessage } from '@/components/admin/scheduler/SchedulerWebhookTest';
 import { UserTable, deleteTimedOutMessage } from '@/components/admin/users/UserTable';
 import { overrideErrorCopy } from '@/components/experiments/BanditWeightsOverride';
 import { UNREACHABLE, errorCopy } from '@/components/experiments/ExperimentManageSection';
@@ -924,6 +926,10 @@ const STATUS_ZERO_SITES: Record<string, { count: number; kind: string }> = {
   // mismatchMessage (a new API key that could not be revoked, #2011): every
   // status 0, timed out or not, says "no answer" and that the key may still exist.
   'components/admin/api-keys/keyEnvironment.ts': { count: 1, kind: 'outcome-unknown' },
+  // everyoneErrorMessage ("Everyone's settings", #2277): `err.message` for every status 0.
+  'components/admin/notifications/AllNotificationSettings.tsx': { count: 1, kind: 'passes-message' },
+  // webhookErrorMessage (the scheduler's test notification, #2277): the same, for the POST.
+  'components/admin/scheduler/SchedulerWebhookTest.tsx': { count: 1, kind: 'passes-message' },
   // overrideErrorCopy ("Set weights by hand", #1957): returns `err.message` for
   // every status 0, so a timed-out PUT says its outcome is unknown.
   'components/experiments/BanditWeightsOverride.tsx': { count: 1, kind: 'passes-message' },
@@ -1118,6 +1124,14 @@ describe('each status-0 place says what a time-out means (#1040 D7)', () => {
           'and revoking it failed (no answer). The key “ci” may still exist: revoke it in the list on this page.',
         );
       }
+    },
+    'components/admin/notifications/AllNotificationSettings.tsx': (_write, read) => {
+      expect(everyoneErrorMessage(read)).toBe(READ_TEXT);
+      expect(everyoneErrorMessage(unreachable())).toBe(unreachableMessage());
+    },
+    'components/admin/scheduler/SchedulerWebhookTest.tsx': (write) => {
+      expect(webhookErrorMessage(write)).toBe(WRITE_TEXT);
+      expect(webhookErrorMessage(unreachable())).toBe(unreachableMessage());
     },
     'components/experiments/BanditWeightsOverride.tsx': (write) => {
       expect(overrideErrorCopy(write)).toBe(WRITE_TEXT);
