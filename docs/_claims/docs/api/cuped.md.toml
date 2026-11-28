@@ -5,7 +5,7 @@ document = "docs/api/cuped.md"
 
 [[unit]]
 text = "CUPED Variance Reduction"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "CUPED (Controlled-experiment Using Pre-Experiment Data) narrows the interval around a treatment effect by adjusting for what each user did before the experiment."
@@ -13,7 +13,7 @@ by = ["test:backend/tests/unit/services/test_cuped_metric_result.py::test_s1_pla
 
 [[unit]]
 text = "How much it narrows depends on how well that history predicts the outcome."
-by = ["exempt:baseline"]
+by = ["exempt:theory"]
 
 [[unit]]
 text = "The endpoint is GET /api/v1/results/{experiment_id}/cuped."
@@ -35,11 +35,11 @@ by = [
 
 [[unit]]
 text = "Reference: Deng, Xu, Kohavi & Walker — Improving the sensitivity of online controlled experiments by utilizing pre-experiment data (WSDM 2013)."
-by = ["exempt:baseline"]
+by = ["exempt:third-party"]
 
 [[unit]]
 text = "How It Works"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "For each conversion metric, the outcome Y of a user is 1 if they converted after assignment (counted exactly as GET /results/{id} counts them, so within the metric's conversion window when it has one) and 0 otherwise."
@@ -62,11 +62,11 @@ by = ["test:backend/tests/integration/api/test_cuped_results_api.py::test_n1_use
 
 [[unit]]
 text = "Each arm's adjusted conversion rate is:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Where:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "θ is the slope of Y on X, pooled within arms over every arm of the experiment: the x coefficient of the regression Y ~ arm + X"
@@ -96,7 +96,7 @@ by = [
 
 [[unit]]
 text = "What counts as history, per user:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "the event is the metric's own event_name (or that of covariate_metric_id, below), matched the way results match conversions: an experiment-view row never counts;"
@@ -134,7 +134,7 @@ by = ["test:backend/tests/integration/services/test_cuped_covariate_window.py::t
 
 [[unit]]
 text = "Sending pre-experiment history"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Send each user's past events to POST /api/v1/tracking/track, or 100 at a time to POST /api/v1/tracking/batch, without an experiment_key or a feature_flag_key."
@@ -146,7 +146,7 @@ by = ["test:backend/tests/integration/api/test_tracking_untagged_events.py::test
 
 [[unit]]
 text = "For each event:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "user_id is exactly the id the user will be assigned with (it is case-sensitive);"
@@ -154,7 +154,7 @@ by = ["test:backend/tests/integration/api/test_cuped_history_sent_by_tracking.py
 
 [[unit]]
 text = "event_type is the metric's event_name, for example checkout_completed;"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "timestamp is when the event happened, in ISO 8601 (no offset means UTC)."
@@ -200,19 +200,19 @@ by = ["docex:docs/api/cuped.md#true"]
 
 [[unit]]
 text = "Run the commands on this page in one terminal, in order, against the stack from the Quick Start."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Each uses the shell variables set by the ones before it."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Log in first:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "It prints \"ADMIN\"."
-by = ["exempt:baseline"]
+by = ["docex:docs/api/cuped.md#\"ADMIN\""]
 
 [[unit]]
 text = "The examples use the demo data's checkout_button_color experiment, whose primary metric counts checkout_completed events."
@@ -232,7 +232,7 @@ by = ["docex:docs/api/cuped.md#\"experiment_id\": null"]
 
 [[unit]]
 text = "Choosing the method"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The method is part of the experiment, in its variance_reduction_config, set when you create it (POST /api/v1/experiments/) or while it is a draft (PUT /api/v1/experiments/{id}); once it has left draft it cannot be changed (see Permissions):"
@@ -246,7 +246,7 @@ by = [
 
 [[unit]]
 text = "Field | Type | Default | Description"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "method | string | none | none, cuped, cuped_plus or winsorization"
@@ -288,7 +288,7 @@ by = [
 
 [[unit]]
 text = "cuped adjusts as described above."
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "cuped_plus is currently computed as cuped: the response's top-level method says cuped_plus, and each row's method says cuped."
@@ -337,11 +337,11 @@ by = [
 
 [[unit]]
 text = "API Reference"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "GET /api/v1/results/{experiment_id}/cuped"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Returns one comparison per conversion metric and treatment, each against the control."
@@ -357,7 +357,7 @@ by = [
 
 [[unit]]
 text = "Like the main results, the view is fixed-horizon: do not stop an experiment the first time it looks significant."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "A user who may view the experiment can read it; without that permission it answers 403, and an experiment that doesn't exist answers 404."
@@ -378,19 +378,19 @@ by = ["docex:docs/api/cuped.md#true"]
 
 [[unit]]
 text = "It prints true."
-by = ["exempt:baseline"]
+by = ["docex:docs/api/cuped.md#true"]
 
 [[unit]]
 text = "The full response:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Response Fields"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Field | Description"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "method (top level) | The method the experiment is configured with"
@@ -486,7 +486,7 @@ by = [
 
 [[unit]]
 text = "Three things can surprise:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "variance_reduction_pct can be negative."
@@ -498,11 +498,11 @@ by = ["test:backend/tests/unit/services/test_cuped_metric_result.py::test_s2_the
 
 [[unit]]
 text = "If an arm's history relates to its outcome differently from the others' (a small arm, say), its adjusted variance can come out larger than its unadjusted one."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/services/test_cuped_pooled_slope.py::test_variance_reduction_can_be_negative"]
 
 [[unit]]
 text = "The estimate is still valid; CUPED simply did not help that comparison."
-by = ["exempt:baseline"]
+by = ["exempt:theory"]
 
 [[unit]]
 text = "Adding an arm changes the other arms' adjusted effects."
@@ -514,7 +514,7 @@ by = ["test:backend/tests/unit/services/test_cuped_metric_result.py::test_s2_the
 
 [[unit]]
 text = "The unadjusted numbers do not move."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/services/test_cuped_pooled_slope.py::test_adding_an_arm_moves_the_other_arms_adjusted_effects_only"]
 
 [[unit]]
 text = "Coverage near 0 gives the unadjusted numbers."
@@ -526,15 +526,15 @@ by = ["test:backend/tests/integration/api/test_cuped_results_api.py::test_n2_n4_
 
 [[unit]]
 text = "That is not an error."
-by = ["exempt:baseline"]
+by = ["exempt:theory"]
 
 [[unit]]
 text = "unavailable_reason"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Value | Meaning"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "not_a_proportion_metric | The metric is not a conversion metric; this view computes conversion metrics only"
@@ -577,7 +577,7 @@ by = ["test:backend/tests/unit/services/test_cuped_metric_result.py::test_sums_n
 
 [[unit]]
 text = "Permissions"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Anyone who may view the experiment can read the results."
