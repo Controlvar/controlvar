@@ -103,7 +103,7 @@ Here are the key API workflows for the experimentation platform:
 ### Feature Flag Workflow
 
 1. Create feature flag (`POST /api/v1/feature-flags`)
-2. Update flag configurations (`PUT /api/v1/feature-flags/{feature_flag_id}`)
+2. Update flag configurations (`PUT /api/v1/feature-flags/{flag_id}`)
 3. Evaluate a flag for a user
    (`GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=...`, with an
    API key; user attributes go in `context` as URL-encoded JSON)
