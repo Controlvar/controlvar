@@ -70,7 +70,7 @@ function EditWorkspaceModal({ workspace, onClose, onUpdated }: EditModalProps) {
         <button
           type="button"
           onClick={onClose}
-          className="text-slate-400 hover:text-slate-600 text-xl leading-none"
+          className="text-slate-500 hover:text-slate-600 text-xl leading-none"
           aria-label="Close"
         >
           &times;
@@ -108,9 +108,9 @@ function EditWorkspaceModal({ workspace, onClose, onUpdated }: EditModalProps) {
               type="text"
               value={workspace.slug}
               disabled
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50 text-slate-400 font-mono cursor-not-allowed"
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50 text-slate-500 font-mono cursor-not-allowed"
             />
-            <p className="mt-1 text-xs text-slate-400">Slug cannot be changed after creation</p>
+            <p className="mt-1 text-xs text-slate-500">Slug cannot be changed after creation</p>
           </div>
           <div>
             <label htmlFor="edit-workspace-description" className="block text-sm font-medium text-slate-700 mb-1">
@@ -217,7 +217,7 @@ function WorkspaceOverviewPage() {
                     </span>
                   )}
                 </div>
-                <p className="text-sm text-slate-400 font-mono mb-2">{workspace.slug}</p>
+                <p className="text-sm text-slate-500 font-mono mb-2">{workspace.slug}</p>
                 {workspace.description && (
                   <p className="text-sm text-slate-600">{workspace.description}</p>
                 )}

@@ -406,7 +406,7 @@ function WorkspaceMembersPage() {
               <tbody className="divide-y divide-slate-100">
                 {members.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="text-center py-10 text-slate-400">
+                    <td colSpan={4} className="text-center py-10 text-slate-500">
                       No members yet. Invite someone to get started.
                     </td>
                   </tr>
@@ -426,7 +426,7 @@ function WorkspaceMembersPage() {
                           </div>
                           <div>
                             <p className="font-medium text-slate-900">{member.username}</p>
-                            <p className="text-xs text-slate-400">{member.email}</p>
+                            <p className="text-xs text-slate-500">{member.email}</p>
                           </div>
                         </div>
                       </td>
@@ -442,6 +442,7 @@ function WorkspaceMembersPage() {
                               handleRoleChange(member, e.target.value as WorkspaceMember['role'])
                             }
                             disabled={isRoleUpdating}
+                            aria-label={`Role for ${member.username}`}
                             className="border border-slate-200 rounded-md px-2 py-1 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
                           >
                             {ROLES.filter((r) => r !== 'OWNER').map((r) => (
