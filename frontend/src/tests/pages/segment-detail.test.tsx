@@ -615,3 +615,36 @@ describe('the usage list', () => {
     expect(document.body.textContent).not.toContain('PLANTED');
   });
 });
+
+describe('every state has one h1', () => {
+  it('loading', () => {
+    serve(idList());
+    render(<SegmentDetailPage />);
+    expect(screen.getAllByRole('heading', { level: 1 }).map((h) => h.textContent)).toEqual(['Loading segment...']);
+  });
+
+  it('error', async () => {
+    mocked.mockImplementation(
+      routedApi([
+        {
+          path: BASE,
+          handler: () => {
+            throw new ApiError({ status: 404, detail: PLANTED });
+          },
+        },
+      ]) as unknown as typeof apiFetch,
+    );
+    render(<SegmentDetailPage />);
+    await screen.findByTestId('segment-error');
+    expect(screen.getAllByRole('heading', { level: 1 }).map((h) => h.textContent)).toEqual([
+      'This segment no longer exists. It may have been removed by another user.',
+    ]);
+  });
+
+  it('loaded: the name is the only h1', async () => {
+    serve(idList());
+    render(<SegmentDetailPage />);
+    await screen.findByTestId('segment-name-heading');
+    expect(screen.getAllByRole('heading', { level: 1 }).map((h) => h.textContent)).toEqual(['Enterprise pilot']);
+  });
+});

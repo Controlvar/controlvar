@@ -399,7 +399,7 @@ export default function ExperimentDetailPage() {
         <PageTitle title="Experiment" />
         <div className="text-center" data-testid="experiment-loading">
           <div className="inline-block w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-          <p className="text-slate-500 mt-2 text-sm">Loading experiment…</p>
+          <h1 className="text-slate-500 mt-2 text-sm font-normal">Loading experiment…</h1>
         </div>
       </div>
     );
@@ -414,9 +414,9 @@ export default function ExperimentDetailPage() {
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-600 mb-2">
             {notFound ? '404' : 'Error'}
           </p>
-          <p className="text-slate-800 text-lg mb-2">
+          <h1 className="text-slate-800 text-lg font-normal mb-2">
             {notFound ? 'Experiment not found' : 'Could not load this experiment'}
-          </p>
+          </h1>
           {!notFound && loadError?.message && (
             <p className="text-sm text-red-600 mb-4">{loadError.message}</p>
           )}

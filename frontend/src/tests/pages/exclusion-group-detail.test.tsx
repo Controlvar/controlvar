@@ -381,6 +381,31 @@ describe('loading and failures', () => {
 // Membership (C5): add and remove, each re-reading the group
 // ---------------------------------------------------------------------------
 
+describe('every state has one h1', () => {
+  it('loading', async () => {
+    serve({ group: pending });
+    render(<ExclusionGroupPage />);
+    await screen.findByTestId('exclusion-group-loading');
+    expect(screen.getAllByRole('heading', { level: 1 }).map((h) => h.textContent)).toEqual(['Loading…']);
+    expect(screen.getByRole('status')).toBeInTheDocument();
+  });
+
+  it.each([
+    [404, 'exclusion-group-error', GROUP_COPY.notFound],
+    [500, 'exclusion-group-error', GROUP_COPY.loadFailed],
+    [403, 'exclusion-group-refused', GROUP_COPY.refused],
+  ])('a group answered %i', async (status, testId, copy) => {
+    serve({
+      group: () => {
+        throw apiError(status, 'PLANTED-7f3');
+      },
+    });
+    render(<ExclusionGroupPage />);
+    await screen.findByTestId(testId);
+    expect(screen.getAllByRole('heading', { level: 1 }).map((h) => h.textContent)).toEqual([copy]);
+  });
+});
+
 describe('adding an experiment', () => {
   it('sends POST {experiment_id} for the chosen one, then shows it as a member', async () => {
     serve();
