@@ -5,7 +5,7 @@ document = "docs/api/warehouse-analytics.md"
 
 [[unit]]
 text = "Warehouse analysis (beta)"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Beta: Snowflake, BigQuery and Amazon Redshift are available"
@@ -53,11 +53,11 @@ by = [
 
 [[unit]]
 text = "What it does"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "You point Controlvar at two of your own tables or views:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "an assignment source: one row per exposure, with the unit id, the experiment key, the variant label and the time of the exposure;"
@@ -83,7 +83,9 @@ by = [
 
 [[unit]]
 text = "A metric is one of two types:"
-by = ["exempt:baseline"]
+by = [
+    "test:modules/backend/tests/unit/warehouse/test_request_schemas.py::test_every_string_field_is_allowlisted_exactly",
+]
 
 [[unit]]
 text = "a proportion: the share of exposed units that had at least one event in the conversion window, compared with Fisher's exact test, the statistics /results uses;"
@@ -165,7 +167,7 @@ by = ["test:modules/backend/tests/integration/warehouse/test_runs_api.py"]
 
 [[unit]]
 text = "What leaves your warehouse"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "No row of your data."
@@ -212,7 +214,7 @@ by = [
 
 [[unit]]
 text = "The connection's role decides what can be read."
-by = ["exempt:baseline"]
+by = ["exempt:third-party"]
 
 [[unit]]
 text = "Anyone who can author a source can compute aggregates, and read short text such as variant labels, over anything the connection's role can read."
@@ -220,11 +222,11 @@ by = ["test:modules/backend/tests/unit/warehouse/test_limits_roles_and_counting.
 
 [[unit]]
 text = "Grant that role only the tables and views analysis needs, and read-only access to them."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "How it counts, and how that differs from /results"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "A unit's exposure is its first exposure in the analysis window."
@@ -288,7 +290,7 @@ by = ["test:backend/tests/integration/api/test_metric_window_writes.py::test_a_c
 
 [[unit]]
 text = "Setting up Snowflake"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Controlvar signs in to Snowflake's SQL API as a user in your account, with a key pair it generates."
@@ -299,7 +301,10 @@ by = [
 
 [[unit]]
 text = "There is no password field."
-by = ["exempt:baseline"]
+by = [
+    "test:modules/backend/tests/unit/warehouse/test_request_schemas.py::test_every_string_field_is_allowlisted_exactly",
+    "test:modules/backend/tests/unit/warehouse/test_request_schemas.py::test_every_request_model_forbids_unknown_fields",
+]
 
 [[unit]]
 text = "In Snowflake, give Controlvar a user and a role of its own."
@@ -315,7 +320,7 @@ by = ["test:modules/backend/tests/unit/warehouse/test_snowflake.py::test_adminis
 
 [[unit]]
 text = "Create the connection in Warehouse › Connections (ADMIN)."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "The account is the organisation-account identifier, for example MYORG-MYACCOUNT (Snowsight › Admin › Accounts), not a locator or a URL."
@@ -327,7 +332,7 @@ by = ["test:modules/backend/tests/unit/warehouse/test_snowflake.py::test_only_th
 
 [[unit]]
 text = "Run it as an administrator."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "The private key never leaves Controlvar."
@@ -338,7 +343,7 @@ by = [
 
 [[unit]]
 text = "Test the connection."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "The test signs in and runs one statement that reads no table."
@@ -372,7 +377,7 @@ by = [
 
 [[unit]]
 text = "Setting up BigQuery"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Controlvar signs in to BigQuery with a service-account key you create for it, and runs every query as a job in a project you choose."
@@ -387,7 +392,7 @@ by = ["exempt:third-party"]
 
 [[unit]]
 text = "BigQuery Job User on the project that runs and pays for the queries (the connection's billing project);"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "BigQuery Data Viewer on each dataset analysis reads, granted on each dataset rather than on the project."
@@ -395,7 +400,7 @@ by = ["exempt:third-party"]
 
 [[unit]]
 text = "Create a JSON key for the service account and paste it into the connection form in Warehouse › Connections (ADMIN)."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "It is sent only in the request body and stored encrypted, and it is never shown again."
@@ -414,7 +419,7 @@ by = ["test:modules/backend/tests/unit/warehouse/test_bigquery.py::test_connecti
 
 [[unit]]
 text = "Set the bytes cap (\"Most data a query may read\")."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Before each query Controlvar runs a dry run: anything that is not a single SELECT, or that would read more than the cap, is refused before it runs."
@@ -628,11 +633,11 @@ by = [
 
 [[unit]]
 text = "Who can do what"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Action | ADMIN | DEVELOPER | ANALYST | VIEWER"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "See which warehouses are available | yes | yes | yes | yes"
@@ -696,7 +701,7 @@ by = [
 
 [[unit]]
 text = "Limits and cost"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Every connection has limits, and each connection in the API shows its worst case per day (worst_case_bytes_per_day or worst_case_seconds_per_day):"
@@ -729,7 +734,9 @@ by = [
 
 [[unit]]
 text = "The count resets at 00:00 UTC."
-by = ["exempt:baseline"]
+by = [
+    "test:modules/backend/tests/integration/warehouse/test_admission.py::test_daily_run_limit_429",
+]
 
 [[unit]]
 text = "The worst case for a day is max_runs_per_day × 11 × the per-query limit."
@@ -752,11 +759,11 @@ by = ["test:modules/backend/tests/unit/warehouse/test_limits_roles_and_counting.
 
 [[unit]]
 text = "When a limit is reached the API answers:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Status | code | When"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "429 | daily_run_limit_reached | The connection has used max_runs_per_day today. Retry-After is the seconds until 00:00 UTC, and the body carries limit and resets_at."
@@ -775,11 +782,11 @@ by = ["test:modules/backend/tests/integration/warehouse/test_admission.py::test_
 
 [[unit]]
 text = "For operators"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Setting | Default | Meaning"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "WAREHOUSE_CREDENTIALS_KEYS | unset | Fernet keys, comma-separated, newest first, that encrypt stored warehouse credentials. While unset or empty, storing or using a credential answers 503 credentials_unavailable. In staging and production a malformed value is refused when the API starts, and the full profile's modules do not load until it is fixed."
@@ -833,7 +840,7 @@ by = ["exempt:third-party"]
 
 [[unit]]
 text = "API"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "All routes are under /api/v1/warehouse/analysis, need a signed-in user, and take credentials only in a request body."
@@ -844,7 +851,7 @@ by = [
 
 [[unit]]
 text = "Method and path | What it does"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "GET /connectors | The warehouses this code knows and whether each is available here"
@@ -939,7 +946,7 @@ by = [
 
 [[unit]]
 text = "A source names a table or view and maps its columns:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Each part of the table name and each column must match the warehouse's identifier rules, and a filter's text value may contain only letters, digits, spaces and _ ."
@@ -1224,7 +1231,7 @@ by = ["exempt:advice"]
 
 [[unit]]
 text = "If you ran an earlier full-profile release"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "As of v0.9.0, the earlier /api/v1/warehouse endpoints (saved connections, sync, and the ClickHouse, MySQL and Databricks connectors) are removed, and the migration to the warehouse analysis tables deletes the connections they saved (see Upgrading and migrations)."
@@ -1236,4 +1243,4 @@ by = ["exempt:advice"]
 
 [[unit]]
 text = "See Modules and profiles for what each profile includes."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
