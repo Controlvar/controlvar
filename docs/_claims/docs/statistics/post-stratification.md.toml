@@ -5,11 +5,11 @@ document = "docs/statistics/post-stratification.md"
 
 [[unit]]
 text = "Post-Stratification Variance Reduction"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Not available through the API yet"
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/api/test_post_strat_api.py::TestPostStratificationEndpoint::test_post_strat_with_no_data_answers_501"]
 
 [[unit]]
 text = "POST /api/v1/results/{experiment_id}/post-stratification answers 501 Not Implemented."
@@ -27,7 +27,7 @@ by = [
 
 [[unit]]
 text = "REST API Reference"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "This route is not listed in the API document."
@@ -35,7 +35,7 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_the_post_stratifi
 
 [[unit]]
 text = "POST /api/v1/results/{experiment_id}/post-stratification"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Not available yet: answers 501 for every existing experiment, with"
@@ -47,7 +47,7 @@ by = ["test:backend/tests/integration/api/test_post_strat_api.py::TestPostStrati
 
 [[unit]]
 text = "Field | Type | Required | Default | Description"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "stratum_cols | list[str] | Yes | — | Column names defining strata. Non-empty."
@@ -70,11 +70,11 @@ by = [
 
 [[unit]]
 text = "Status codes:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Status | Condition"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "404 | Experiment not found"

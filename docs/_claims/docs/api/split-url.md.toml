@@ -9,7 +9,7 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "Part of the split_url module"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Split URL testing is one of the optional modules -- present in the full profile, absent from the core one."
@@ -28,7 +28,7 @@ by = [
 
 [[unit]]
 text = "See Modules and profiles for what each profile includes and how to run the full one."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "A split URL experiment gives each variant its own page."
@@ -1019,11 +1019,11 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "split_url_config holds the URL variants:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Field | Type | Required | Description"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "variants | array | Yes | The URL variants: at least 2"
@@ -1074,7 +1074,7 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_
 
 [[unit]]
 text = "Validation Rules"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "On create and update, split_url_config is checked for:"
@@ -1263,11 +1263,11 @@ by = [
 
 [[unit]]
 text = "Error Responses"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Status | Meaning"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "400 Bad Request | Preview and assign: the experiment is not a split_url experiment (Experiment is not a split_url type), or has no split_url_config (split_url_config is not set for this experiment). Start: see Starting a split URL experiment"

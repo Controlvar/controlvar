@@ -5,7 +5,7 @@ document = "docs/auth/flow.md"
 
 [[unit]]
 text = "Authentication Flow Diagrams"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "This document contains the flow diagrams for the Cognito authentication system implemented in Controlvar."
@@ -13,7 +13,7 @@ by = ["exempt:navigation"]
 
 [[unit]]
 text = "Cognito only"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The password-reset and token-refresh endpoints (POST /api/v1/auth/forgot-password, /reset-password and /refresh) are available only when AUTH_PROVIDER=cognito."
@@ -58,7 +58,7 @@ by = ["test:modules/backend/tests/unit/services/test_sso_settings_checks_and_mes
 
 [[unit]]
 text = "1. Registration and Confirmation Flow"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Only with COGNITO_SELF_SIGNUP_ENABLED=true and a user pool that allows self sign-up; otherwise see Adding a user."
@@ -69,16 +69,16 @@ by = [
 
 [[unit]]
 text = "2. Sign-in and Token Issuance Flow"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "3. Password Reset Flow"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "4. Token Refresh Mechanism"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "5. Authorization Decision Flow"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
