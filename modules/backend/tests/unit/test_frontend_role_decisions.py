@@ -290,6 +290,15 @@ SITES: Dict[Key, Tuple[int, str, str]] = {
     ): (1, CONVERTED, "readsAllAuditLogs: audit_log:read"),
     # --- decided by the built-in role on purpose ---------------------------
     (
+        "frontend/src/components/admin/notifications/access.ts",
+        "return user?.role === 'ADMIN' || user?.role === 'DEVELOPER';",
+    ): (
+        2,
+        BASE,
+        "sendsTestNotification mirrors POST /notifications/test, which checks "
+        "current_user.role in (ADMIN, DEVELOPER) and no grantable pair",
+    ),
+    (
         _EXP_PERMS,
         "return ROLES_THAT_ADMINISTER_ELIGIBILITY.includes(user.role as 'ADMIN');",
     ): (
@@ -507,8 +516,8 @@ SITES: Dict[Key, Tuple[int, str, str]] = {
 }
 
 #: Reads per class, and in all: a classification that loses or gains one fails.
-EXPECTED_READS = {CONVERTED: 7, BASE: 18, NOTHING: 31}
-EXPECTED_TOTAL = 56
+EXPECTED_READS = {CONVERTED: 7, BASE: 20, NOTHING: 31}
+EXPECTED_TOTAL = 58
 
 
 # ---------------------------------------------------------------------------
