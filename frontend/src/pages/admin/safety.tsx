@@ -289,7 +289,7 @@ export function SafetyDashboard() {
                 <div key={i} className="h-32 bg-slate-100 rounded-lg animate-pulse" />
               ))}
             </div>
-          ) : flags.length === 0 && !flagsError ? (
+          ) : flags.length === 0 && !flagsError && failedChecks.length === 0 ? (
             <div
               data-testid="flag-status-empty"
               className="bg-slate-50 border border-slate-200 rounded-lg p-8 text-center text-sm text-slate-500"
