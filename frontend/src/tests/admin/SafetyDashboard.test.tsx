@@ -230,6 +230,26 @@ describe('SafetyDashboard', () => {
     expect(screen.getAllByTestId('safety-status-card')).toHaveLength(1);
   });
 
+  it('does not say there are no flags when every safety check is rate limited', async () => {
+    mockGetFlagSafetyStatus.mockRejectedValue(new ApiError({ status: 429, detail: 'Rate limit exceeded' }));
+    render(<SafetyDashboard />);
+    const banner = await screen.findByTestId('flag-status-partial');
+    expect(banner).toHaveTextContent(/rate limited/i);
+    expect(screen.queryByTestId('safety-status-card')).toBeNull();
+    expect(screen.queryByTestId('flag-status-empty')).toBeNull();
+    expect(screen.queryByText(/no feature flags yet/i)).toBeNull();
+  });
+
+  it('does not say there are no flags when every safety check fails', async () => {
+    mockGetFlagSafetyStatus.mockRejectedValue(new Error('500'));
+    render(<SafetyDashboard />);
+    const banner = await screen.findByTestId('flag-status-partial');
+    expect(banner).toHaveTextContent(/safety check failed/i);
+    expect(screen.queryByTestId('safety-status-card')).toBeNull();
+    expect(screen.queryByTestId('flag-status-empty')).toBeNull();
+    expect(screen.queryByText(/no feature flags yet/i)).toBeNull();
+  });
+
   it('checks flags through a bounded worker pool instead of all at once', async () => {
     const flagCount = 24;
     mockListFlags.mockResolvedValue({ items: manyFlags(flagCount), total: flagCount, skip: 0, limit: 100 });
