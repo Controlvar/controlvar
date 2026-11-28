@@ -5,7 +5,7 @@ document = "docs/api/sequential-testing.md"
 
 [[unit]]
 text = "Sequential Testing & Early Stopping"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Sequential testing lets you continuously monitor experiment results and stop as soon as you have enough evidence — without inflating your false positive rate."
@@ -13,11 +13,11 @@ by = ["test:backend/tests/unit/stats_validation/test_sequential_confidence_seque
 
 [[unit]]
 text = "Methods"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "mSPRT (mixture Sequential Probability Ratio Test)"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The method the analysis uses."
@@ -74,7 +74,7 @@ by = [
 
 [[unit]]
 text = "Always-Valid Confidence Intervals (Confidence Sequences)"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "A confidence sequence is a confidence interval that is valid at every sample size simultaneously."
@@ -96,11 +96,11 @@ by = ["test:backend/tests/unit/stats_validation/test_sequential_confidence_seque
 
 [[unit]]
 text = "2017 and Howard et al."
-by = ["exempt:baseline"]
+by = ["exempt:third-party"]
 
 [[unit]]
 text = "2021), on the difference in conversion rates (treatment minus control), with the same alpha and tau_squared:"
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/stats_validation/test_sequential_confidence_sequence.py::test_cs_half_width_closed_form"]
 
 [[unit]]
 text = "where the estimate is the observed difference in rates and V is the Agresti-Caffo variance of that difference: one conversion and one non-conversion are added to each arm, p̃ = (conversions + 1) / (users + 2), and V = p̃_c (1 − p̃_c) / (n_c + 2) + p̃_t (1 − p̃_t) / (n_t + 2)."
@@ -111,7 +111,7 @@ by = [
 
 [[unit]]
 text = "The mSPRT uses the same V."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/stats_validation/test_sequential_confidence_sequence.py::test_cs_matches_can_stop"]
 
 [[unit]]
 text = "Because the interval and the stop decision share V, τ² and α, they cannot disagree: 0 is outside the interval exactly when can_stop is true."
@@ -148,7 +148,7 @@ by = ["test:backend/tests/unit/stats_validation/test_sequential_confidence_seque
 
 [[unit]]
 text = "Alpha Spending (not computed yet)"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "A group-sequential design with planned interim analyses (O'Brien-Fleming or Pocock alpha spending) is not implemented: alpha_spending is always an empty list."
@@ -167,7 +167,7 @@ by = ["test:backend/tests/unit/stats_validation/test_sequential_confidence_seque
 
 [[unit]]
 text = "Turning it on"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Sequential testing is set on the experiment, when you create it (POST /api/v1/experiments/) or while it is a draft (PUT /api/v1/experiments/{id}); once it has left draft neither field can be changed (see Permissions):"
@@ -180,7 +180,7 @@ by = [
 
 [[unit]]
 text = "Field | Type | Default | Description"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "sequential_testing_enabled | bool | false | Turns the analysis on"
@@ -242,19 +242,19 @@ by = [
 
 [[unit]]
 text = "Run the commands on this page in one terminal, in order, against the stack from the Quick Start."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Each uses the shell variables set by the ones before it."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Log in first:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "It prints \"ADMIN\"."
-by = ["exempt:baseline"]
+by = ["docex:docs/api/sequential-testing.md#\"ADMIN\""]
 
 [[unit]]
 text = "This creates an experiment of its own, on the checkout_completed event, with sequential testing on and five planned looks, saves its id in $EXP_ID and starts it:"
@@ -277,11 +277,11 @@ by = ["test:backend/tests/unit/stats_validation/test_sequential_confidence_seque
 
 [[unit]]
 text = "API Reference"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "GET /api/v1/results/{experiment_id}/sequential"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Returns the full sequential analysis for an experiment, on its primary metric: the control against the treatment created first, so an experiment with three or more variants compares only that one, and the same one on every call."
@@ -327,11 +327,11 @@ by = ["test:backend/tests/unit/api/test_sequential_contract.py::test_always_vali
 
 [[unit]]
 text = "Evidence Strength Values"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Value | Meaning"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 count = 2
 
 [[unit]]
@@ -359,7 +359,7 @@ by = ["test:backend/tests/unit/api/test_sequential_decisions.py::test_strong_for
 
 [[unit]]
 text = "Recommended Actions"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "stop_for_effect | The mSPRT crossed its boundary (1/alpha): stop, there is an effect, which may be an improvement or a harm"
@@ -465,7 +465,7 @@ by = [
 
 [[unit]]
 text = "In the results response"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "GET /api/v1/results/{experiment_id} and GET /api/v1/experiments/{experiment_id}/results carry the same analysis as sequential_testing, computed by the same code as /sequential without alpha: the primary metric, the control against the treatment created first, at the stored sequential_testing_config.alpha."
@@ -500,7 +500,7 @@ by = [
 
 [[unit]]
 text = "The request below passes use_cache=false for that reason:"
-by = ["exempt:baseline"]
+by = ["docex:docs/api/sequential-testing.md#\"embedded_method\": \"msprt\""]
 
 [[unit]]
 text = "It prints \"embedded_method\": \"msprt\" and the boundary 20.0, the same as the first /sequential request above."
@@ -508,7 +508,7 @@ by = ["docex:docs/api/sequential-testing.md#\"embedded_method\": \"msprt\""]
 
 [[unit]]
 text = "Permissions"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Changing an experiment's sequential testing settings is a change to the experiment, decided by permission and by the experiment's state, not by who created it."
@@ -547,11 +547,11 @@ by = ["test:backend/tests/integration/api/test_experiment_analysis_settings_fixe
 
 [[unit]]
 text = "Common Mistakes"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Long-running risk is informational only."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/unit/api/test_sequential_contract.py::test_long_running_with_a_clear_effect_still_stops_for_effect"]
 
 [[unit]]
 text = "An experiment flagged at_risk (the same value as long_running_risk.is_at_risk) may still be producing valid results."
