@@ -255,6 +255,12 @@ Use the **Sample Size** tab to confirm the smallest variant has reached the plan
 before deciding. Do not stop the experiment the first time a p-value drops below 0.05: decide at
 the planned sample size.
 
+### Notes and learnings
+
+An experiment's page has a **Notes and learnings** section, for what ran, what you saw and what to do next. Everyone who can open the experiment reads it, in every status. The **Notes** and **Learnings** fields are offered to anyone with permission to change experiments, which the ADMIN and DEVELOPER roles have.
+
+They are the `notes` and `learnings` keys of the experiment's metadata. `POST /api/v1/experiments/{experiment_id}/metadata` with `{"notes": "..."}` merges the keys it is sent and leaves the others as they are, so saving one field never changes the other, nor a key you set through the API, which the page shows read-only.
+
 ---
 
 ### Reading Results

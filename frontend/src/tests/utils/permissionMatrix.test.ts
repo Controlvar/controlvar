@@ -37,6 +37,7 @@ interface PermissionTable {
   analyse_interactions_roles: Role[];
   change_experiment_route: { role: Role[]; superuser: Role[] };
   holdout_check_route: { role: Role[]; superuser: Role[] };
+  experiment_metadata_route: { role: Role[]; superuser: Role[] };
   grantable: Array<[string, string]>;
 }
 
@@ -280,6 +281,26 @@ describe('checking one user id against the global holdout (#2276)', () => {
   it('reads both lists from the table: a table that lost them would pass an empty loop', () => {
     expect(TABLE.holdout_check_route.role).toEqual(['ADMIN', 'DEVELOPER']);
     expect(TABLE.holdout_check_route.superuser).toEqual(TABLE.roles);
+  });
+});
+
+describe("an experiment's notes and learnings (#2274)", () => {
+  // POST /experiments/{id}/metadata calls get_experiment_change_access; the
+  // table holds what it answered for each role, with and without the
+  // superuser flag, and canChangeExperiment (which shows the notes fields)
+  // must give the same answer with no effective map.
+  it.each(TABLE.roles)('canChangeExperiment answers as the metadata route does for %s, with and without the flag', (role) => {
+    expect(experimentPermissions.canChangeExperiment({ role, is_superuser: false }, undefined)).toBe(
+      TABLE.experiment_metadata_route.role.includes(role),
+    );
+    expect(experimentPermissions.canChangeExperiment({ role, is_superuser: true }, undefined)).toBe(
+      TABLE.experiment_metadata_route.superuser.includes(role),
+    );
+  });
+
+  it('reads both lists from the table: a table that lost them would pass an empty loop', () => {
+    expect(TABLE.experiment_metadata_route.role).toEqual(['ADMIN', 'DEVELOPER']);
+    expect(TABLE.experiment_metadata_route.superuser).toEqual(TABLE.roles);
   });
 });
 
