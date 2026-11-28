@@ -254,18 +254,20 @@ export default function ExclusionGroupPage() {
         </Link>
 
         {(!resolved || (mayManage && state.kind === 'loading')) && (
-          <p className="text-sm text-slate-600" role="status" data-testid="exclusion-group-loading">
-            Loading…
-          </p>
+          <div role="status">
+            <h1 className="text-sm font-normal text-slate-600" data-testid="exclusion-group-loading">
+              Loading…
+            </h1>
+          </div>
         )}
 
         {refused && (
-          <p
-            className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-700"
+          <h1
+            className="rounded-lg border border-slate-200 bg-white p-4 text-sm font-normal text-slate-700"
             data-testid="exclusion-group-refused"
           >
             {GROUP_COPY.refused}
-          </p>
+          </h1>
         )}
 
         {mayManage && state.kind === 'error' && (
@@ -274,7 +276,7 @@ export default function ExclusionGroupPage() {
             className="rounded-lg bg-red-50 border border-red-200 p-4 text-sm text-red-800"
             data-testid="exclusion-group-error"
           >
-            {state.message}
+            <h1 className="text-sm font-normal">{state.message}</h1>
           </div>
         )}
 

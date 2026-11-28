@@ -86,6 +86,37 @@ beforeEach(() => {
   });
 });
 
+describe('ExperimentDetailPage: every state has one h1 that names it', () => {
+  it('loading', () => {
+    mockedApiFetch.mockImplementation(
+      routedApi([
+        { path: '/api/v1/experiments/exp-1', handler: () => new Promise(() => undefined) },
+      ]) as unknown as typeof apiFetch,
+    );
+    render(<ExperimentDetailPage />);
+    expect(screen.getAllByRole('heading', { level: 1 }).map((h) => h.textContent)).toEqual(['Loading experiment…']);
+  });
+
+  it.each([
+    [404, 'experiment-not-found', 'Experiment not found'],
+    [0, 'experiment-error', 'Could not load this experiment'],
+  ])('an answer of %s', async (status, testId, text) => {
+    mockedApiFetch.mockImplementation(
+      routedApi([
+        {
+          path: '/api/v1/experiments/exp-1',
+          handler: () => {
+            throw apiError(status, "Can't reach the API");
+          },
+        },
+      ]) as unknown as typeof apiFetch,
+    );
+    render(<ExperimentDetailPage />);
+    await screen.findByTestId(testId);
+    expect(screen.getAllByRole('heading', { level: 1 }).map((h) => h.textContent)).toEqual([text]);
+  });
+});
+
 describe('ACTIONS_BY_STATUS', () => {
   it('mirrors the backend lifecycle guards', () => {
     expect(ACTIONS_BY_STATUS.draft).toEqual(['start']);

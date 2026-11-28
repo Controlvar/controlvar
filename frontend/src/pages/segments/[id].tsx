@@ -553,14 +553,15 @@ export default function SegmentDetailPage() {
         </Link>
 
         {loading && !segment && (
-          <p className="text-sm text-slate-600" data-testid="segment-loading">
+          <h1 className="text-sm font-normal text-slate-600" data-testid="segment-loading">
             Loading segment...
-          </p>
+          </h1>
         )}
 
         {!loading && error && (
           <div role="alert" className="rounded-lg bg-red-50 border border-red-200 p-4 text-sm text-red-800 flex items-center justify-between gap-4" data-testid="segment-error">
-            <span>{error}</span>
+            {/* Once a segment is shown its name is the h1; a failed reload keeps it. */}
+            {segment ? <span>{error}</span> : <h1 className="text-sm font-normal">{error}</h1>}
             <button type="button" className={button} onClick={() => void load()} data-testid="segment-retry">
               Retry
             </button>
