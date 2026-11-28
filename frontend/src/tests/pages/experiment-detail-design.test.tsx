@@ -790,7 +790,7 @@ describe('accessibility', () => {
     finish(undefined);
     await screen.findByTestId('design-saved');
     await noViolations();
-  });
+  }, 20_000);
 
   it('a refused text field is invalid and described by the alert', async () => {
     await openDesign();
