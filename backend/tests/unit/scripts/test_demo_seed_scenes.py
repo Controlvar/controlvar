@@ -17,6 +17,8 @@ No database, no network.
 from __future__ import annotations
 
 import ast
+import importlib
+import os
 import re
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -32,6 +34,7 @@ from backend.app.models.assignment import Assignment
 from backend.app.models.event import Event
 from backend.app.models.experiment import Experiment, ExperimentStatus, Variant
 from backend.app.services.bandit_service import BanditService
+from backend.app.services.srm_service import compute_srm
 from backend.scripts import seed_demo_data as seed
 
 pytestmark = [pytest.mark.unit]
@@ -227,3 +230,92 @@ def test_thompson_sampling_gives_algo_v2_the_largest_share(scenes):
         }
     weights = BanditService.compute_weights("thompson_sampling", data, seed=7)
     assert max(weights, key=weights.get) == "algo_v2", weights
+
+
+class _FakeDb:
+    """What ``SessionLocal()`` returns in the simulator: takes the writes."""
+
+    def __init__(self, added: List[Any]) -> None:
+        self._added = added
+
+    def __enter__(self) -> "_FakeDb":
+        return self
+
+    def __exit__(self, *exc: Any) -> None:
+        return None
+
+    def query(self, *args: Any) -> _NoRows:
+        return _NoRows()
+
+    def add(self, obj: Any) -> None:
+        self._added.append(obj)
+
+    def flush(self) -> None:
+        return None
+
+    def commit(self) -> None:
+        return None
+
+
+def _import_live_simulator() -> Any:
+    """Import the script; it sets database defaults in ``os.environ``."""
+    before = dict(os.environ)
+    try:
+        return importlib.import_module("backend.scripts.simulate_live_events")
+    finally:
+        os.environ.clear()
+        os.environ.update(before)
+
+
+def _simulate_checkout_users(count: int, seed_value: int) -> Dict[str, Any]:
+    register_core_models()
+    simulator_module = _import_live_simulator()
+    added: List[Any] = []
+    simulator_module.SessionLocal = lambda: _FakeDb(added)
+    simulator = simulator_module.Simulator(rate=5, duration=0, rng_seed=seed_value)
+    ids = {"blue_button": uuid.uuid4(), "green_button": uuid.uuid4()}
+    simulator._experiment_cache = {
+        "Checkout Button Color": {"id": uuid.uuid4(), "variants": ids}
+    }
+    config = simulator_module.EXPERIMENT_CONFIG["Checkout Button Color"]
+    for _ in range(count):
+        simulator._simulate_user("Checkout Button Color", config)
+    users = {
+        name: sum(1 for o in added if isinstance(o, Assignment) and o.variant_id == vid)
+        for name, vid in ids.items()
+    }
+    converted = {
+        name: sum(
+            1
+            for o in added
+            if isinstance(o, Event)
+            and o.event_name == "checkout_completed"
+            and o.variant_id == vid
+        )
+        for name, vid in ids.items()
+    }
+    return {"users": users, "converted": converted}
+
+
+def test_the_live_simulator_keeps_checkout_button_color_at_50_50(scenes):
+    """An hour of simulated users on top of the seed's 15,000 per variant must
+    not raise the sample-ratio warning on the experiment page."""
+    checkout = scenes["checkout"]
+    seeded = {name: checkout.users(name) for name in ("blue_button", "green_button")}
+    allocations = {name: checkout.variants[name].traffic_allocation for name in seeded}
+    for seed_value in (1, 2, 3):
+        drawn = _simulate_checkout_users(3 * 3600, seed_value)["users"]
+        observed = {name: seeded[name] + drawn[name] for name in seeded}
+        result = compute_srm(observed, allocations)
+        assert result is not None
+        assert result.warning is False, (seed_value, observed, result.p_value)
+
+
+def test_the_live_simulator_converts_each_checkout_variant_at_the_seeded_rate():
+    simulator_module = _import_live_simulator()
+    rates = simulator_module.EXPERIMENT_CONFIG["Checkout Button Color"]["variant_rates"]
+    assert rates == seed.CHECKOUT_CVR
+    drawn = _simulate_checkout_users(20_000, 7)
+    for name, rate in seed.CHECKOUT_CVR.items():
+        observed = drawn["converted"][name] / drawn["users"][name]
+        assert observed == pytest.approx(rate, abs=0.015), (name, observed)
