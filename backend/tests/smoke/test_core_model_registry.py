@@ -112,6 +112,37 @@ _CORE_MODULES_PROBE = """
 """
 
 
+#: Imports every file under backend/app/models/ after register_core_models(),
+#: so a model module that nothing imports is seen too.
+_EVERY_MODEL_FILE_PROBE = """
+    import importlib
+    import json
+    from pathlib import Path
+
+    import backend.app.models as models
+
+    Base = models.register_core_models()
+    registered = set(Base.metadata.tables)
+    root = Path(models.__file__).parent
+    on_disk = sorted(
+        ".".join(p.relative_to(root).with_suffix("").parts)
+        for p in root.rglob("*.py")
+        if p.name != "__init__.py"
+    )
+    for name in on_disk:
+        importlib.import_module(f"{models.__name__}.{name}")
+    prefix = f"{models.__name__}."
+    print(json.dumps({
+        "listed": list(models.CORE_MODEL_MODULES),
+        "on_disk": on_disk,
+        "mapped": sorted(
+            {m.class_.__module__.removeprefix(prefix) for m in Base.registry.mappers}
+        ),
+        "added_tables": sorted(set(Base.metadata.tables) - registered),
+    }))
+"""
+
+
 class TestCoreModelRegistry:
     def test_manifest_lists_the_module_tables(self):
         """Guard the guard: a manifest we failed to parse must not pass."""
@@ -206,3 +237,23 @@ class TestCoreModelRegistry:
             if m.removeprefix("backend.app.models.") not in result["listed"]
         ]
         assert not unlisted, f"mapped but not in CORE_MODEL_MODULES: {unlisted}"
+
+    def test_every_model_file_under_backend_app_models_is_listed(self):
+        """``CORE_MODEL_MODULES`` names every file under ``backend/app/models/``
+        that maps a class or adds a table, read from the directory.
+
+        The test above sees only the modules ``register_core_models()``
+        imported. A model module that nothing else imports, once dropped from
+        the list, is not imported, so it was not seen there, and
+        ``register_core_models()`` left its tables out."""
+        result = _run_in_fresh_interpreter(_EVERY_MODEL_FILE_PROBE)
+        not_on_disk = sorted(set(result["listed"]) - set(result["on_disk"]))
+        assert not_on_disk == [], (
+            f"listed but not under backend/app/models/: {not_on_disk}"
+        )
+        unlisted = sorted(set(result["mapped"]) - set(result["listed"]))
+        assert unlisted == [], f"maps a class but not in CORE_MODEL_MODULES: {unlisted}"
+        assert result["added_tables"] == [], (
+            "tables that only importing every file under backend/app/models/ "
+            f"registers: {result['added_tables']}"
+        )
