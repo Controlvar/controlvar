@@ -142,7 +142,7 @@ export function SegmentRows({ segments, rowHeaders = false, label }: SegmentRows
                 scope={rowHeaders ? 'row' : undefined}
               >
                 {label ? label(seg.segment_value) : seg.segment_value}
-                <span className="ml-1.5 text-xs text-slate-400">
+                <span className="ml-1.5 text-xs text-slate-500">
                   (n={seg.sample_size.toLocaleString()})
                 </span>
               </FirstCell>
@@ -153,7 +153,7 @@ export function SegmentRows({ segments, rowHeaders = false, label }: SegmentRows
             <td className="px-4 py-3 text-right text-sm text-slate-900">
               {v.variant_name}
               {v.is_control && (
-                <span className="ml-1 text-xs text-slate-400">
+                <span className="ml-1 text-xs text-slate-500">
                   (ctrl)
                 </span>
               )}
