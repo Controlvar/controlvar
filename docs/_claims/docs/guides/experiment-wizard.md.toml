@@ -5,7 +5,7 @@ document = "docs/guides/experiment-wizard.md"
 
 [[unit]]
 text = "Guided experiment builder"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "This page describes the dashboard's guided setup, which asks for a new experiment one step at a time, and the sample-size guidance its Estimate step uses."
@@ -13,7 +13,7 @@ by = ["test:frontend/src/tests/pages/experiment-new-guided.test.tsx"]
 
 [[unit]]
 text = "In the dashboard: guided setup"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Experiments → + New Experiment opens guided setup, which asks for a new experiment in five steps:"
@@ -24,7 +24,7 @@ by = [
 
 [[unit]]
 text = "Step | What you set"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "1. Type | A/B Test or Multivariate"
@@ -265,19 +265,19 @@ by = ["test:frontend/src/tests/pages/experiment-new-guided.test.tsx"]
 
 [[unit]]
 text = "The commands below run as written against the stack from the Quick Start, in one terminal, top to bottom; each uses the shell variables set by the ones before it."
-by = ["exempt:baseline"]
+by = ["docex:docs/guides/experiment-wizard.md#\"ADMIN\""]
 
 [[unit]]
 text = "Log in first:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "It prints \"ADMIN\"."
-by = ["exempt:baseline"]
+by = ["docex:docs/guides/experiment-wizard.md#\"ADMIN\""]
 
 [[unit]]
 text = "Sample Size Guidance"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "The experiments API computes a sample size, and the dashboard's guided setup calls it on its Estimate step."
@@ -345,7 +345,10 @@ by = [
 
 [[unit]]
 text = "Where p₁ = baseline rate, p₂ = baseline rate × (1 + MDE), p̄ = (p₁ + p₂) / 2, z_α/2 = 1.96 (two-tailed, α=0.05; a one-sided test uses z_α = 1.645), z_β = 0.842 (80% power), and n is rounded up."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/unit/services/test_power_calculator.py::TestSampleSizeComputation::test_the_size_is_the_formula_the_page_writes_out",
+    "test:backend/tests/unit/api/test_sample_size_critical_values.py::test_sample_size_matches_exact_critical_values",
+]
 
 [[unit]]
 text = "It is per variant: with a correction, α is significance_level ÷ (variant_count − 1)."
