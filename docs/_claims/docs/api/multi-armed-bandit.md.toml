@@ -447,7 +447,7 @@ by = ["test:backend/tests/integration/api/test_metric_window_open_users.py::test
 
 [[unit]]
 text = "A user who converts three times counts once."
-by = ["exempt:baseline"]
+by = ["test:backend/tests/integration/services/test_bandit_scheduler_db.py::test_postgres_fallback_counts_converting_users_as_results_does"]
 
 [[unit]]
 text = "With no metric configured, every event other than an experiment view is a success."
