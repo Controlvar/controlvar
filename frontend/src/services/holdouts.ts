@@ -1,5 +1,5 @@
 import { apiFetch } from '@/services/api';
-import { HoldoutChanges, HoldoutCreate, HoldoutDetail, HoldoutList, HoldoutResults } from '@/types/eligibility';
+import { HoldoutChanges, HoldoutCheck, HoldoutCreate, HoldoutDetail, HoldoutList, HoldoutResults } from '@/types/eligibility';
 
 /**
  * The global-holdout page's calls (#1455), `/api/v1/holdout`.
@@ -17,6 +17,15 @@ export const HoldoutsService = {
   /** `GET /api/v1/holdout/all`: every holdout, active and ended (ADMIN). */
   async listAll(): Promise<HoldoutList> {
     return apiFetch<HoldoutList>(`${BASE}/all`);
+  },
+
+  /**
+   * `GET /api/v1/holdout/check/{user_id}` (#2276): whether one user id falls in
+   * the active holdout. The id goes in the path as typed, percent-encoded; a
+   * `/` in it never matches the route, so the caller refuses one first.
+   */
+  async check(userId: string): Promise<HoldoutCheck> {
+    return apiFetch<HoldoutCheck>(`${BASE}/check/${encodeURIComponent(userId)}`);
   },
 
   /** `POST /api/v1/holdout`. With `is_active: true` it ends the active one. */

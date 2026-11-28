@@ -244,7 +244,7 @@ text = "See a feature flag's evaluations, latency and client error log | API onl
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
-text = "Check one user id against the global holdout | API only | Mutual exclusion groups and global holdout"
+text = "Check one user id against the global holdout | Dashboard | Mutual exclusion groups and global holdout"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]

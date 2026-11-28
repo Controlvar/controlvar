@@ -62,7 +62,7 @@ The table lists each capability and where you do it today:
 | Read the change history of one flag, experiment or person | API only | [Audit logging](../api/audit-logging.md) |
 | Write notes and learnings on an experiment | API only | [Running experiments](user-guide.md) |
 | See a feature flag's evaluations, latency and client error log | API only | [Safety monitoring](../feature-flags/safety.md) |
-| Check one user id against the global holdout | API only | [Mutual exclusion groups and global holdout](../api/mutual-exclusion-groups.md#global-holdout) |
+| Check one user id against the global holdout | Dashboard | [Mutual exclusion groups and global holdout](../api/mutual-exclusion-groups.md#global-holdout) |
 | See every user's notification settings | API only | [Slack & Email Alerting](../api/alerting.md) |
 | Send a test notification through the scheduler's webhook | API only | [API endpoints](../api/endpoints.md) |
 | Add tags to feature flags and experiments | API only | [Creating feature flags](../feature-flags/create.md) |

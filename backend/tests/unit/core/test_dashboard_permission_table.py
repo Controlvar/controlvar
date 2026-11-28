@@ -19,6 +19,9 @@ run by both profiles' Jest) holds every permission helper to:
   ``deps.get_experiment_change_access`` does for each role, once without and
   once with the superuser flag; ``PUT /experiments/{id}/schedule``, which a
   paused experiment's resume time uses, calls it; #2283);
+* ``holdout_check_route``: who ``GET /api/v1/holdout/check/{user_id}`` admits
+  (what ``global_holdout._require_developer`` does for each role, once without
+  and once with the superuser flag; #2276);
 * ``grantable``: the eleven pairs a custom role or direct grant can hold
   (``GRANTABLE``).
 
@@ -104,6 +107,20 @@ def _admitted_by_change_access(is_superuser: bool) -> List[str]:
     return admitted
 
 
+def _admitted_by_holdout_check(is_superuser: bool) -> List[str]:
+    """The roles the holdout check route's own check admits."""
+    admitted = []
+    for name in ROLE_ORDER:
+        user = SimpleNamespace(role=UserRole[name], is_superuser=is_superuser)
+        try:
+            global_holdout._require_developer(user)
+        except HTTPException as refused:
+            assert refused.status_code == 403
+        else:
+            admitted.append(name)
+    return admitted
+
+
 class _ReachedTheDatabase(Exception):
     pass
 
@@ -164,6 +181,10 @@ def build_table() -> Dict[str, Any]:
             "role": _admitted_by_change_access(False),
             "superuser": _admitted_by_change_access(True),
         },
+        "holdout_check_route": {
+            "role": _admitted_by_holdout_check(False),
+            "superuser": _admitted_by_holdout_check(True),
+        },
         "grantable": [list(pair) for pair in sorted(GRANTABLE)],
     }
 
@@ -192,6 +213,10 @@ def test_the_table_is_not_empty():
     assert table["override_bandit_weights_roles"] == ["ADMIN"]
     assert table["analyse_interactions_roles"] == ["ADMIN", "DEVELOPER", "ANALYST"]
     assert table["change_experiment_route"] == {
+        "role": ["ADMIN", "DEVELOPER"],
+        "superuser": ["ADMIN", "DEVELOPER", "ANALYST", "VIEWER"],
+    }
+    assert table["holdout_check_route"] == {
         "role": ["ADMIN", "DEVELOPER"],
         "superuser": ["ADMIN", "DEVELOPER", "ANALYST", "VIEWER"],
     }

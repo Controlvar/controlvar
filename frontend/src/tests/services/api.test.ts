@@ -46,7 +46,7 @@ import { signInFailureNotice } from '@/services/hostedUi';
 import { classifyPasswordError, passwordOutcomeSentence } from '@/services/password';
 import { classifyTwoFactorError, twoFactorFailureSentence } from '@/services/twoFactor';
 import { groupErrorCopy } from '@/utils/exclusionGroups';
-import { holdoutErrorCopy, loadErrorCopy, resultsErrorCopy } from '@/utils/holdouts';
+import { checkErrorCopy, holdoutErrorCopy, loadErrorCopy, resultsErrorCopy } from '@/utils/holdouts';
 import { pairErrorCopy, scanErrorCopy } from '@/utils/interactions';
 import { segmentErrorCopy } from '@/utils/segmentErrors';
 import { MODULES_SRC_ROOT, allMatches, listSourceFiles, SRC_ROOT, sourceLabel } from '../helpers/api-literals';
@@ -949,8 +949,8 @@ const STATUS_ZERO_SITES: Record<string, { count: number; kind: string }> = {
   // classifyTwoFactorError's `case 0:` (the two-step sign-in account page, #1812).
   'services/twoFactor.ts': { count: 1, kind: 'write' },
   'utils/exclusionGroups.ts': { count: 1, kind: 'write' },
-  // holdoutErrorCopy's `case 0:`, loadErrorCopy, resultsErrorCopy.
-  'utils/holdouts.ts': { count: 3, kind: 'write' },
+  // holdoutErrorCopy's `case 0:`, loadErrorCopy, resultsErrorCopy, checkErrorCopy (#2276).
+  'utils/holdouts.ts': { count: 4, kind: 'write' },
   // scanErrorCopy and pairErrorCopy (#1960): two reads that return `err.message`
   // for every status 0, so the time-out text already shows.
   'utils/interactions.ts': { count: 2, kind: 'passes-message' },
@@ -1196,6 +1196,8 @@ describe('each status-0 place says what a time-out means (#1040 D7)', () => {
       expect(loadErrorCopy(unreachable())).toBe(UNREACHABLE);
       expect(resultsErrorCopy(read)).toBe(READ_TEXT);
       expect(resultsErrorCopy(unreachable())).toBe(UNREACHABLE);
+      expect(checkErrorCopy(read)).toBe(READ_TEXT);
+      expect(checkErrorCopy(unreachable())).toBe(UNREACHABLE);
     },
     'utils/interactions.ts': (_write, read) => {
       expect(scanErrorCopy(read)).toBe(READ_TEXT);

@@ -36,6 +36,7 @@ interface PermissionTable {
   override_bandit_weights_roles: Role[];
   analyse_interactions_roles: Role[];
   change_experiment_route: { role: Role[]; superuser: Role[] };
+  holdout_check_route: { role: Role[]; superuser: Role[] };
   grantable: Array<[string, string]>;
 }
 
@@ -259,6 +260,26 @@ describe("a paused experiment's resume time (#2283)", () => {
   it('reads both lists from the table: a table that lost them would pass an empty loop', () => {
     expect(TABLE.change_experiment_route.role).toEqual(['ADMIN', 'DEVELOPER']);
     expect(TABLE.change_experiment_route.superuser).toEqual(TABLE.roles);
+  });
+});
+
+describe('checking one user id against the global holdout (#2276)', () => {
+  // GET /holdout/check/{user_id} calls _require_developer; the table holds what
+  // it answered for each role, with and without the superuser flag, and
+  // canReadEligibility (which shows the check) must give the same answer with
+  // no effective map.
+  it.each(TABLE.roles)('canReadEligibility answers as the route does for %s, with and without the flag', (role) => {
+    expect(experimentPermissions.canReadEligibility({ role, is_superuser: false }, undefined)).toBe(
+      TABLE.holdout_check_route.role.includes(role),
+    );
+    expect(experimentPermissions.canReadEligibility({ role, is_superuser: true }, undefined)).toBe(
+      TABLE.holdout_check_route.superuser.includes(role),
+    );
+  });
+
+  it('reads both lists from the table: a table that lost them would pass an empty loop', () => {
+    expect(TABLE.holdout_check_route.role).toEqual(['ADMIN', 'DEVELOPER']);
+    expect(TABLE.holdout_check_route.superuser).toEqual(TABLE.roles);
   });
 });
 

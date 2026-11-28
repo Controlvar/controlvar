@@ -138,6 +138,16 @@ export interface HoldoutResults {
   analysis_status?: string;
 }
 
+/** `HoldoutCheckResponse`, from `GET /api/v1/holdout/check/{user_id}`. */
+export interface HoldoutCheck {
+  user_id: string;
+  is_in_holdout: boolean;
+  /** The active holdout's size in whole percent; 0 when none is active. */
+  holdout_percentage: number;
+  /** The user's bucket, 0 to 99. */
+  bucket: number;
+}
+
 /** `GlobalHoldoutResponse`, from `GET /api/v1/holdout` (null when none is active). */
 export interface GlobalHoldout {
   id: string;
