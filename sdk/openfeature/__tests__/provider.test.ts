@@ -154,10 +154,21 @@ describe('ExperimentationProvider — construction', () => {
     expect(provider.client).toBeInstanceOf(ExperimentationClient);
   });
 
+  test('a client alone is enough: the options type asks for an apiKey only without one', () => {
+    const client = new ExperimentationClient({ apiUrl: 'https://shared.example.com', apiKey: 'shared', fetch: flagFetch({ enabled: true }) });
+    const provider = new ExperimentationProvider({ client });
+    expect(provider.client).toBe(client);
+    // Neither a client nor a key is a type error as well as a runtime one.
+    // @ts-expect-error apiKey is required when no client is given
+    expect(() => new ExperimentationProvider({})).toThrow('apiKey is required');
+    // @ts-expect-error baseUrl does not stand in for the key
+    expect(() => new ExperimentationProvider({ baseUrl: 'https://x.example.com' })).toThrow('apiKey is required');
+  });
+
   test('reuses an injected JS SDK client (apiKey not required then)', async () => {
     const fetchMock = flagFetch({ enabled: true });
     const client = new ExperimentationClient({ apiUrl: 'https://shared.example.com', apiKey: 'shared', fetch: fetchMock });
-    const provider = new ExperimentationProvider({ apiKey: '', client });
+    const provider = new ExperimentationProvider({ client });
     expect(provider.client).toBe(client);
     await provider.resolveBooleanEvaluation('f', false, ctx);
     expect(requestOf(fetchMock).url).toContain('https://shared.example.com/');
@@ -254,7 +265,7 @@ describe('ExperimentationProvider — request', () => {
   test('the SDK client is given the attributes, a Date already a string (what a local evaluation reads)', async () => {
     const client = new ExperimentationClient({ apiUrl: 'http://localhost:8000', apiKey: 'k', fetch: flagFetch({ enabled: true }) });
     const spy = jest.spyOn(client, 'evaluateFlag');
-    const provider = new ExperimentationProvider({ apiKey: '', client });
+    const provider = new ExperimentationProvider({ client });
     const at = new Date(Date.UTC(2026, 5, 1));
     await provider.resolveStringEvaluation('f', 'd', { targetingKey: 'user-1', plan: 'pro', at });
     expect(spy).toHaveBeenCalledWith('f', { userId: 'user-1', attributes: { plan: 'pro', at: '2026-06-01T00:00:00.000Z' } });
@@ -837,7 +848,7 @@ describe('ExperimentationProvider — cache', () => {
     const { client, evaluateRequests } = localLabelClient({ status: 500 });
     try {
       await expect(client.ready()).resolves.toMatchObject({ ok: true });
-      const provider = new ExperimentationProvider({ apiKey: '', client });
+      const provider = new ExperimentationProvider({ client });
       const free = await provider.resolveStringEvaluation('label', 'd', { targetingKey: 'u1', plan: 'free' });
       const enterprise = await provider.resolveStringEvaluation('label', 'd', { targetingKey: 'u1', plan: 'enterprise' });
       expect(free).toMatchObject({ value: 'Buy now', reason: StandardResolutionReasons.SPLIT, variant: 'off' });
@@ -857,7 +868,7 @@ describe('ExperimentationProvider — cache', () => {
     const { client, evaluateRequests } = localLabelClient(serverBuyNow('rollout'));
     try {
       await expect(client.ready()).resolves.toMatchObject({ ok: true });
-      const provider = new ExperimentationProvider({ apiKey: '', client });
+      const provider = new ExperimentationProvider({ client });
       const enterprise = { targetingKey: 'u1', plan: 'enterprise' };
       // A number against the rule's string: the SDK does not compare it, so the call defers.
       const deferring = { targetingKey: 'u1', plan: 7 };
@@ -892,7 +903,7 @@ describe('ExperimentationProvider — cache', () => {
     const { client, evaluateRequests } = localLabelClient(serverBuyNow('inactive'));
     try {
       await expect(client.ready()).resolves.toMatchObject({ ok: true });
-      const provider = new ExperimentationProvider({ apiKey: '', client });
+      const provider = new ExperimentationProvider({ client });
       const enterprise = { targetingKey: 'u1', plan: 'enterprise' };
       await expect(provider.resolveStringEvaluation('label', 'd', enterprise)).resolves.toMatchObject({
         value: 'Complete purchase',
@@ -918,7 +929,7 @@ describe('ExperimentationProvider — cache', () => {
       getEvaluatedFlags: sdk.getEvaluatedFlags.bind(sdk),
       clearCache: sdk.clearCache.bind(sdk),
     } as unknown as ExperimentationClient;
-    const provider = new ExperimentationProvider({ apiKey: '', client: older });
+    const provider = new ExperimentationProvider({ client: older });
     await expect(provider.resolveBooleanEvaluation('f', false, ctx)).resolves.toMatchObject({
       value: true,
       reason: StandardResolutionReasons.TARGETING_MATCH,
