@@ -28,7 +28,7 @@ export const STORY_STEPS: StoryStep[] = [
   },
   {
     title: 'Looks good, roll to 25 %',
-    action: 'The script advances rollout stage 2 (POST /rollout-schedules/{id}/stages/{stage}/advance). The flag\'s rollout percentage becomes 25 %.',
+    action: 'The script advances rollout stage 2 (POST /rollout-schedules/stages/{stage_id}/advance). The flag\'s rollout percentage becomes 25 %.',
     lookAt: 'Flag detail shows 25 %. In the simulator stats the player_v2 on-rate climbs towards a quarter of devices.',
   },
   {
