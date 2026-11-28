@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import Link from 'next/link';
 import { PageTitle } from '@/components/PageTitle';
+import { HoldoutCheckForm } from '@/components/experiments/HoldoutCheckForm';
 import { HoldoutForm } from '@/components/experiments/HoldoutForm';
 import { HoldoutResultsPanel } from '@/components/experiments/HoldoutResultsPanel';
 import { InlineConfirm } from '@/components/ui/InlineConfirm';
@@ -544,6 +545,9 @@ export default function HoldoutsPage() {
                 )}
               </section>
             )}
+
+            {/* Everyone who can read this page may ask (`canReadEligibility`): the route's own check. */}
+            <HoldoutCheckForm />
 
             {results && <HoldoutResultsPanel key={results.id} holdoutId={results.id} holdoutName={results.name} />}
           </div>

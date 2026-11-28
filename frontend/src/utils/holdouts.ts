@@ -1,7 +1,7 @@
 import { isApiError } from '@/services/api';
 import { UNREACHABLE } from '@/components/experiments/ExperimentManageSection';
 import { demoRefusalMessage } from '@/utils/demoMode';
-import { GlobalHoldout, HoldoutChanges, HoldoutDetail, HoldoutUnavailableReason } from '@/types/eligibility';
+import { GlobalHoldout, HoldoutChanges, HoldoutCheck, HoldoutDetail, HoldoutUnavailableReason } from '@/types/eligibility';
 import { parseApiTimestamp } from '@/utils/apiTimestamp';
 
 /**
@@ -31,6 +31,14 @@ export const HOLDOUT_COPY = {
   eventHelp: 'Matched exactly, for example purchase.',
   eventRequired: 'Enter an event name.',
   resultsFailed: 'Could not load the results. Try again.',
+  checkIdRequired: 'Enter a user id.',
+  checkIdSlash: 'A user id that contains a slash cannot be checked here.',
+  checkHelp: 'Matched exactly: capitals and spaces count.',
+  checkRefused:
+    'Checking a user needs permission to create experiments, which the ADMIN and DEVELOPER roles have.',
+  checkNotFound: 'That user id could not be checked.',
+  checkInvalid: 'That user id was not accepted.',
+  checkFailed: 'Could not check that user id. Try again.',
 } as const;
 
 /** The form's default size (PLAN C6): the API's own default of 10 is unchanged. */
@@ -223,4 +231,35 @@ export function points(value: number): string {
 export function pValueText(p: number | null | undefined): string {
   if (typeof p !== 'number' || !Number.isFinite(p)) return '—';
   return p < 0.001 ? '< 0.001' : p.toFixed(3);
+}
+
+/** The sentence for a checked user id (#2276). `holdout_percentage` 0 means no holdout is active. */
+export function checkAnswer(result: HoldoutCheck): string {
+  if (result.holdout_percentage === 0) {
+    return `${result.user_id} is not in the global holdout: none is active.`;
+  }
+  const detail = `bucket ${result.bucket}; the holdout keeps ${result.holdout_percentage}%`;
+  return result.is_in_holdout
+    ? `${result.user_id} is in the global holdout (${detail}).`
+    : `${result.user_id} is not in the global holdout (${detail}).`;
+}
+
+/** Fixed copy for a refused check, by status; never the server's text. */
+export function checkErrorCopy(err: unknown): string {
+  if (!isApiError(err)) return HOLDOUT_COPY.checkFailed;
+  if (err.timedOut) return err.message;
+  const demo = demoRefusalMessage(err);
+  if (demo) return demo;
+  switch (err.status) {
+    case 0:
+      return UNREACHABLE;
+    case 403:
+      return HOLDOUT_COPY.checkRefused;
+    case 404:
+      return HOLDOUT_COPY.checkNotFound;
+    case 422:
+      return HOLDOUT_COPY.checkInvalid;
+    default:
+      return HOLDOUT_COPY.checkFailed;
+  }
 }

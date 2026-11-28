@@ -87,6 +87,18 @@
       "VIEWER"
     ]
   },
+  "holdout_check_route": {
+    "role": [
+      "ADMIN",
+      "DEVELOPER"
+    ],
+    "superuser": [
+      "ADMIN",
+      "DEVELOPER",
+      "ANALYST",
+      "VIEWER"
+    ]
+  },
   "grantable": [
     [
       "audit_log",

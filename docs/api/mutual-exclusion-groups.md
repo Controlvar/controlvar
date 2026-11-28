@@ -275,6 +275,8 @@ curl -s localhost:8000/api/v1/holdout/check/user-123 \
 {"user_id":"user-123","is_in_holdout":false,"holdout_percentage":5,"bucket":44}
 ```
 
+In the dashboard, the Global holdouts page has a **Check a user id** field, for the roles that may call this route. The id is matched exactly, so capitals and spaces count, and an id with a slash cannot be checked there.
+
 Each user has a `bucket` from 0 to 99, a hash of their id with the active holdout's salt, so
 it stays the same for as long as that holdout is active and is different under the next
 holdout. A user is in the holdout when their bucket is below `holdout_percentage`: here

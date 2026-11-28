@@ -513,6 +513,20 @@ text = "Check whether a specific user is in the active global holdout:"
 by = ["docex:docs/api/mutual-exclusion-groups.md#\"user_id\":\"user-123\""]
 
 [[unit]]
+text = "In the dashboard, the Global holdouts page has a Check a user id field, for the roles that may call this route."
+by = [
+    "test:frontend/src/tests/pages/holdouts-check.test.tsx::%s sees it, and the witness is on the loaded page",
+    "test:frontend/src/tests/pages/holdouts-check.test.tsx::%s loads the page, sees no check, and sends nothing",
+]
+
+[[unit]]
+text = "The id is matched exactly, so capitals and spaces count, and an id with a slash cannot be checked there."
+by = [
+    "test:frontend/src/tests/pages/holdouts-check.test.tsx::sends the id exactly as typed: capitals and spaces kept, nothing trimmed",
+    "test:frontend/src/tests/pages/holdouts-check.test.tsx::an id with a slash is refused at the field before anything is sent",
+]
+
+[[unit]]
 text = "Each user has a bucket from 0 to 99, a hash of their id with the active holdout's salt, so it stays the same for as long as that holdout is active and is different under the next holdout."
 by = [
     "test:backend/tests/unit/services/test_global_holdout_service.py::TestDeterministicBucketing::test_bucket_range",
