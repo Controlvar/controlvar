@@ -46,6 +46,16 @@ describe('NotificationPrefsForm', () => {
     expect(input.value).toBe('user@example.com');
   });
 
+  it('slack_channel_label_names_its_input', () => {
+    render(<NotificationPrefsForm prefs={mockPrefs} onSave={jest.fn()} />);
+    expect(screen.getByLabelText('Slack Channel Override')).toBe(screen.getByTestId('slack-channel-input'));
+  });
+
+  it('email_override_label_names_its_input', () => {
+    render(<NotificationPrefsForm prefs={mockPrefs} onSave={jest.fn()} />);
+    expect(screen.getByLabelText('Email Override')).toBe(screen.getByTestId('email-override-input'));
+  });
+
   it('checkbox_toggle_updates_state', () => {
     render(<NotificationPrefsForm prefs={mockPrefs} onSave={jest.fn()} />);
     const checkbox = screen.getByTestId('pref-notify_experiment_completed') as HTMLInputElement;

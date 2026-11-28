@@ -58,8 +58,9 @@ export function NotificationPrefsForm({ prefs, onSave }: NotificationPrefsFormPr
       ))}
 
       <div>
-        <label className="block text-sm font-medium text-slate-700">Slack Channel Override</label>
+        <label htmlFor="slack-channel-input" className="block text-sm font-medium text-slate-700">Slack Channel Override</label>
         <input
+          id="slack-channel-input"
           data-testid="slack-channel-input"
           type="text"
           value={form.slack_channel}
@@ -70,8 +71,9 @@ export function NotificationPrefsForm({ prefs, onSave }: NotificationPrefsFormPr
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-slate-700">Email Override</label>
+        <label htmlFor="email-override-input" className="block text-sm font-medium text-slate-700">Email Override</label>
         <input
+          id="email-override-input"
           data-testid="email-override-input"
           type="email"
           value={form.email_override}
