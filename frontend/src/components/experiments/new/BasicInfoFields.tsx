@@ -13,7 +13,7 @@ export function BasicInfoFields({ state, dispatch }: BasicInfoFieldsProps) {
     <>
       <div>
         <label htmlFor="experiment-name" className="block text-sm font-medium text-slate-700 mb-1">
-          Name <span className="text-red-500">*</span>
+          Name <span className="text-red-700">*</span>
         </label>
         <input
           id="experiment-name"

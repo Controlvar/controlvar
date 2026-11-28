@@ -215,7 +215,7 @@ export default function NewFeatureFlagPage() {
 
             <div>
               <label htmlFor="flag-name" className="block text-sm font-medium text-slate-700 mb-1">
-                Name <span className="text-red-500">*</span>
+                Name <span className="text-red-700">*</span>
               </label>
               <input
                 id="flag-name"
@@ -231,7 +231,7 @@ export default function NewFeatureFlagPage() {
 
             <div>
               <label htmlFor="flag-key" className="block text-sm font-medium text-slate-700 mb-1">
-                Key <span className="text-red-500">*</span>
+                Key <span className="text-red-700">*</span>
               </label>
               <input
                 id="flag-key"

@@ -221,7 +221,7 @@ export function CreateApiKeyModal({ isOpen, onClose, onSuccess, onMismatch }: Cr
                 htmlFor="api-key-name"
                 className="block text-sm font-medium text-slate-700 mb-1"
               >
-                Name <span className="text-red-500">*</span>
+                Name <span className="text-red-700">*</span>
               </label>
               <input
                 id="api-key-name"

@@ -44,7 +44,7 @@ export function AuditLogDetailPanel({ log, onClose }: AuditLogDetailPanelProps) 
           type="button"
           data-testid="detail-panel-close"
           onClick={onClose}
-          className="text-slate-400 hover:text-slate-600 text-xl leading-none"
+          className="text-slate-600 hover:text-slate-800 text-xl leading-none"
           aria-label="Close detail panel"
         >
           &times;

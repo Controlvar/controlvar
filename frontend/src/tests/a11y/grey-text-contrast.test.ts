@@ -78,6 +78,11 @@ const FILES = [
   'components/experiments/LiveResultsPanel.tsx',
   'components/results/Breakdowns/SegmentComparisonTable.tsx',
   'components/results/Breakdowns/BalancedGroupsView.tsx',
+  // The flag safety panel's and the audit detail panel's close buttons, and
+  // the invite form's "(optional)" label.
+  'components/admin/safety/FlagSafetyConfig.tsx',
+  'components/admin/audit/AuditLogDetailPanel.tsx',
+  'components/admin/users/InviteUserModal.tsx',
 ];
 
 /**
@@ -104,6 +109,25 @@ describe('slate-50 pages use slate-600 or darker text', () => {
     expect(light).toEqual([]);
     // The pattern reads this file's shades: a file with none would pass vacuously.
     expect(source).toMatch(/\btext-slate-[6-9]00\b/);
+  });
+});
+
+/**
+ * The required-field asterisk is small text on white: `red-500` (#ef4444) is
+ * 3.76:1, under the 4.5:1 it needs; `red-700` is 6.47:1.
+ */
+describe('the required-field asterisks', () => {
+  const ASTERISK_FILES = [
+    'pages/feature-flags/new.tsx',
+    'components/experiments/new/BasicInfoFields.tsx',
+    'components/admin/api-keys/CreateApiKeyModal.tsx',
+  ];
+
+  it.each(ASTERISK_FILES)('%s has no red-500 asterisk', (file) => {
+    const source = fs.readFileSync(path.join(SRC, file), 'utf8');
+    expect(source.match(/\btext-red-500\b[^>]*>\*</g)).toBeNull();
+    // The pattern reads this file's asterisks: a file with none would pass vacuously.
+    expect(source).toMatch(/\btext-red-[6-9]00\b[^>]*>\*</);
   });
 });
 

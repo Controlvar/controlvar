@@ -248,7 +248,7 @@ export function InviteUserModal({ isOpen, onClose, onSuccess }: InviteUserModalP
             {/* Full name */}
             <div className="mb-4">
               <label htmlFor="invite-full-name" className="block text-sm font-medium text-slate-700 mb-1">
-                Full name <span className="text-slate-400 font-normal">(optional)</span>
+                Full name <span className="text-slate-600 font-normal">(optional)</span>
               </label>
               <input
                 id="invite-full-name"
