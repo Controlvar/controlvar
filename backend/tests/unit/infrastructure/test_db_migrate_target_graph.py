@@ -54,10 +54,11 @@ pytestmark = pytest.mark.skipif(
 #: ``4955571d232c`` (#1812, the same for ``t1812_user_totp``),
 #: ``c448_balance_within`` (#1545, the same for ``4955571d232c``),
 #: ``85dd4796bb8b`` (#1528), ``607c51a59bf5`` (#1543), ``4c2c09a2b3e8``
-#: (#1497), ``37dcb2969766`` (#1206), ``d29a479daafe`` (#440) and
-#: ``a89544fb1075`` are the others.  A core revision added later moves the
-#: example to its own down revision or joins every list, and the documents that
-#: name a target must say what the downgrades it runs drop
+#: (#1497), ``37dcb2969766`` (#1206), ``d29a479daafe`` (#440),
+#: ``806901fb7735`` and ``1ab99332f0ba`` are the others.  A revision added
+#: later joins every list on its branch and adds its own down revision as an
+#: entry (``test_every_revision_above_the_oldest_target_has_an_entry``), and
+#: the documents that name a target must say what the downgrades it runs drop
 #: (``test_documented_downgrade_targets.py``).
 NAMED_DOWNGRADES = {
     "t2012_flag_split": ["t1934_metric_window"],
@@ -214,6 +215,12 @@ NAMED_DOWNGRADES = {
 }
 BRANCH_POINT = "a7b8c9d0e1f2"
 MODULES_PREFIX = "modules_"
+#: The oldest target named on each branch. Core: the runbook's last step,
+#: "Further still, to `1ab99332f0ba`"; below it, undoing ``1ab99332f0ba`` is
+#: the migrations page's re-run recipe, not a rollback step. Modules:
+#: ``modules_0001_rbac``, whose own down revision is the branch point, which
+#: unapplies both branches.
+OLDEST_TARGET = {"core": "1ab99332f0ba", "modules": "modules_0001_rbac"}
 
 
 def _script() -> ScriptDirectory:
@@ -294,6 +301,42 @@ def test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch(targe
     assert plan == NAMED_DOWNGRADES[target]
     branches = {rev.startswith(MODULES_PREFIX) for rev in plan}
     assert len(branches) == 1
+
+
+def _branch(revision: str) -> str:
+    return "modules" if revision.startswith(MODULES_PREFIX) else "core"
+
+
+@pytest.mark.regression
+def test_every_revision_above_the_oldest_target_has_an_entry():
+    """Each revision from a head down to its branch's oldest named target is
+    undone alone by a downgrade to its down revision, which the runbook or the
+    workflow's help names, so each of those down revisions has an entry, and
+    nothing older does.
+
+    The test above checks only the entries that exist: without this one, a
+    deleted entry, or a new revision whose own down revision was not added,
+    left the file green. In a core tree only the core branch is checked."""
+    script = _script()
+    checked = set()
+    for head in script.get_heads():
+        branch = _branch(head)
+        oldest = OLDEST_TARGET[branch]
+        expected = []
+        revision = script.get_revision(head)
+        while True:
+            down = revision.down_revision
+            assert isinstance(down, str), f"{revision.revision} has down {down!r}"
+            expected.append(down)
+            if down == oldest:
+                break
+            revision = script.get_revision(down)
+        listed = [t for t in NAMED_DOWNGRADES if _branch(t) == branch]
+        missing = [t for t in expected if t not in NAMED_DOWNGRADES]
+        extra = sorted(set(listed) - set(expected))
+        assert (missing, extra) == ([], []), f"{branch}: missing, extra"
+        checked.add(branch)
+    assert "core" in checked
 
 
 @pytest.mark.regression
