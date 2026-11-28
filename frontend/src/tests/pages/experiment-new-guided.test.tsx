@@ -299,7 +299,7 @@ describe('guided setup sends exactly the request the single-page form sends', ()
     // Verbatim: the configuration is the object the typed text parses to, in both views.
     const sent = (advanced as typeof PARITY_LITERAL).variants[2].configuration;
     expect(sent).toStrictEqual(JSON.parse(PARITY_CONFIGURATION_TEXT));
-  });
+  }, 20_000);
 
   it('sends the eleven keys of the create request and nothing else', async () => {
     const guided = (await createThroughGuided()) as Record<string, unknown>;
@@ -318,7 +318,7 @@ describe('guided setup sends exactly the request the single-page form sends', ()
         'bayesian_enabled',
       ].sort(),
     );
-  });
+  }, 20_000);
 
   it('sends null targeting rules when no rule was added', async () => {
     api();

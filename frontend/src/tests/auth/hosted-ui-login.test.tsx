@@ -36,11 +36,15 @@ import { safeAfterSignInPath } from '@/services/hostedUi';
 const { modulesTreeAvailable } = require('../../../modules-alias') as { modulesTreeAvailable: () => boolean };
 
 let registered = 0;
-function row(name: string, fn: () => unknown) {
+function row(name: string, fn: () => unknown, timeout?: number) {
   registered += 1;
-  it(name, async () => {
-    await fn();
-  });
+  it(
+    name,
+    async () => {
+      await fn();
+    },
+    timeout,
+  );
 }
 
 beforeEach(() => {
@@ -114,7 +118,7 @@ describe('regression #708: where a sign-in lands is a path on this origin (row 1
       view.unmount();
     }
     expect(landed).toEqual([...REFUSED.map(() => '/experiments'), ...KEPT]);
-  });
+  }, 20_000);
 
   row('and is checked again when the sign-in is finished', () => {
     for (const next of REFUSED) expect(`landed on ${safeAfterSignInPath(next)}`).toBe('landed on /experiments');

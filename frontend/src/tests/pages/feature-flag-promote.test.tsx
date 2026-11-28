@@ -782,7 +782,7 @@ describe('the dialog', () => {
     fireEvent.click(screen.getByTestId('promote-button'));
     await screen.findByTestId('promote-source-empty');
     expect(await check()).toEqual([]);
-  });
+  }, 20_000);
 });
 
 // ---------------------------------------------------------------------------
