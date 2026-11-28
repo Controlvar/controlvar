@@ -5,7 +5,7 @@ document = "docs/guides/segments.md"
 
 [[unit]]
 text = "Segments"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "A segment is a named group of users."
@@ -21,7 +21,7 @@ by = ["test:backend/tests/integration/api/test_segment_members_api.py::test_kind
 
 [[unit]]
 text = "The rule format and its limits are in the API reference."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "ID list (kind: id_list): the users whose user_id you upload, for example a customer export."
@@ -32,7 +32,7 @@ by = [
 
 [[unit]]
 text = "This page is about these."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "The member routes are beta (x-stability: beta): their shape may still change."
@@ -40,7 +40,7 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 
 [[unit]]
 text = "The full contract and every refusal are in the API reference."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "The examples run against the Quick Start stack and its demo data."
@@ -48,7 +48,7 @@ by = ["docex:docs/guides/segments.md#\"ADMIN\""]
 
 [[unit]]
 text = "Sign in"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Changing a segment takes the experiment permissions, which the ADMIN and DEVELOPER roles have; in the full profile a custom role or direct grant can give them too."
@@ -62,15 +62,15 @@ by = [
 
 [[unit]]
 text = "Sign in as the demo administrator:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "It prints \"ADMIN\"."
-by = ["exempt:baseline"]
+by = ["docex:docs/guides/segments.md#\"ADMIN\""]
 
 [[unit]]
 text = "Create an ID-list segment"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "An ID-list segment has no rules."
@@ -78,7 +78,7 @@ by = ["docex:docs/guides/segments.md#{\"kind\":\"id_list\",\"rules\":null,\"memb
 
 [[unit]]
 text = "This creates one and saves its id in $SEGMENT:"
-by = ["exempt:baseline"]
+by = ["docex:docs/guides/segments.md#{\"kind\":\"id_list\",\"rules\":null,\"member_count\":0}"]
 
 [[unit]]
 text = "It prints {\"kind\":\"id_list\",\"rules\":null,\"member_count\":0}."
@@ -86,7 +86,7 @@ by = ["docex:docs/guides/segments.md#{\"kind\":\"id_list\",\"rules\":null,\"memb
 
 [[unit]]
 text = "Add IDs"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Send up to 10,000 IDs per request."
@@ -122,11 +122,11 @@ by = [
 
 [[unit]]
 text = "It prints {\"added\":1,\"already_members\":1,\"member_count\":4}."
-by = ["exempt:baseline"]
+by = ["docex:docs/guides/segments.md#{\"added\":1,\"already_members\":1,\"member_count\":4}"]
 
 [[unit]]
 text = "Add IDs from a file"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "A segment holds at most 1,000,000 IDs."
@@ -134,15 +134,15 @@ by = ["test:backend/tests/integration/api/test_flag_guide_behaviour.py::test_a_s
 
 [[unit]]
 text = "Send a longer file in chunks of 10,000, one request at a time, and stop at the first error."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "This writes 25,000 IDs, one per line, to a file in a scratch directory, sends them in three chunks and prints each answer."
-by = ["exempt:baseline"]
+by = ["docex:docs/guides/segments.md#\"member_count\":25004"]
 
 [[unit]]
 text = "Each body is piped to curl (--data-binary @-): 10,000 IDs are too long for one command-line argument on Linux."
-by = ["exempt:baseline"]
+by = ["exempt:third-party"]
 
 [[unit]]
 text = "It prints one line per chunk."
@@ -154,7 +154,7 @@ by = ["docex:docs/guides/segments.md#\"member_count\":25004"]
 
 [[unit]]
 text = "The file's IDs are written cust-000001 to cust-025000, so none of them was in the segment before (cust-001 is a different ID)."
-by = ["exempt:baseline"]
+by = ["exempt:example"]
 
 [[unit]]
 text = "A request over a limit answers 422 and adds nothing."
@@ -173,7 +173,7 @@ by = [
 
 [[unit]]
 text = "Check a user"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "A user is a member when the user_id in the context you send is in the list:"
@@ -184,7 +184,7 @@ by = [
 
 [[unit]]
 text = "It prints true."
-by = ["exempt:baseline"]
+by = ["docex:docs/guides/segments.md#true"]
 
 [[unit]]
 text = "A user_id that is not in the list, or a context with no user_id, prints false."
@@ -192,7 +192,7 @@ by = ["test:backend/tests/integration/api/test_segment_members_api.py::test_eval
 
 [[unit]]
 text = "Remove IDs"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "It prints {\"removed\":1,\"not_members\":1,\"member_count\":25003}: cust-999 was not a member."
@@ -200,7 +200,7 @@ by = ["docex:docs/guides/segments.md#{\"removed\":1,\"not_members\":1,\"member_c
 
 [[unit]]
 text = "Target a flag or an experiment at a segment"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "A targeting condition names the segment by id: {\"attribute\": \"segment\", \"operator\": \"in_segment\", \"value\": \"<segment id>\"}, or not_in_segment for everyone else."
@@ -211,7 +211,7 @@ by = [
 
 [[unit]]
 text = "This creates a flag that is on only for the segment's members (its rollout outside the segment is 0%):"
-by = ["exempt:baseline"]
+by = ["docex:docs/guides/segments.md#active"]
 
 [[unit]]
 text = "It prints active."
@@ -229,7 +229,7 @@ by = [
 
 [[unit]]
 text = "cust-001 is in the list and cust-999 is not:"
-by = ["exempt:baseline"]
+by = ["docex:docs/guides/segments.md#cust-001 {\"enabled\":true,\"reason\":\"targeting_rule\"}"]
 
 [[unit]]
 text = "It prints one line per user: cust-001 gets {\"enabled\":true,\"reason\":\"targeting_rule\"}, and cust-999 falls through to the 0% rollout, {\"enabled\":false,\"reason\":\"rollout\"}."
@@ -292,7 +292,7 @@ by = ["test:backend/tests/unit/services/test_sdk_ruleset_vectors.py::test_segmen
 
 [[unit]]
 text = "The full rule is in the API reference."
-by = ["exempt:baseline"]
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Read an experiment's results for the list"
@@ -315,7 +315,7 @@ by = ["test:frontend/src/tests/pages/results-saved-segment.test.tsx::F2, F8: cho
 
 [[unit]]
 text = "Archive a segment"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "An archived list still filters an experiment's results, and its IDs cannot change while it stays archived."
@@ -348,7 +348,7 @@ by = [
 
 [[unit]]
 text = "It prints {\"code\":\"segment_in_use\",\"flags\":1}."
-by = ["exempt:baseline"]
+by = ["docex:docs/guides/segments.md#{\"code\":\"segment_in_use\",\"flags\":1}"]
 
 [[unit]]
 text = "The full answer is {\"detail\": {\"code\": \"segment_in_use\", \"message\", \"feature_flags\": [{\"id\", \"key\", \"name\"}], \"experiments\": [{\"id\", \"key\", \"name\", \"status\"}]}}."
@@ -356,7 +356,7 @@ by = ["test:backend/tests/integration/api/test_segment_in_use.py::test_a_disable
 
 [[unit]]
 text = "Remove the segment from those rules, or archive the flag, then archive the segment."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "A flag whose staging or development rules (beta) use the segment is listed too, with environments, every environment whose rules do."
@@ -364,11 +364,11 @@ by = ["test:backend/tests/integration/api/test_flag_environments_api.py::test_a_
 
 [[unit]]
 text = "Limits"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Limit | Value"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "IDs per request | 1 to 10,000"
