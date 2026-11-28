@@ -964,6 +964,20 @@ MECHANISMS: Dict[str, Mechanism] = {
             ),
         ),
     ),
+    # The Python README's Constructor line: every parameter of __init__, with its default.
+    "python-readme-constructor": Mechanism(
+        "sdk/python/tests/test_readme.py::test_the_constructor_line_names_every_parameter_and_default",
+        holds=(("sdk/python/README.md", r"^Constructor: ExperimentationClient\("),),
+    ),
+    # The contract-smoke "Env:" paragraph: every variable the smoke reads is named in it, and no
+    # other (the names only; each default has its own test).
+    "sdk-readme-smoke-env": Mechanism(
+        "tests/sdk-contract/test_readme_smoke_env.py::test_the_readme_lists_the_variables_the_smoke_reads",
+        holds=(
+            ("sdk/js/README.md", r"^Env: CONTROLVAR_API_URL "),
+            ("sdk/python/README.md", r"^Env: CONTROLVAR_API_URL "),
+        ),
+    ),
     # Which warehouses the page says are available.
     "warehouse-availability": Mechanism(
         "modules/backend/tests/unit/test_warehouse_docs_availability.py"

@@ -283,7 +283,8 @@ node — no DOM, no React render. `exposure` is what the `onExposure` of a new `
 received over two assignments of the smoke's user. Env: `CONTROLVAR_API_URL` (default `http://localhost:8000`),
 `CONTROLVAR_API_KEY` (required), `CONTRACT_EXPERIMENT_KEY` (default `sdk_contract_ab`),
 `CONTRACT_FLAG_KEY` (default `sdk_contract_flag`), `CONTRACT_USER_ID` (default random
-`smoke-<uuid>`). Repo-wide runner:
+`smoke-<uuid>`), `CONTRACT_MULTIWAY_USERS` (comma-separated users of the multi-way flag; the live
+runner sets it). Repo-wide runner:
 `python tests/sdk-contract/live/run_live_contract.py --sdk react`.
 
 `trackEvent` never throws, so the smoke wraps `fetch` and fails when a tracking call did not come

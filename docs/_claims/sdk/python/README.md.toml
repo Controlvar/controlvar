@@ -268,8 +268,11 @@ text = "Set CONTROLVAR_API_KEY to an API key, then run the block as it is; the t
 by = ["mechanism:python-readme-quick-start"]
 
 [[unit]]
-text = "Constructor: ExperimentationClient(api_url, api_key, timeout_seconds=5.0, cache_ttl_seconds=300, default_variant=\"control\", transport=None)."
-by = ["test:sdk/python/tests/test_client.py::TestConstruction::test_defaults_and_trailing_slash"]
+text = "Constructor: ExperimentationClient(api_url, api_key, timeout_seconds=5.0, cache_ttl_seconds=300, default_variant=\"control\", transport=None, evaluation=\"server\", refresh_interval_seconds=30.0, max_stale_seconds=None, on_error=None, on_exposure=None)."
+by = [
+    "test:sdk/python/tests/test_client.py::TestConstruction::test_defaults_and_trailing_slash",
+    "mechanism:python-readme-constructor",
+]
 
 [[unit]]
 text = "Instances are thread-safe."
@@ -705,8 +708,10 @@ text = "It prints:"
 by = ["test:sdk/python/tests/test_contract_smoke.py::test_it_runs_from_the_source_tree_with_its_defaults"]
 
 [[unit]]
-text = "Env: CONTROLVAR_API_URL (default http://localhost:8000), CONTROLVAR_API_KEY (required), CONTRACT_EXPERIMENT_KEY (default sdk_contract_ab), CONTRACT_FLAG_KEY (default sdk_contract_flag), CONTRACT_USER_ID (default random smoke-<uuid>)."
+text = "Env: CONTROLVAR_API_URL (default http://localhost:8000), CONTROLVAR_API_KEY (required), CONTRACT_EXPERIMENT_KEY (default sdk_contract_ab), CONTRACT_FLAG_KEY (default sdk_contract_flag), CONTRACT_TARGETED_FLAG_KEY (default sdk_contract_targeted), CONTRACT_USER_ID (default random smoke-<uuid>), CONTROLVAR_LOCAL_API_KEY (optional: a key with the sdk:ruleset scope; with it the smoke also links two ids with alias)."
 by = [
+    "mechanism:sdk-readme-smoke-env",
+    "test:sdk/python/tests/test_contract_smoke.py::test_with_the_sdk_ruleset_key_it_links_two_new_ids_on_one_new_client_and_reports_them",
     "test:sdk/python/tests/test_contract_smoke.py::test_it_runs_from_the_source_tree_with_its_defaults",
     "test:sdk/python/tests/test_contract_smoke.py::test_it_runs_the_four_contract_steps",
     "test:sdk/python/tests/test_contract_smoke.py::test_it_stops_without_a_key",
