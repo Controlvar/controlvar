@@ -38,7 +38,7 @@ The `Frontend Tests` CI check runs the first four. Playwright journeys live in
 
 ## Structure
 
-```
+```text
 src/
 ├── pages/            # one file per route: experiments/, feature-flags/, results/, admin/, login.tsx
 ├── components/       # AppShell (nav, user menu), RequireAuth, PageTitle, feature components

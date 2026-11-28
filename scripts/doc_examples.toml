@@ -523,16 +523,16 @@ path = "deploy/compose/README.md"
 reason = "starts and upgrades the production stack on a Docker host: compose-production boots this directory's files, and its compose-upgrade job (scripts/compose_upgrade.sh) runs the marked blocks"
 
 [pending]
-"backend/lambda/README.md" = { comments = 0, unlabelled = 1, syntax = 0 }
-"backend/lambda/event_processor/README.md" = { comments = 0, unlabelled = 1, syntax = 0 }
+"backend/lambda/README.md" = { comments = 0, unlabelled = 0, syntax = 0 }
+"backend/lambda/event_processor/README.md" = { comments = 0, unlabelled = 0, syntax = 0 }
 "docs/deployment/README.md" = { comments = 0, unlabelled = 0, syntax = 0 }
-"docs/deployment/deployment-guide.md" = { comments = 0, unlabelled = 1, syntax = 2 }
+"docs/deployment/deployment-guide.md" = { comments = 0, unlabelled = 0, syntax = 2 }
 "docs/deployment/disaster-recovery.md" = { comments = 0, unlabelled = 0, syntax = 0 }
-"docs/deployment/iam-permissions.md" = { comments = 0, unlabelled = 1, syntax = 1 }
+"docs/deployment/iam-permissions.md" = { comments = 0, unlabelled = 0, syntax = 1 }
 "docs/deployment/rollback-runbook.md" = { comments = 0, unlabelled = 1, syntax = 0 }
 "docs/deployment/secrets-management.md" = { comments = 0, unlabelled = 0, syntax = 0 }
 "docs/getting-started/pre-commit-hooks.md" = { comments = 0, unlabelled = 0, syntax = 0 }
-"docs/getting-started/python-virtual-env-setup.md" = { comments = 0, unlabelled = 1, syntax = 0 }
+"docs/getting-started/python-virtual-env-setup.md" = { comments = 0, unlabelled = 0, syntax = 0 }
 "docs/getting-started/vscode-settings.md" = { comments = 0, unlabelled = 0, syntax = 0 }
 "docs/integrations/aws.md" = { comments = 0, unlabelled = 0, syntax = 0 }
 "docs/sdk-guide.md" = { comments = 0, unlabelled = 0, syntax = 0 }
@@ -544,20 +544,20 @@ reason = "starts and upgrades the production stack on a Docker host: compose-pro
 "docs/sdk/go.md" = { comments = 0, unlabelled = 0, syntax = 0 }
 "docs/sdk/ios.md" = { comments = 0, unlabelled = 0, syntax = 0 }
 "docs/sdk/java.md" = { comments = 0, unlabelled = 0, syntax = 0 }
-"docs/sdk/javascript.md" = { comments = 0, unlabelled = 1, syntax = 0 }
-"docs/sdk/openfeature.md" = { comments = 0, unlabelled = 2, syntax = 0 }
+"docs/sdk/javascript.md" = { comments = 0, unlabelled = 0, syntax = 0 }
+"docs/sdk/openfeature.md" = { comments = 0, unlabelled = 0, syntax = 0 }
 "docs/sdk/php.md" = { comments = 0, unlabelled = 0, syntax = 0 }
 "docs/sdk/python.md" = { comments = 0, unlabelled = 0, syntax = 0 }
-"docs/sdk/react-native.md" = { comments = 0, unlabelled = 1, syntax = 0 }
+"docs/sdk/react-native.md" = { comments = 0, unlabelled = 0, syntax = 0 }
 "docs/sdk/react.md" = { comments = 0, unlabelled = 0, syntax = 0 }
 "docs/sdk/ruby.md" = { comments = 0, unlabelled = 0, syntax = 0 }
-"docs/self-hosting/cdk.md" = { comments = 0, unlabelled = 1, syntax = 3 }
+"docs/self-hosting/cdk.md" = { comments = 0, unlabelled = 0, syntax = 3 }
 "docs/self-hosting/monitoring.md" = { comments = 0, unlabelled = 0, syntax = 0 }
-"frontend/README.md" = { comments = 0, unlabelled = 1, syntax = 0 }
+"frontend/README.md" = { comments = 0, unlabelled = 0, syntax = 0 }
 "sdk/android/README.md" = { comments = 0, unlabelled = 0, syntax = 0 }
-"sdk/dotnet/README.md" = { comments = 0, unlabelled = 2, syntax = 0 }
+"sdk/dotnet/README.md" = { comments = 0, unlabelled = 0, syntax = 0 }
 "sdk/edge/README.md" = { comments = 0, unlabelled = 0, syntax = 0 }
-"sdk/elixir/README.md" = { comments = 0, unlabelled = 1, syntax = 0 }
+"sdk/elixir/README.md" = { comments = 0, unlabelled = 0, syntax = 0 }
 "sdk/flutter/README.md" = { comments = 0, unlabelled = 0, syntax = 0 }
 "sdk/go/README.md" = { comments = 0, unlabelled = 0, syntax = 0 }
 "sdk/ios/README.md" = { comments = 0, unlabelled = 0, syntax = 0 }

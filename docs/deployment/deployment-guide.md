@@ -614,7 +614,7 @@ desired.
 
 ## 6. Deployment Architecture
 
-```
+```text
 Actions → Deploy (from main; environment = staging | prod)
   preflight   no credentials: ref, profile, tag on main, Release Gate
   deploy      one approval, then:

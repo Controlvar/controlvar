@@ -462,7 +462,7 @@ event, or a targeting context over 8,192 bytes or 10 levels deep; 429 rate limit
 (`tests/sdk-contract/golden-vectors.json`) and custom integrations can verify parity, but
 **nothing in the SDK calls it to pick a variant** — the server decides.
 
-```
+```text
 MD5("{userId}:{flagKey}") → first 4 bytes as little-endian uint32 → ÷ 2^32 (4294967296)
 ```
 

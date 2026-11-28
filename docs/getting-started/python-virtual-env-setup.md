@@ -7,7 +7,7 @@ This guide outlines how to set up and configure a Python virtual environment for
 The `requirements/` directory already exists — you do not create it. It holds
 four *profiles*, and every one of them resolves to the same pins:
 
-```
+```text
 requirements/
 ├── base.txt     # one line: -r ../backend/requirements.txt
 ├── dev.txt      # base + ipython, debugpy

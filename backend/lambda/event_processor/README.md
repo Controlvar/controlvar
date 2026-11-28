@@ -10,7 +10,7 @@ The Event Processor Lambda is a serverless function that processes events from K
 
 ### Processing Pipeline
 
-```
+```text
 Kinesis → Parse → Validate → Enrich → Aggregate → Archive → Response
 ```
 

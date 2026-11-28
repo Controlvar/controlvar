@@ -481,7 +481,7 @@ more:
 
 The first line the app prints says which profile it picked:
 
-```
+```text
 [cdk] profile: full (modules/infrastructure/cdk/stacks present)
 ```
 

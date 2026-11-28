@@ -453,7 +453,7 @@ byte-for-byte parity, but **neither provider uses it to decide a flag or a varia
 does. It is exposed as `provider.hashUser(userId, flagKey)` (TypeScript, delegating to the JS
 SDK's `consistentHash`) and by the Python SDK's hashing helper.
 
-```
+```text
 input  = "{userId}:{flagKey}"  (UTF-8)
 digest = MD5(input)
 uint32 = first 4 bytes of digest, little-endian unsigned 32-bit int
@@ -462,7 +462,7 @@ hash   = uint32 / 2^32         ∈ [0.0, 1.0)      (divisor 4294967296, not 4294
 
 **Test vector** (all SDKs produce this value):
 
-```
+```text
 hash_user("user-123", "my-flag") ≈ 0.6927449859
   MD5("user-123:my-flag") = 43bc57b1e81dec71c5242122ac05170f
   First 4 bytes LE → uint32 = 2975317059

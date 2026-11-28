@@ -530,7 +530,7 @@ exported too.
 `consistentHash(userId, flagKey)`, `md5Hex(input)` and `md5Bytes(input)` are exported so the
 cross-SDK golden-vector tests and custom integrations can verify parity:
 
-```
+```text
 MD5("{userId}:{flagKey}") → first 4 bytes as little-endian uint32 → ÷ 2^32 (4294967296)
 consistentHash('user-123', 'my-flag') ≈ 0.6927449859
 ```
