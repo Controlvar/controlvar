@@ -5,11 +5,11 @@ document = "docs/performance/load-testing.md"
 
 [[unit]]
 text = "Load Testing — Controlvar"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Overview"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "p50, p95, and p99 response times are at or below the target thresholds"
@@ -24,19 +24,21 @@ by = [
 
 [[unit]]
 text = "Running Load Tests Locally"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Prerequisites"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Run every command from the repository root, in the development virtual environment that Python Virtual Environment Setup makes:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "The Quick Start stack is all three."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_default_stack_is_postgres_redis_the_api_and_the_dashboard",
+]
 
 [[unit]]
 text = "With make db instead (PostgreSQL and Redis only), start the API from the checkout, in a separate terminal:"
@@ -63,7 +65,7 @@ by = ["docex:docs/performance/load-testing.md#sdk_contract_ab"]
 
 [[unit]]
 text = "Rate limits"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "An API in the development environment, which is what the Quick Start stack and the command above run, answers 429 to an address that passes a route's rate limit: 6000 requests a minute for each SDK route (/api/v1/tracking/, /api/v1/feature-flags/evaluate/), counted per address and per path."
@@ -75,7 +77,7 @@ by = [
 
 [[unit]]
 text = "So against a development API, keep a run small and short, as Option B does."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "For a real load, run the API in the test environment, where rate limiting is off, as Option C's --start-server and the weekly workflow do."
@@ -86,19 +88,19 @@ by = [
 
 [[unit]]
 text = "Option A: Locust Web UI (interactive)"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Baseline test:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Spike test:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Endurance test:"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Then open http://localhost:8089 in your browser."
@@ -114,11 +116,13 @@ by = ["test:backend/tests/unit/scripts/test_load_test_runner_cli.py::test_the_we
 
 [[unit]]
 text = "Against a development API, the rate limits above apply."
-by = ["exempt:baseline"]
+by = [
+    "test:backend/tests/unit/scripts/test_load_test_runner_cli.py::test_a_development_api_answers_429_past_6000_requests_a_minute_on_an_sdk_route",
+]
 
 [[unit]]
 text = "Option B: Headless mode (no browser)"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Baseline, 10 users for 20 seconds, which stays under a development API's rate limits:"
@@ -141,7 +145,7 @@ by = ["test:backend/tests/unit/scripts/test_load_test_runner_cli.py::test_start_
 
 [[unit]]
 text = "Name the ones the seed wrote to:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "It ends with Every declared target recorded and no request failed; latency and throughput reported, not gated."
@@ -153,39 +157,39 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "Against a development API, keep the run small and short, as in Option B."
-by = ["exempt:baseline"]
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Adding Load Tests for New Endpoints"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "Add a @task method to the appropriate user class in api_load_test.py, in the form every task uses: with self.client.get(..., name=<the target's endpoint>, catch_response=True) as response: and expect(response, 200) from locustfiles/common.py."
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Trigger a CI baseline run to check that the new endpoint is recorded"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Running Unit Tests for the Load Test Framework"
-by = ["exempt:baseline"]
+by = ["exempt:label"]
 
 [[unit]]
 text = "In the development virtual environment, as above:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Test the SLA spec definitions:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Test the validators (percentile calculations, SLA checks, CSV parsing, reporting):"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Run both together:"
-by = ["exempt:baseline"]
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "They pass without a running database or API server."
