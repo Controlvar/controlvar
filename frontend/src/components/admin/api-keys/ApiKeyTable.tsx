@@ -231,7 +231,7 @@ export function ApiKeyTable({ onCreateKey, refreshToken = 0 }: ApiKeyTableProps)
       {!loading && error && (
         <div data-testid="api-key-error-state" className="p-8 text-center text-red-600">
           <p className="font-medium">Failed to load API keys</p>
-          <p className="text-sm mt-1 text-red-500">{error}</p>
+          <p className="text-sm mt-1 text-red-700">{error}</p>
         </div>
       )}
 

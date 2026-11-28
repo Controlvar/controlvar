@@ -28,7 +28,7 @@ export function ModuleNotice({ title, module, description }: ModuleNoticeProps) 
     >
       <PageTitle title={`${title} — module not installed`} />
       <div className="max-w-2xl mx-auto mt-12 rounded-lg border border-slate-200 bg-white p-8 text-center">
-        <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Module</p>
+        <p className="text-xs font-semibold uppercase tracking-wider text-slate-600">Module</p>
         <h1 className="mt-2 text-xl font-semibold text-slate-900">{title}</h1>
         <p className="mt-3 text-sm text-slate-600">{description}</p>
         <p className="mt-4 text-sm text-slate-500">
@@ -79,7 +79,7 @@ export function ModuleUnavailableNotice({
     >
       <PageTitle title={`${title} — unavailable`} />
       <div className="max-w-2xl mx-auto mt-12 rounded-lg border border-slate-200 bg-white p-8 text-center">
-        <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Module</p>
+        <p className="text-xs font-semibold uppercase tracking-wider text-slate-600">Module</p>
         <h1 className="mt-2 text-xl font-semibold text-slate-900">{title}</h1>
         <p className="mt-3 text-sm text-slate-600">{description}</p>
         <p className="mt-4 text-sm text-slate-500">

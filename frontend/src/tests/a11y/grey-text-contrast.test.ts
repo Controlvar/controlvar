@@ -17,6 +17,14 @@ const SRC = path.join(__dirname, '..', '..');
 
 const FILES = [
   'pages/login.tsx',
+  // The scheduler page and its cards, the stat tile, the users table's
+  // "No email", the module notice and the 403 page.
+  'pages/admin/scheduler.tsx',
+  'components/admin/scheduler/SchedulerStatusCard.tsx',
+  'components/admin/StatTile.tsx',
+  'components/admin/users/UserTable.tsx',
+  'components/ModuleNotice.tsx',
+  'components/RequireAuth.tsx',
   'pages/experiments/index.tsx',
   'pages/feature-flags/index.tsx',
   'pages/feature-flags/[id].tsx',
@@ -305,5 +313,25 @@ describe("the experiment page's schedule form", () => {
     expect(shades).toHaveLength(1);
     expect(shades[0][0]).toBe('green');
     expect(shades[0][1]).toBeGreaterThanOrEqual(700);
+  });
+});
+
+/**
+ * The admin pages' load-error line is small text on white: `red-500`
+ * (#ef4444) is 3.76:1, under the 4.5:1 it needs; `red-700` is 6.47:1.
+ */
+describe('the admin load-error lines', () => {
+  const ERROR_FILES = [
+    'components/admin/users/UserTable.tsx',
+    'components/admin/api-keys/ApiKeyTable.tsx',
+    'components/admin/audit/AuditLogTable.tsx',
+    'pages/admin/index.tsx',
+  ];
+
+  it.each(ERROR_FILES)('%s has no red-500 text', (file) => {
+    const source = fs.readFileSync(path.join(SRC, file), 'utf8');
+    expect(source.match(/\btext-red-500\b/g)).toBeNull();
+    // The pattern reads this file's reds: a file with none would pass vacuously.
+    expect(source).toMatch(/\btext-red-[6-9]00\b/);
   });
 });

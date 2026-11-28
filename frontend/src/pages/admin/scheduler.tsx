@@ -39,7 +39,7 @@ export function SchedulerHealthPage() {
       <div data-testid="scheduler-health-page" className="flex flex-col gap-5">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-semibold text-slate-900">Scheduler Health</h2>
-          <span className="text-xs text-slate-400">Auto-refreshes every 60 seconds</span>
+          <span className="text-xs text-slate-600">Auto-refreshes every 60 seconds</span>
         </div>
 
         {canTestSchedulerWebhook(user) && <SchedulerWebhookTest />}
