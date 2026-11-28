@@ -58,13 +58,13 @@ export function AdminSidebar({ currentPath }: AdminSidebarProps) {
   return (
     <aside
       data-testid="admin-sidebar"
-      className="w-56 flex-shrink-0 bg-white border-r border-slate-200 flex flex-col"
+      className="w-full md:w-56 flex-shrink-0 bg-white border-b md:border-b-0 md:border-r border-slate-200 flex flex-col"
     >
-      <div className="px-4 py-6">
-        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-4">
+      <div className="px-4 py-3 md:py-6">
+        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 md:mb-4">
           Navigation
         </p>
-        <nav className="space-y-1">
+        <nav className="flex flex-row flex-wrap gap-1 md:flex-col">
           {items.map((item) => {
             const isActive = currentPath === item.href;
             return (
@@ -72,6 +72,7 @@ export function AdminSidebar({ currentPath }: AdminSidebarProps) {
                 key={item.href}
                 href={item.href}
                 data-testid={item.testId}
+                aria-current={isActive ? 'page' : undefined}
                 className={[
                   'flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors',
                   isActive
