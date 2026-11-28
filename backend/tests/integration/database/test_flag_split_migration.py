@@ -138,7 +138,7 @@ RELEASED_CORE_HEAD = "t449_identity_aliases"
 #: The core head of this tree: ``t1934_metric_window`` (#1934), the revision
 #: after this one, whose downgrade drops ``metrics.conversion_window_hours``.
 CORE_HEAD = "t1934_metric_window"
-MODULES_HEAD = "modules_0005_redshift"
+MODULES_HEAD = "modules_0006_saml_requests"
 
 PREVIOUS_ROWS = {
     CORE: {PREVIOUS_CORE_HEAD},

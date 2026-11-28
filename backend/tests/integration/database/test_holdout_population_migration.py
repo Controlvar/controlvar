@@ -72,7 +72,7 @@ LATER_DOWNGRADE_TABLES = {
     "identity_aliases",
     "flag_environment_settings",
 }
-MODULES_HEAD = "modules_0005_redshift"
+MODULES_HEAD = "modules_0006_saml_requests"
 
 PREVIOUS_ROWS = {
     CORE: {PREVIOUS_CORE_HEAD},

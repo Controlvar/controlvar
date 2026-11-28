@@ -60,7 +60,7 @@ PREVIOUS_CORE_HEAD = "t1812_user_totp"
 #: the revision after this one, whose downgrade drops
 #: ``flag_environment_settings`` and ``api_keys.environment``.
 CORE_HEAD = "t1934_metric_window"
-MODULES_HEAD = "modules_0005_redshift"
+MODULES_HEAD = "modules_0006_saml_requests"
 #: Tables a later core revision's downgrade drops: a downgrade from the head to
 #: this test's target unapplies ``t2011_flag_environments`` and
 #: ``t2012_flag_split`` and ``t1934_metric_window`` too.

@@ -123,6 +123,7 @@ modules/backend/tests/integration/api/test_compliance_reports_api.py
 modules/backend/app/api/v1/endpoints/sso.py
 modules/backend/app/services/sso_service.py
 modules/backend/app/models/sso_config.py
+modules/backend/app/models/sso_saml_request.py
 modules/backend/tests/integration/api/test_sso_api.py
 modules/backend/tests/unit/services/test_sso_service.py
 
@@ -337,7 +338,7 @@ modules/frontend
 #
 # modules/backend/app/register.py is `modules.register(hooks)` (re-exported by
 # modules/__init__.py): it validates the modules' settings, registers the
-# nine model modules, installs the audit signer, mounts the eight routers
+# ten model modules, installs the audit signer, mounts the eight routers
 # behind authentication, registers the six capabilities and passes the ten
 # module names to hooks.register_modules(). modules/backend/app/settings.py
 # holds `ModulesSettings` -- the audit signing key, HIPAA, SSO, ETL and
@@ -382,13 +383,14 @@ modules/backend/tests/unit/warehouse
 
 # =============================================================================
 # MODULE TABLES — the boundary test asserts Base.metadata.tables ∩ MODULE_TABLES == ∅
-# after models/__init__.py stops importing the modules' models. 14 tables:
+# after models/__init__.py stops importing the modules' models. 15 tables:
 # =============================================================================
 #   workspaces
 #   workspace_members
 #   workspace_invites
 #   workspace_api_keys
 #   sso_configs
+#   sso_saml_requests
 #   custom_roles
 #   user_custom_roles
 #   direct_permission_grants

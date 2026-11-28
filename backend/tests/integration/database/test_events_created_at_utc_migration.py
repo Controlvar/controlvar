@@ -96,7 +96,7 @@ CORE_HEAD = "t1934_metric_window"
 #: The core head of the previous release (0.16.2), with ``d12cbd384bbe`` and
 #: ``a89544fb1075`` pending in front of this revision.
 RELEASED = "271f03a31742"
-MODULES_HEAD = "modules_0005_redshift"
+MODULES_HEAD = "modules_0006_saml_requests"
 WAREHOUSE_TABLES = {
     "warehouse_connections",
     "warehouse_sources",

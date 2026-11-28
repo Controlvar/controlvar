@@ -166,7 +166,7 @@ python -m alembic -c backend/app/db/alembic.ini heads
 ```
 
 It prints two, such as `<core head id> (head)` and
-`modules_0005_redshift (modules) (head)`.
+`modules_0006_saml_requests (modules) (head)`.
 The core head is the one without `(modules)`. Generate the revision on it, with your own
 message in place of `describe the change`:
 

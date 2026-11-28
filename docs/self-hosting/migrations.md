@@ -124,7 +124,7 @@ Output, for a full install (a core install prints the first line only):
 
 ```text
 t1934_metric_window (head)
-modules_0005_redshift (head)
+modules_0006_saml_requests (head)
 ```
 
 One line per head: the revision ID of the last migration applied on each
@@ -162,9 +162,10 @@ Roll back the most recent migration **of one branch**. With two heads a bare
 `-1` is ambiguous — alembic warns and picks one, which may not be the branch you
 meant — so name the branch:
 
-The modules branch has five revisions: `modules_0001_rbac`, then
+The modules branch has six revisions: `modules_0001_rbac`, then
 `modules_0002_warehouse_analysis`, then `modules_0003_lower_is_better`, then
-`modules_0004_rbac_activation`, then `modules_0005_redshift`. Name
+`modules_0004_rbac_activation`, then `modules_0005_redshift`, then
+`modules_0006_saml_requests`. Name
 the modules revision to end at rather than counting back: a relative step such
 as `modules@-2` counts from the newest revision the image has, so it unapplies
 a different revision once a release adds one.
@@ -178,10 +179,13 @@ docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrad
 docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrade modules_0001_rbac
 ```
 
-`downgrade modules_0004_rbac_activation` unapplies `modules_0005_redshift`
-only, which puts back the previous release's constraints on
-`warehouse_connections` and changes no row; it refuses while any Amazon
-Redshift connection is stored. `downgrade modules_0003_lower_is_better` also
+`downgrade modules_0005_redshift` unapplies `modules_0006_saml_requests`
+only, which drops the table `sso_saml_requests`, the SAML sign-ins in
+progress, and changes no other table. `downgrade modules_0004_rbac_activation`
+also unapplies `modules_0005_redshift`, which puts back the previous
+release's constraints on `warehouse_connections` and changes no row; it
+refuses while any Amazon Redshift connection is stored.
+`downgrade modules_0003_lower_is_better` also
 unapplies `modules_0004_rbac_activation`, which drops the column
 `activated_at` from `user_custom_roles` and `direct_permission_grants`, with
 any activation time stored in it. `downgrade modules_0002_warehouse_analysis`
@@ -189,7 +193,7 @@ also unapplies `modules_0003_lower_is_better`, which drops the column
 `warehouse_sources.lower_is_better`, every metric source's lower-is-better
 setting. `downgrade modules_0001_rbac` also unapplies
 `modules_0002_warehouse_analysis`, which drops the three warehouse tables it
-created, with their rows. `modules@-5` unapplies all five, newest first.
+created, with their rows. `modules@-6` unapplies all six, newest first.
 
 One step back on the core chain:
 
@@ -209,8 +213,8 @@ than from those migrations, their downgrade is a no-op — it will not drop
 populated tables it never made. `modules_0003_lower_is_better` drops its column
 on every database, however the column was made.
 `modules_0004_rbac_activation` drops its two columns on every database in the
-same way, and `modules_0005_redshift` puts back its three constraints on every
-database.
+same way, `modules_0005_redshift` puts back its three constraints on every
+database, and `modules_0006_saml_requests` drops its table on every database.
 
 ### `modules_0002_warehouse_analysis` removes saved warehouse connections
 
@@ -220,7 +224,8 @@ earlier `warehouse_connections` is deleted** — connections saved through the
 earlier warehouse endpoints — and nothing is copied into the new table.
 
 Downgrading it cannot bring those rows back: `downgrade modules_0001_rbac`
-first unapplies `modules_0005_redshift`, which refuses while any Amazon
+first unapplies `modules_0006_saml_requests`, which drops the table of SAML
+sign-ins in progress, `modules_0005_redshift`, which refuses while any Amazon
 Redshift connection is stored, `modules_0004_rbac_activation`, which drops the
 activation-time column of custom role assignments and direct grants, with any
 activation time stored in it, and `modules_0003_lower_is_better`, which drops
@@ -299,6 +304,17 @@ Amazon Redshift connection is stored, names them, and changes nothing:
 ```text
 modules_0005_redshift: refusing to downgrade: 1 warehouse connection(s) are Amazon Redshift connections (<id>). The previous release's warehouse_connections constraints refuse that type. Delete those connections, or restore the backup taken before the upgrade to this release. Nothing was changed.
 ```
+
+### `modules_0006_saml_requests` adds the table for SAML sign-ins in progress
+
+This revision adds the table `sso_saml_requests` and its index, and changes no
+other table. Nothing reads or writes the table yet. It has no foreign key, so
+creating it locks no existing table, and it bounds its one wait at 0.25 s.
+
+Downgrading this revision (to `modules_0005_redshift`) drops the table on
+every database, with any sign-in in progress, which must then be started
+again; no other table changes, and the previous release starts on the
+downgraded database. An upgrade afterwards creates the table empty.
 
 ### `1ab99332f0ba` rewrites stored event times to UTC
 
@@ -1027,11 +1043,15 @@ applied, and it is simply run again.
 
 If the upgrade to 0.49.0 stops with a lock-timeout message, re-run it: every
 revision runs in one transaction, so nothing was applied. While it runs, an SDK
-request can wait up to 3.5 seconds at most: the upgrade waits at most 3.5
-seconds in all for its locks, and SDK requests queue behind the `api_keys` lock,
-which `t2011_flag_environments` takes (at most 1.5 seconds to take) and the
-upgrade holds until it commits, through the waits of `t2012_flag_split` (at
-most 1 second) and `t1934_metric_window` (at most 0.5 seconds); a request that
+request can wait up to 3.75 seconds at most: the upgrade waits at most 3.75
+seconds in all for its locks (3.5 seconds on the core profile, whose upgrade
+does not run `modules_0006_saml_requests`; on the full profile that revision
+runs first, before `t2011_flag_environments` takes the `api_keys` lock, so no
+SDK request queues through its wait of at most 0.25 seconds), and SDK requests
+queue behind the `api_keys` lock, which `t2011_flag_environments` takes (at
+most 1.5 seconds to take) and the upgrade holds until it commits, through the
+waits of `t2012_flag_split` (at most 1 second) and `t1934_metric_window` (at
+most 0.5 seconds); a request that
 reads `feature_flags` during those waits queues behind them too, for at most
 1.5 seconds. An SDK whose timeout is shorter answers its fallback meanwhile (the edge SDK's default is
 500 ms, and it answers `enabled: false`).
@@ -1564,6 +1584,9 @@ What this means for you:
   [`modules_0005_redshift`](#modules_0005_redshift-lets-a-warehouse-connection-be-an-amazon-redshift-connection)
   is backward-compatible for a rollback too, and undoing it changes no row; it
   refuses while any Amazon Redshift connection is stored.
+  [`modules_0006_saml_requests`](#modules_0006_saml_requests-adds-the-table-for-saml-sign-ins-in-progress)
+  is backward-compatible for a rollback too, and undoing it drops the table of
+  SAML sign-ins in progress and changes no other table.
 - Compose runs one API container, which is the only writer and keeps `RUN_MIGRATIONS=true`.
   The chart already keeps the bootstrap out of the serving container: it runs
   it in an init container.

@@ -240,7 +240,7 @@ by = [
 ]
 
 [[unit]]
-text = "The fourteen module tables (workspaces, workspace_members, workspace_invites, workspace_api_keys, sso_configs, custom_roles, user_custom_roles, direct_permission_grants, baa_configs, phi_audit_logs, warehouse_connections, warehouse_sources, warehouse_analysis_runs, integration_configs) are not created."
+text = "The fifteen module tables (workspaces, workspace_members, workspace_invites, workspace_api_keys, sso_configs, sso_saml_requests, custom_roles, user_custom_roles, direct_permission_grants, baa_configs, phi_audit_logs, warehouse_connections, warehouse_sources, warehouse_analysis_runs, integration_configs) are not created."
 by = ["test:backend/tests/smoke/test_core_boundary.py::test_metadata_holds_no_module_table"]
 
 [[unit]]

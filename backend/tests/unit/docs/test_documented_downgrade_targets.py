@@ -300,6 +300,40 @@ def test_a_distant_or_partial_drop_word_does_not_announce_it(text):
     assert not announces(text, _DROPPING)
 
 
+#: The documented way back from ``modules_0006_saml_requests`` (#123): a
+#: downgrade to its parent, ``modules_0005_redshift``. Its downgrade drops its
+#: table with ``drop_table``, which :func:`drops_a_column` does not read, so the
+#: target and its announcement are asserted here by name.
+_SAML_REQUESTS = "modules_0006_saml_requests"
+_SAML_REQUESTS_PARENT = "modules_0005_redshift"
+#: The documents that give that target, each where it names it.
+_SAML_REQUESTS_DOCUMENTS = ("migrations.md", "rollback-runbook.md")
+
+
+def test_the_documented_way_back_from_modules_0006_unapplies_it_alone_and_says_so():
+    """Both documents name ``downgrade modules_0005_redshift``, and the part
+    that names it says ``modules_0006_saml_requests``'s downgrade drops its
+    table; alembic's planner unapplies that revision and nothing else from the
+    current heads. ``test_modules_0006_transitions.py`` runs the downgrade and
+    starts the previous release on the result. A core tree has neither
+    revision, so only the documents are read there."""
+    found = [m for m in mentions() if m.target == _SAML_REQUESTS_PARENT]
+    for source in _SAML_REQUESTS_DOCUMENTS:
+        named = [m for m in found if m.source == source]
+        assert named, f"{source} names no downgrade to {_SAML_REQUESTS_PARENT}"
+        assert any(announces(m.context, _SAML_REQUESTS) for m in named), (
+            f"{source} names downgrade {_SAML_REQUESTS_PARENT} without saying "
+            f"that {_SAML_REQUESTS}'s downgrade drops its table"
+        )
+    script = _script()
+    known = {r.revision for r in script.walk_revisions()}
+    if _SAML_REQUESTS in known:
+        assert unapplied(script, _SAML_REQUESTS_PARENT) == [_SAML_REQUESTS]
+        assert script.get_revision(_SAML_REQUESTS).down_revision == (
+            _SAML_REQUESTS_PARENT
+        )
+
+
 def test_no_documented_target_crosses_a_column_dropping_downgrade_unannounced():
     problems = unannounced_crossings(mentions())
     assert problems == {}, (

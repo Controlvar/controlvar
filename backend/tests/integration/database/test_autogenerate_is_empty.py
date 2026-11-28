@@ -48,7 +48,7 @@ BOTH_PROFILES = [CORE, pytest.param(FULL, marks=pytest.mark.modules)]
 
 #: How many module tables a full-profile schema holds
 #: (``autogenerate_filters.MODULE_TABLES``, pinned to the manifest).
-MODULE_TABLE_COUNT = 14
+MODULE_TABLE_COUNT = 15
 
 
 @pytest.fixture

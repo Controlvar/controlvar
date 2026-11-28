@@ -103,7 +103,7 @@ FLAG_ENVIRONMENTS = "t2011_flag_environments"
 RELEASED_CORE_HEAD = "t449_identity_aliases"
 #: The core head of this tree.
 CORE_HEAD = "t1934_metric_window"
-MODULES_HEAD = "modules_0005_redshift"
+MODULES_HEAD = "modules_0006_saml_requests"
 
 PREVIOUS_ROWS = {
     CORE: {PREVIOUS_CORE_HEAD},

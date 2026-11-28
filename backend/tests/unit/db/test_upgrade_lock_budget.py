@@ -72,8 +72,11 @@ class Release:
 #: of ``'1s'``, one for ``feature_flags`` and one for the table
 #: ``t2011_flag_environments`` created, 1 s in all; then
 #: ``t1934_metric_window``, which has one block of ``'500ms'``, for
-#: ``metrics``, 0.5 s. 0.49.0's sum is 3.5 s (+0.5 s for
-#: ``t1934_metric_window``, from 3 s). From a database already at
+#: ``metrics``, 0.5 s; and, where the modules branch exists,
+#: ``modules_0006_saml_requests``, whose one block of ``'250ms'`` bounds the
+#: same wait as ``t449_identity_aliases``'s, 0.25 s. 0.49.0's sum is 3.75 s
+#: (+0.25 s for ``modules_0006_saml_requests``, from 3.5 s). From a database
+#: already at
 #: ``t2011_flag_environments`` (an install from ``main``, which no release
 #: left) both of ``t2012_flag_split``'s blocks can wait, 2 s in all. A tuple of
 #: records, not a dict keyed by release:
@@ -86,7 +89,8 @@ RELEASES: Tuple[Release, ...] = (
         declared={"t449_identity_aliases": 0.25},
     ),
     # t2011: 500 ms on feature_flags, then 1500 ms on api_keys. t2012: 1 s on
-    # feature_flags. t1934: 500 ms on metrics.
+    # feature_flags. t1934: 500 ms on metrics. modules_0006: 250 ms on the
+    # creation of its own table.
     Release(
         name="0.49.0",
         start_heads=("t449_identity_aliases", "modules_0005_redshift"),
@@ -94,6 +98,7 @@ RELEASES: Tuple[Release, ...] = (
             "t2011_flag_environments": 2,
             "t2012_flag_split": 1,
             "t1934_metric_window": 0.5,
+            "modules_0006_saml_requests": 0.25,
         },
     ),
 )
@@ -220,27 +225,38 @@ def test_0_48_0_runs_t449_alone_from_0_47_0_and_declares_a_quarter_second():
     assert entry.declared == {"t449_identity_aliases": 0.25}
 
 
-def test_0_49_0_starts_at_0_48_0s_released_heads_and_declares_three_and_a_half_seconds():
+def test_0_49_0_starts_at_0_48_0s_released_heads_and_declares_three_and_three_quarter_seconds():
     """0.48.0's walk now ends at 0.48.0's released heads, which shipped in
     v0.48.0 (``t449_identity_aliases`` and, where the modules branch exists,
     ``modules_0005_redshift``), and 0.49.0's starts there. In both profiles
     0.49.0's upgrade runs ``t2011_flag_environments``, which declares 2 s,
     ``t2012_flag_split``, which declares 1 s, and ``t1934_metric_window``, which
-    declares 0.5 s: 3.5 s, 0.5 s more than the 3 s before it."""
+    declares 0.5 s; where the modules branch exists it also runs
+    ``modules_0006_saml_requests``, which declares 0.25 s: 3.75 s, 0.25 s more
+    than the 3.5 s before it, under the 4 s cap. alembic runs that revision
+    first, before ``t2011_flag_environments`` takes the ``api_keys`` lock, so
+    no SDK request queues through its wait (the migrations page says so)."""
     entry = release("0.49.0")
     assert entry.start_heads == ("t449_identity_aliases", "modules_0005_redshift")
     assert end_heads("0.48.0") == entry.start_heads
-    assert walk(_script(), entry, end_heads("0.49.0")) == [
-        "t1934_metric_window",
-        "t2011_flag_environments",
-        "t2012_flag_split",
-    ]
+    core = ["t1934_metric_window", "t2011_flag_environments", "t2012_flag_split"]
+    full = (REPO_ROOT / "modules").is_dir()
+    expected = sorted(core + ["modules_0006_saml_requests"]) if full else core
+    assert walk(_script(), entry, end_heads("0.49.0")) == expected
     assert entry.declared == {
         "t2011_flag_environments": 2,
         "t2012_flag_split": 1,
         "t1934_metric_window": 0.5,
+        "modules_0006_saml_requests": 0.25,
     }
-    assert sum(entry.declared.values()) == 3.5
+    assert sum(entry.declared.values()) == 3.75
+    assert CAP_SECONDS == 4.0
+    if full:
+        order = [
+            step.revision.revision
+            for step in _script()._upgrade_revs("heads", entry.start_heads)
+        ]
+        assert order[0] == "modules_0006_saml_requests", order
 
 
 def test_a_declared_bound_is_a_positive_number_or_zero():

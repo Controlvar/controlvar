@@ -70,7 +70,7 @@ def test_it_extends_t2012_flag_split_and_fits_the_version_table():
 def test_the_heads_are_this_revision_and_in_a_full_tree_the_modules_head():
     expected = {REVISION}
     if (REPO_ROOT / "modules").is_dir():
-        expected.add("modules_0005_redshift")
+        expected.add("modules_0006_saml_requests")
     assert set(_script().get_heads()) == expected
 
 

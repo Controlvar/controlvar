@@ -87,12 +87,12 @@ class TestModulesRegistration:
     def test_the_modules_package_registers_everything(self, fresh_hooks):
         """`modules/__init__.py` re-exports `register` from
         modules/backend/app/register.py; one call installs the signer, the
-        nine model modules, the six capabilities, the tags and the ten
+        ten model modules, the six capabilities, the tags and the ten
         module names."""
         assert modules_loader.load_modules(force=True) is True
 
         assert type(hooks.audit_signer).__name__ == "AuditSigningService"
-        assert len(hooks.import_registered_models()) == 9
+        assert len(hooks.import_registered_models()) == 10
         assert set(hooks.capability_names()) == {
             "compliance.export",
             "compliance.report",
@@ -179,10 +179,10 @@ class TestModulesRegistration:
         assert modules_loader.load_modules(force=True) is True
         assert modules_loader.load_modules() is True
         assert modules_loader.load_modules(force=True) is True
-        # Registries de-duplicate: one registrar, nine modules, no repeats.
+        # Registries de-duplicate: one registrar, ten modules, no repeats.
         with hooks._lock:
             assert len(hooks._router_registrars) == 1
-            assert len(hooks._model_modules) == 9
+            assert len(hooks._model_modules) == 10
         assert len(hooks.installed_modules()) == len(hooks.KNOWN_MODULES)
 
 
@@ -777,7 +777,7 @@ class TestSchemaOnlyRegistration:
         assert modules_loader.require_modules_or_absent() is True
 
         # Everything that decides what the schema is.
-        assert len(hooks.import_registered_models()) == 9
+        assert len(hooks.import_registered_models()) == 10
         assert len(Base.metadata.tables) >= before
         assert type(hooks.audit_signer).__name__ == "AuditSigningService"
         # And nothing that only a router needs.

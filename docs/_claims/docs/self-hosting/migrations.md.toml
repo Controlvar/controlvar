@@ -253,11 +253,18 @@ text = "The modules branch, back to a named revision:"
 by = ["exempt:label"]
 
 [[unit]]
-text = "downgrade modules_0004_rbac_activation unapplies modules_0005_redshift only, which puts back the previous release's constraints on warehouse_connections and changes no row; it refuses while any Amazon Redshift connection is stored."
+text = "downgrade modules_0004_rbac_activation also unapplies modules_0005_redshift, which puts back the previous release's constraints on warehouse_connections and changes no row; it refuses while any Amazon Redshift connection is stored."
 by = [
     "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
     "test:backend/tests/integration/database/test_modules_0005_transitions.py::test_downgrade_narrows_the_constraints_and_keeps_every_row",
     "test:backend/tests/integration/database/test_modules_0005_transitions.py::test_downgrade_refuses_while_a_redshift_connection_is_stored",
+]
+
+[[unit]]
+text = "downgrade modules_0005_redshift unapplies modules_0006_saml_requests only, which drops the table sso_saml_requests, the SAML sign-ins in progress, and changes no other table."
+by = [
+    "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
+    "test:backend/tests/integration/database/test_modules_0006_transitions.py::test_downgrade_drops_the_table_and_nothing_else",
 ]
 
 [[unit]]
@@ -304,11 +311,12 @@ by = [
 ]
 
 [[unit]]
-text = "modules_0004_rbac_activation drops its two columns on every database in the same way, and modules_0005_redshift puts back its three constraints on every database."
+text = "modules_0004_rbac_activation drops its two columns on every database in the same way, modules_0005_redshift puts back its three constraints on every database, and modules_0006_saml_requests drops its table on every database."
 by = [
     "test:backend/tests/integration/database/test_profile_migrations.py::test_downgrade_keeps_the_tables_the_bootstrap_created",
     "test:backend/tests/integration/database/test_modules_0004_transitions.py::test_downgrade_drops_both_columns_and_keeps_every_row",
     "test:backend/tests/integration/database/test_modules_0005_transitions.py::test_downgrade_narrows_the_constraints_and_keeps_every_row",
+    "test:backend/tests/integration/database/test_modules_0006_transitions.py::test_downgrade_drops_the_table_and_nothing_else",
 ]
 
 [[unit]]
@@ -326,12 +334,13 @@ by = [
 ]
 
 [[unit]]
-text = "Downgrading it cannot bring those rows back: downgrade modules_0001_rbac first unapplies modules_0005_redshift, which refuses while any Amazon Redshift connection is stored, modules_0004_rbac_activation, which drops the activation-time column of custom role assignments and direct grants, with any activation time stored in it, and modules_0003_lower_is_better, which drops each metric source's lower-is-better setting, then drops the three tables this revision created and puts back an empty table of the earlier shape."
+text = "Downgrading it cannot bring those rows back: downgrade modules_0001_rbac first unapplies modules_0006_saml_requests, which drops the table of SAML sign-ins in progress, modules_0005_redshift, which refuses while any Amazon Redshift connection is stored, modules_0004_rbac_activation, which drops the activation-time column of custom role assignments and direct grants, with any activation time stored in it, and modules_0003_lower_is_better, which drops each metric source's lower-is-better setting, then drops the three tables this revision created and puts back an empty table of the earlier shape."
 by = [
     "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
     "test:backend/tests/integration/database/test_modules_0002_transitions.py::test_modules_0002_downgrade_restores_the_earlier_shape",
     "test:backend/tests/integration/database/test_profile_migrations.py::test_downgrade_keeps_the_tables_the_bootstrap_created",
     "test:backend/tests/integration/database/test_modules_0005_transitions.py::test_downgrade_refuses_while_a_redshift_connection_is_stored",
+    "test:backend/tests/integration/database/test_modules_0006_transitions.py::test_downgrade_drops_the_table_and_nothing_else",
 ]
 
 [[unit]]
@@ -429,6 +438,40 @@ by = [
     "test:backend/tests/integration/database/test_modules_0005_transitions.py::test_a_database_at_the_previous_release_upgrades_and_keeps_every_connection",
     "test:backend/tests/integration/database/test_modules_0005_transitions.py::test_the_migrated_table_has_the_models_constraints",
 ]
+
+[[unit]]
+text = "modules_0006_saml_requests adds the table for SAML sign-ins in progress"
+by = ["test:backend/tests/integration/database/test_modules_0006_transitions.py::test_a_database_at_the_previous_release_gains_the_table"]
+
+[[unit]]
+text = "This revision adds the table sso_saml_requests and its index, and changes no other table."
+by = [
+    "test:backend/tests/integration/database/test_modules_0006_transitions.py::test_a_database_at_the_previous_release_gains_the_table",
+    "test:backend/tests/integration/database/test_modules_0006_transitions.py::test_the_migrated_table_is_what_a_fresh_full_bootstrap_builds",
+]
+
+[[unit]]
+text = "Nothing reads or writes the table yet."
+by = ["test:modules/backend/tests/unit/db/test_saml_requests_revision.py::test_nothing_reads_or_writes_the_table_yet"]
+
+[[unit]]
+text = "It has no foreign key, so creating it locks no existing table, and it bounds its one wait at 0.25 s."
+by = [
+    "test:backend/tests/integration/database/test_modules_0006_transitions.py::test_the_upgrade_locks_no_table_that_existed_before_it",
+    "test:backend/tests/integration/database/test_modules_0006_transitions.py::test_a_concurrent_creation_of_the_table_ends_the_upgrade_with_the_refusal",
+    "test:modules/backend/tests/unit/db/test_saml_requests_revision.py::test_the_bound_is_a_quarter_second_set_first_and_reset_last",
+]
+
+[[unit]]
+text = "Downgrading this revision (to modules_0005_redshift) drops the table on every database, with any sign-in in progress, which must then be started again; no other table changes, and the previous release starts on the downgraded database."
+by = [
+    "test:backend/tests/integration/database/test_modules_0006_transitions.py::test_downgrade_drops_the_table_and_nothing_else",
+    "test:backend/tests/integration/database/test_modules_0006_transitions.py::test_the_previous_release_refuses_the_database_until_it_is_downgraded",
+]
+
+[[unit]]
+text = "An upgrade afterwards creates the table empty."
+by = ["test:backend/tests/integration/database/test_modules_0006_transitions.py::test_downgrade_drops_the_table_and_nothing_else"]
 
 [[unit]]
 text = "Like an Amazon Athena connection, it stores no secret and has the external ID generated when it is saved; unlike one, it has no per-query byte cap."
@@ -1547,9 +1590,9 @@ by = [
 ]
 
 [[unit]]
-text = "While it runs, an SDK request can wait up to 3.5 seconds at most: the upgrade waits at most 3.5 seconds in all for its locks, and SDK requests queue behind the api_keys lock, which t2011_flag_environments takes (at most 1.5 seconds to take) and the upgrade holds until it commits, through the waits of t2012_flag_split (at most 1 second) and t1934_metric_window (at most 0.5 seconds); a request that reads feature_flags during those waits queues behind them too, for at most 1.5 seconds."
+text = "While it runs, an SDK request can wait up to 3.75 seconds at most: the upgrade waits at most 3.75 seconds in all for its locks (3.5 seconds on the core profile, whose upgrade does not run modules_0006_saml_requests; on the full profile that revision runs first, before t2011_flag_environments takes the api_keys lock, so no SDK request queues through its wait of at most 0.25 seconds), and SDK requests queue behind the api_keys lock, which t2011_flag_environments takes (at most 1.5 seconds to take) and the upgrade holds until it commits, through the waits of t2012_flag_split (at most 1 second) and t1934_metric_window (at most 0.5 seconds); a request that reads feature_flags during those waits queues behind them too, for at most 1.5 seconds."
 by = [
-    "test:backend/tests/unit/db/test_upgrade_lock_budget.py::test_0_49_0_starts_at_0_48_0s_released_heads_and_declares_three_and_a_half_seconds",
+    "test:backend/tests/unit/db/test_upgrade_lock_budget.py::test_0_49_0_starts_at_0_48_0s_released_heads_and_declares_three_and_three_quarter_seconds",
     "test:backend/tests/integration/database/test_flag_split_migration.py::test_a_session_reading_feature_flags_ends_the_upgrade_with_the_refusal",
     "test:backend/tests/integration/database/test_flag_environments_migration.py::test_a_request_holding_api_keys_ends_the_upgrade_with_the_refusal",
     "test:backend/tests/integration/database/test_flag_environments_migration.py::test_while_the_upgrade_waits_for_feature_flags_key_lookups_still_run",
@@ -1714,7 +1757,7 @@ by = [
 text = "From 0.48.0, this upgrade waits at most 1 s for the lock it needs on feature_flags, behind any session that has read that table and not ended its transaction; t2011_flag_environments, in the same run, has the lock on api_keys by then, so new SDK requests wait with it."
 by = [
     "test:backend/tests/unit/db/test_flag_split_revision.py::test_the_bound_is_one_second_and_the_declared_one",
-    "test:backend/tests/unit/db/test_upgrade_lock_budget.py::test_0_49_0_starts_at_0_48_0s_released_heads_and_declares_three_and_a_half_seconds",
+    "test:backend/tests/unit/db/test_upgrade_lock_budget.py::test_0_49_0_starts_at_0_48_0s_released_heads_and_declares_three_and_three_quarter_seconds",
     "test:backend/tests/integration/database/test_flag_split_migration.py::test_the_upgrade_runs_exactly_its_statements",
     "test:backend/tests/integration/database/test_flag_split_migration.py::test_a_session_reading_feature_flags_ends_the_upgrade_with_the_refusal",
     "test:backend/tests/integration/database/test_flag_split_migration.py::test_a_deadlock_ends_the_upgrade_with_the_refusal_and_applies_nothing",
@@ -1868,7 +1911,7 @@ by = [
 text = "From 0.48.0, this upgrade waits at most 0.5 s for the lock it needs on metrics, behind any session that has read that table and not ended its transaction, a results request among them; t2011_flag_environments and t2012_flag_split, in the same run, have their locks on api_keys and feature_flags by then, so new SDK requests wait with it."
 by = [
     "test:backend/tests/unit/db/test_metric_window_revision.py::test_the_bound_is_half_a_second_and_the_declared_one",
-    "test:backend/tests/unit/db/test_upgrade_lock_budget.py::test_0_49_0_starts_at_0_48_0s_released_heads_and_declares_three_and_a_half_seconds",
+    "test:backend/tests/unit/db/test_upgrade_lock_budget.py::test_0_49_0_starts_at_0_48_0s_released_heads_and_declares_three_and_three_quarter_seconds",
     "test:backend/tests/integration/database/test_metric_window_migration.py::test_the_upgrade_runs_exactly_its_statements",
     "test:backend/tests/integration/database/test_metric_window_migration.py::test_a_session_reading_metrics_ends_the_upgrade_with_the_refusal",
     "test:backend/tests/integration/database/test_metric_window_migration.py::test_an_sdk_request_waits_with_the_run_and_is_answered_once_it_ends",
@@ -2584,6 +2627,13 @@ by = [
 ]
 
 [[unit]]
+text = "modules_0006_saml_requests is backward-compatible for a rollback too, and undoing it drops the table of SAML sign-ins in progress and changes no other table."
+by = [
+    "test:backend/tests/integration/database/test_modules_0006_transitions.py::test_the_previous_release_refuses_the_database_until_it_is_downgraded",
+    "test:backend/tests/integration/database/test_modules_0006_transitions.py::test_downgrade_drops_the_table_and_nothing_else",
+]
+
+[[unit]]
 text = "modules_0004_rbac_activation is backward-compatible for a rollback too, and undoing it drops the activation-time column of custom role assignments and direct grants, with any activation time stored in it; an upgrade afterwards adds the column empty."
 by = [
     "test:backend/tests/integration/database/test_modules_0004_transitions.py::test_the_previous_release_still_writes_and_its_rows_have_no_activation_time",
@@ -2813,7 +2863,7 @@ text = "CI runs this page's exec blocks as written against the Quick Start stack
 by = ["mechanism:migration-pages-environments"]
 
 [[unit]]
-text = "The modules branch has five revisions: modules_0001_rbac, then modules_0002_warehouse_analysis, then modules_0003_lower_is_better, then modules_0004_rbac_activation, then modules_0005_redshift."
+text = "The modules branch has six revisions: modules_0001_rbac, then modules_0002_warehouse_analysis, then modules_0003_lower_is_better, then modules_0004_rbac_activation, then modules_0005_redshift, then modules_0006_saml_requests."
 by = [
     "mechanism:alembic-plan-branch",
     "mechanism:alembic-plan-unapply",
@@ -2824,7 +2874,7 @@ text = "Name the modules revision to end at rather than counting back: a relativ
 by = ["mechanism:alembic-plan-relative-downgrade"]
 
 [[unit]]
-text = "modules@-5 unapplies all five, newest first."
+text = "modules@-6 unapplies all six, newest first."
 by = ["mechanism:alembic-plan-unapply"]
 
 [[unit]]

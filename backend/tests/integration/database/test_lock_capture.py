@@ -40,7 +40,7 @@ pytestmark = [pytest.mark.integration]
 
 REVISION = "t1934_metric_window"
 PARENT = "t2012_flag_split"
-MODULES_HEAD = "modules_0005_redshift"
+MODULES_HEAD = "modules_0006_saml_requests"
 PARENT_ROWS = {CORE: {PARENT}, FULL: {PARENT, MODULES_HEAD}}
 REVISION_ROWS = {CORE: {REVISION}, FULL: {REVISION, MODULES_HEAD}}
 
